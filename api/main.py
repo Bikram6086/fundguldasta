@@ -141,6 +141,33 @@ def health_check():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+ARCHETYPE_CAGR_RANGES = {
+    'steady':     (14, 16),
+    'balanced':   (15, 17),
+    'aggressive': (16, 19),
+    'conviction': (18, 22),
+}
+
+
+def _archetype_relevance(arch_id: str, target_cagr: float):
+    """Return (distance, match_label) measuring how well archetype fits target CAGR."""
+    lo, hi = ARCHETYPE_CAGR_RANGES[arch_id]
+    if lo <= target_cagr <= hi:
+        return 0.0, "Best Match"
+    elif target_cagr < lo:
+        dist = lo - target_cagr
+        if dist <= 2:
+            label = "Close Match"
+        elif dist <= 5:
+            label = "Above Your Target"
+        else:
+            label = "Well Above Target"
+        return dist, label
+    else:  # target > hi
+        dist = target_cagr - hi
+        return dist, "Below Your Target"
+
+
 @app.post("/api/bouquets/curate")
 def curate_bouquets(request: CurateRequest):
     """
@@ -215,6 +242,7 @@ def curate_bouquets(request: CurateRequest):
 
         meta = ARCHETYPE_META[arch_id]
 
+        rel_dist, rel_label = _archetype_relevance(arch_id, implied_cagr or 16.0)
         archetypes.append({
             'id':                   arch_id,
             'icon':                 ICONS[arch_id],
@@ -232,6 +260,8 @@ def curate_bouquets(request: CurateRequest):
             'devils':               devils,
             'comparator':           comparator,
             'realisticAssessment':  advisory,
+            'relevanceScore':       round(rel_dist, 1),
+            'matchLabel':           rel_label,
         })
 
     if not archetypes:
@@ -239,6 +269,11 @@ def curate_bouquets(request: CurateRequest):
             status_code=404,
             detail="No cached bouquets found. Run precompute.py first."
         )
+
+    archetypes.sort(key=lambda x: x['relevanceScore'])
+    # Always mark the closest archetype as Best Match regardless of absolute distance
+    if archetypes and archetypes[0]['matchLabel'] != 'Best Match':
+        archetypes[0]['matchLabel'] = 'Closest Match'
 
     return {
         'impliedCAGR':              implied_cagr,
