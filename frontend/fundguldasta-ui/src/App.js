@@ -205,7 +205,7 @@ body{font-family:'Outfit',sans-serif;background:${G.bg};color:${G.fog};min-heigh
 .fdg{background:${G.em}}.fda{background:${G.am}}
 .slbl{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:${G.gold};margin-bottom:14px}
 .itax{margin-top:14px;padding:13px 15px;background:rgba(232,160,0,0.07);border:1px solid rgba(232,160,0,0.2);border-radius:10px;font-size:12px;color:${G.am};line-height:1.7}
-@keyframes up{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+.customize-toggle{display:flex;align-items:center;gap:8px;background:transparent;border:1px solid rgba(212,175,55,0.25);border-radius:8px;padding:8px 16px;color:${G.mist};font-family:'Outfit',sans-serif;font-size:12px;cursor:pointer;transition:all .2s;margin-top:16px}.customize-toggle:hover{border-color:rgba(212,175,55,0.5);color:${G.gold}}.customize-panel{margin-top:16px;border:1px solid rgba(212,175,55,0.15);border-radius:12px;padding:20px;background:rgba(212,175,55,0.03)}.cx-search{width:100%;background:${G.elv};border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px 14px;color:${G.white};font-family:'Outfit',sans-serif;font-size:13px;outline:none;box-sizing:border-box}.cx-search:focus{border-color:rgba(212,175,55,0.35)}.cx-results{margin-top:4px;background:${G.sur};border:1px solid ${G.bord};border-radius:8px;overflow:hidden}.cx-result{padding:12px 14px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.04);transition:background .15s}.cx-result:last-child{border-bottom:none}.cx-result:hover{background:rgba(212,175,55,0.06)}.cx-result-name{font-size:13px;color:${G.white};margin-bottom:2px}.cx-result-meta{font-size:11px;color:${G.mist}}.cx-compare{margin-top:16px}.cx-table{width:100%;border-collapse:collapse;margin-top:10px}.cx-table th{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:${G.mist};padding:8px 10px;text-align:left;border-bottom:1px solid ${G.bord}}.cx-table th:not(:first-child){text-align:right}.cx-table td{padding:9px 10px;font-size:12px;color:${G.fog};border-bottom:1px solid rgba(255,255,255,0.03)}.cx-table td:not(:first-child){text-align:right;font-family:'JetBrains Mono',monospace}.cx-table tr:last-child td{border-bottom:none}.cx-better{color:#27AE78}.cx-worse{color:#E05555}.cx-impact{margin-top:12px;padding:12px 14px;background:rgba(255,255,255,0.03);border-radius:8px;font-size:12px;color:${G.mist};line-height:1.7}.cx-actions{display:flex;gap:10px;margin-top:14px}.cx-accept{flex:1;padding:10px;background:rgba(39,174,120,0.15);border:1px solid rgba(39,174,120,0.3);border-radius:8px;color:#27AE78;font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s}.cx-accept:hover{background:rgba(39,174,120,0.25)}.cx-reject{flex:1;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:${G.mist};font-family:'Outfit',sans-serif;font-size:13px;cursor:pointer;transition:all .2s}.cx-reject:hover{background:rgba(255,255,255,0.07)}.cx-applied{display:inline-flex;align-items:center;gap:5px;font-size:10px;background:rgba(39,174,120,0.12);border:1px solid rgba(39,174,120,0.25);border-radius:6px;padding:3px 8px;color:#27AE78;margin-left:8px}@keyframes up{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.1)}}
 `;
 
@@ -228,6 +228,12 @@ export default function App() {
   const [freshness, setFreshness] = useState(null);
   const [apiError, setApiError] = useState(null);
   const [cagrAdvisory, setCagrAdvisory] = useState(null);
+  const [customizeOpen, setCustomizeOpen] = useState(false);
+  const [customizeSearch, setCustomizeSearch] = useState('');
+  const [customizeResults, setCustomizeResults] = useState([]);
+  const [customizeComparing, setCustomizeComparing] = useState(null);
+  const [customizeApplied, setCustomizeApplied] = useState(null);
+  const [customizeLoading, setCustomizeLoading] = useState(false);
 
   const impliedCAGR = (() => {
     if (mode === "return") return parseFloat(cagr) || null;
@@ -278,6 +284,36 @@ export default function App() {
     }
   };
 
+  const handleCustomizeSearch = async (q) => {
+    setCustomizeSearch(q);
+    if (q.length < 2) { setCustomizeResults([]); return; }
+    try {
+      const res = await apiCall('GET', `/api/funds/search?q=${encodeURIComponent(q)}&limit=8`);
+      setCustomizeResults(Array.isArray(res) ? res : []);
+    } catch { setCustomizeResults([]); }
+  };
+
+  const handleCustomizeSelect = async (fund) => {
+    setCustomizeResults([]);
+    setCustomizeSearch(fund.name);
+    setCustomizeLoading(true);
+    try {
+      const horizonYears = parseInt(yrs) || 7;
+      const targetCAGR = parseFloat(cagr) || 16;
+      const result = await apiCall('POST', '/api/bouquets/customize', {
+        archetype_id: selectedArch?.id,
+        replacement_fund_code: fund.scheme_code,
+        horizon_years: horizonYears,
+        target_cagr: targetCAGR,
+      });
+      setCustomizeComparing(result);
+    } catch (e) {
+      console.error('Customize error', e);
+    } finally {
+      setCustomizeLoading(false);
+    }
+  };
+
   const handleScenario = (scId, optId, score) => {
     const next = { ...bAns, [scId]: { optId, score } };
     setBAns(next);
@@ -294,10 +330,19 @@ export default function App() {
   };
 
   const reset = () => {
-    setScreen("hero"); setSelectedArch(null); setBStep(0); setCagrAdvisory(null);
+    setScreen("hero"); setSelectedArch(null); setBStep(0); setCagrAdvisory(null); setCustomizeApplied(null); setCustomizeOpen(false);
     setBAns({}); setBDone(false); setBProf(null);
     setShowBehav(true); setCurationResult(null); setApiError(null);
   };
+
+  useEffect(() => {
+    setCustomizeOpen(false);
+    setCustomizeSearch('');
+    setCustomizeResults([]);
+    setCustomizeComparing(null);
+    setCustomizeApplied(null);
+    setCustomizeLoading(false);
+  }, [selectedArch]);
 
   const a = selectedArch;
   const archetypes = curationResult?.archetypes || [];
@@ -496,7 +541,7 @@ export default function App() {
 
               {/* BOX 3 — FUNDS */}
               <div className="card">
-                <div className="ch"><span className="ct">Bouquet Composition</span><span className="badge bg-gold">5 Funds · Direct Plans · No Commission</span></div>
+                <div className="ch"><span className="ct">Bouquet Composition</span><span className="badge bg-gold">5 Funds · Direct Plans · No Commission</span>{customizeApplied && <span className="cx-applied">✎ Customized</span>}</div>
                 <div className="cb">
                   <div className="fg">
                     {(a.funds || []).map((f, i) => (
@@ -515,6 +560,74 @@ export default function App() {
                     ))}
                   </div>
                 </div>
+                  <button className="customize-toggle" onClick={() => setCustomizeOpen(o => !o)}>
+                    {customizeOpen ? "▲ Close Customization" : "✎ Customize this bouquet"}
+                  </button>
+                  {customizeOpen && (
+                    <div className="customize-panel">
+                      <div style={{ fontSize: 12, color: G.mist, marginBottom: 10 }}>Search any eligible fund by name or AMC to substitute in this bouquet</div>
+                      <input
+                        className="cx-search"
+                        type="text"
+                        placeholder="e.g. Parag Parikh, HDFC, Axis Midcap..."
+                        value={customizeSearch}
+                        onChange={e => handleCustomizeSearch(e.target.value)}
+                      />
+                      {customizeResults.length > 0 && (
+                        <div className="cx-results">
+                          {customizeResults.map(f => (
+                            <div key={f.scheme_code} className="cx-result" onClick={() => handleCustomizeSelect(f)}>
+                              <div className="cx-result-name">{f.name}</div>
+                              <div className="cx-result-meta">{f.amc} · {f.category} · {f.tier_label}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {customizeLoading && <div style={{ color: G.mist, fontSize: 12, marginTop: 10 }}>Analysing substitution...</div>}
+                      {customizeComparing && !customizeLoading && (
+                        <div className="cx-compare">
+                          {customizeComparing.warnings?.map((w, i) => (
+                            <div key={i} className="warn-box" style={{ marginBottom: 8 }}>{w}</div>
+                          ))}
+                          <div style={{ fontSize: 12, color: G.mist, marginBottom: 6 }}>
+                            Replacing <strong style={{ color: G.white }}>{customizeComparing.replacement_slot?.replaced_name}</strong> ({customizeComparing.replacement_slot?.replaced_weight}%) with <strong style={{ color: G.gold }}>{customizeComparing.replacement_fund?.name}</strong>
+                          </div>
+                          <table className="cx-table">
+                            <thead><tr><th>Metric</th><th>Original</th><th>Your Choice</th><th>Difference</th></tr></thead>
+                            <tbody>
+                              {[["Composite Score", customizeComparing.original_score?.composite_score, customizeComparing.replacement_score?.composite_score, "pts"],
+                                ["Return Consistency", customizeComparing.original_score?.dimension_scores?.return_consistency, customizeComparing.replacement_score?.dimension_scores?.return_consistency, "pts"],
+                                ["Downside Protection", customizeComparing.original_score?.dimension_scores?.downside_behaviour, customizeComparing.replacement_score?.dimension_scores?.downside_behaviour, "pts"],
+                                ["Manager Stability", customizeComparing.original_score?.dimension_scores?.manager_stability, customizeComparing.replacement_score?.dimension_scores?.manager_stability, "pts"],
+                                ["Risk-Adjusted Quality", customizeComparing.original_score?.dimension_scores?.risk_adjusted, customizeComparing.replacement_score?.dimension_scores?.risk_adjusted, "pts"],
+                              ].map(([label, orig, repl, unit]) => {
+                                const diff = orig != null && repl != null ? (repl - orig).toFixed(1) : null;
+                                const cls = diff > 0 ? "cx-better" : diff < 0 ? "cx-worse" : "";
+                                return (
+                                  <tr key={label}>
+                                    <td>{label}</td>
+                                    <td>{orig != null ? orig.toFixed(1) : "—"}</td>
+                                    <td className={diff > 0 ? "cx-better" : diff < 0 ? "cx-worse" : ""}>{repl != null ? repl.toFixed(1) : "—"}</td>
+                                    <td className={cls}>{diff != null ? (diff > 0 ? "+" : "") + diff : "—"}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                          {customizeComparing.impact?.message && (
+                            <div className="cx-impact">📊 {customizeComparing.impact.message}</div>
+                          )}
+                          <div className="cx-actions">
+                            <button className="cx-accept" onClick={() => { setCustomizeApplied(customizeComparing); setCustomizeOpen(false); }}>Accept my preference →</button>
+                            <button className="cx-reject" onClick={() => { setCustomizeComparing(null); setCustomizeSearch(""); }}>Keep recommended</button>
+                          </div>
+                        </div>
+                      )}
+                      {customizeApplied && (
+                        <div style={{ marginTop: 12, fontSize: 12, color: "#27AE78" }}>✓ Customization applied. <button style={{ background: "none", border: "none", color: G.mist, cursor: "pointer", fontSize: 12, padding: 0, marginLeft: 4 }} onClick={() => { setCustomizeApplied(null); setCustomizeSearch(""); setCustomizeComparing(null); }}>Undo</button></div>
+                      )}
+                    </div>
+                  )}
               </div>
 
               {/* BOX 4 — METRICS */}

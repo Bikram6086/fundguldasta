@@ -20,6 +20,10 @@ from typing import Optional, List
 from dotenv import load_dotenv
 from engine.cagr_advisor import assess_realism
 from engine.precompute import run_precomputation, run_all_horizons
+from engine.fund_replacement import (
+    search_eligible_funds, find_replacement_slot,
+    score_single_fund, compute_replacement_impact,
+)
 
 load_dotenv(os.path.expanduser('~/fundguldasta/config/.env'))
 
@@ -78,6 +82,13 @@ class CurateRequest(BaseModel):
     horizonYears: float = 7
     taxSlab: Optional[int] = 30
     behavProfile: Optional[str] = None
+
+class CustomizeRequest(BaseModel):
+    archetype_id: str
+    replacement_fund_code: str
+    horizon_years: int = 7
+    target_cagr: float = 16.0
+
 
 # ── ENDPOINTS ────────────────────────────────────────────────
 
@@ -385,3 +396,114 @@ def get_platform_stats():
         'platform': 'FundGuldasta',
         'version': '1.0.0',
     }
+
+
+# ── FUND CUSTOMIZATION ENDPOINTS ─────────────────────────────
+
+@app.get("/api/funds/search")
+def fund_search(q: str = Query(default="", min_length=1), limit: int = Query(default=10, le=20)):
+    """
+    Search eligible fund universe by name or AMC.
+    Returns up to `limit` funds matching the query.
+    """
+    if not q.strip():
+        return []
+    try:
+        results = search_eligible_funds(q.strip(), limit)
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/funds/{scheme_code}/score")
+def get_fund_score(
+    scheme_code: str,
+    horizon_years: int = Query(default=7),
+    target_cagr: float = Query(default=16.0),
+):
+    """
+    Score a single fund using the full 6-dimension engine.
+    Used for comparison during bouquet customization.
+    """
+    try:
+        result = score_single_fund(scheme_code, horizon_years, target_cagr)
+        if result.get('error'):
+            raise HTTPException(status_code=404, detail=result['error'])
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/bouquets/customize")
+def customize_bouquet(request: CustomizeRequest):
+    """
+    Evaluate a user-requested fund substitution in a bouquet.
+    Returns comparison of original vs replacement fund plus estimated impact.
+    """
+    try:
+        # Find which fund to replace
+        slot = find_replacement_slot(request.archetype_id, request.replacement_fund_code)
+
+        # Score both funds
+        original_score = score_single_fund(
+            slot['replaced_code'], request.horizon_years, request.target_cagr
+        )
+        replacement_score = score_single_fund(
+            request.replacement_fund_code, request.horizon_years, request.target_cagr
+        )
+
+        # Compute impact
+        impact = compute_replacement_impact(
+            replaced_code=slot['replaced_code'],
+            replacement_code=request.replacement_fund_code,
+            allocation_weight=slot['replaced_weight'],
+            horizon_years=request.horizon_years,
+            lumpsum=1_000_000,
+        )
+
+        # Look up replacement fund metadata
+        conn = get_db()
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT scheme_name, amc_name, sebi_category, expense_ratio, aum_crores,
+                   COUNT(nd.nav_date) as nav_count
+            FROM fund_metadata fm
+            LEFT JOIN nav_data nd ON fm.scheme_code = nd.scheme_code
+            WHERE fm.scheme_code = %s
+            GROUP BY fm.scheme_name, fm.amc_name, fm.sebi_category, fm.expense_ratio, fm.aum_crores
+        """, (request.replacement_fund_code,))
+        repl_meta = cursor.fetchone()
+        cursor.close()
+        conn.close()
+
+        replacement_info = {}
+        if repl_meta:
+            nav_count = repl_meta[5]
+            tier = 1 if nav_count >= 1750 else (2 if nav_count >= 1250 else 3)
+            replacement_info = {
+                'scheme_code': request.replacement_fund_code,
+                'name': repl_meta[0],
+                'amc': repl_meta[1],
+                'category': repl_meta[2],
+                'expense_ratio': float(repl_meta[3]) if repl_meta[3] else None,
+                'aum_crores': float(repl_meta[4]) if repl_meta[4] else None,
+                'tier': tier,
+            }
+
+        return {
+            'replacement_slot': slot,
+            'replacement_fund': replacement_info,
+            'original_score': original_score,
+            'replacement_score': replacement_score,
+            'impact': impact,
+            'warnings': [
+                w for w in [
+                    '⚠️ Tier 3 fund: limited history (3-5 years). Scores extrapolated.' if replacement_info.get('tier') == 3 else None,
+                    '⚠️ Different category replacement — bouquet category diversity affected.' if slot['reason'].startswith('Lowest') else None,
+                ] if w
+            ],
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
