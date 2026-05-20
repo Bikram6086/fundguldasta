@@ -343,3 +343,13 @@ if __name__ == "__main__":
         print(f"ERROR: {e}")
         log_precompute_run('failed', 0, str(e))
         raise
+﻿
+
+def run_all_horizons(target_cagr: float = 16.0):
+    """Pre-warm cache for all common horizons. Called at API startup in a background thread."""
+    horizons = [3, 5, 7, 10, 15]
+    for h in horizons:
+        try:
+            run_precomputation(horizon_years=h, target_cagr=target_cagr)
+        except Exception as e:
+            print(f"  run_all_horizons: skipped {h}yr — {e}")

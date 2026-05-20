@@ -11,12 +11,15 @@ Implements the contract defined in apiContract.js exactly.
 import psycopg2
 import json
 import os
+import threading
 from datetime import datetime, date
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
 from dotenv import load_dotenv
+from engine.cagr_advisor import assess_realism
+from engine.precompute import run_precomputation, run_all_horizons
 
 load_dotenv(os.path.expanduser('~/fundguldasta/config/.env'))
 
@@ -78,6 +81,18 @@ class CurateRequest(BaseModel):
 
 # ── ENDPOINTS ────────────────────────────────────────────────
 
+@app.on_event("startup")
+def startup_prewarm():
+    """Pre-warm cache for common horizons in background on server start."""
+    def prewarm():
+        import time
+        time.sleep(8)  # wait for server to be fully ready
+        print("Pre-warming bouquet cache for horizons [3, 5, 7, 10, 15]...")
+        run_all_horizons(target_cagr=16.0)
+        print("Pre-warm complete.")
+    threading.Thread(target=prewarm, daemon=True).start()
+
+
 @app.get("/health")
 def health_check():
     """Health check endpoint — verifies API and database are up."""
@@ -115,9 +130,18 @@ def curate_bouquets(request: CurateRequest):
     elif request.mode == 'sip' and request.sipAmount and request.horizonYears:
         implied_cagr = 16.0
 
-    # Find closest cached horizon
-    available_horizons = [5, 7, 10]
-    closest_horizon = min(available_horizons, key=lambda h: abs(h - horizon))
+    # Get CAGR advisory
+    advisory = assess_realism(implied_cagr or 16.0, request.horizonYears)
+
+    # Check cache for exact horizon; trigger on-demand computation if missing
+    probe = get_latest_cache('steady', horizon)
+    if not probe:
+        print(f'Cache miss for {horizon}yr — computing on demand...')
+        try:
+            run_precomputation(horizon_years=horizon, target_cagr=implied_cagr or 16.0)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f'Computation failed: {e}')
+    closest_horizon = horizon
 
     # Load all 4 archetypes from cache
     archetypes = []
@@ -150,21 +174,22 @@ def curate_bouquets(request: CurateRequest):
         meta = ARCHETYPE_META[arch_id]
 
         archetypes.append({
-            'id':           arch_id,
-            'icon':         ICONS[arch_id],
-            'label':        meta['label'],
-            'cagrRange':    meta['cagrRange'],
-            'risk':         meta['risk'],
-            'color':        meta['color'],
-            'rgb':          meta['rgb'],
-            'funds':        funds,
-            'metrics':      {'periods': metrics},
-            'confidence':   confidence,
-            'stressTest':   stress,
-            'overlap':      overlap,
-            'methodology':  methodology,
-            'devils':       devils,
-            'comparator':   comparator,
+            'id':                   arch_id,
+            'icon':                 ICONS[arch_id],
+            'label':                meta['label'],
+            'cagrRange':            meta['cagrRange'],
+            'risk':                 meta['risk'],
+            'color':                meta['color'],
+            'rgb':                  meta['rgb'],
+            'funds':                funds,
+            'metrics':              {'periods': metrics},
+            'confidence':           confidence,
+            'stressTest':           stress,
+            'overlap':              overlap,
+            'methodology':          methodology,
+            'devils':               devils,
+            'comparator':           comparator,
+            'realisticAssessment':  advisory,
         })
 
     if not archetypes:
@@ -189,8 +214,7 @@ def get_metrics(
     taxSlab: int = Query(default=30),
 ):
     """Returns performance metrics table for a specific archetype."""
-    available = [5, 7, 10]
-    closest = min(available, key=lambda h: abs(h - horizonYears))
+    closest = horizonYears
     row = get_latest_cache(archetype_id, closest)
 
     if not row:
@@ -206,8 +230,7 @@ def get_metrics(
 @app.get("/api/bouquets/{archetype_id}/confidence")
 def get_confidence(archetype_id: str, horizonYears: int = Query(default=7)):
     """Returns confidence score with all factor inputs visible."""
-    available = [5, 7, 10]
-    closest = min(available, key=lambda h: abs(h - horizonYears))
+    closest = horizonYears
     row = get_latest_cache(archetype_id, closest)
 
     if not row:
@@ -218,8 +241,7 @@ def get_confidence(archetype_id: str, horizonYears: int = Query(default=7)):
 @app.get("/api/bouquets/{archetype_id}/stress-test")
 def get_stress_test(archetype_id: str, horizonYears: int = Query(default=7)):
     """Returns historical crash performance data."""
-    available = [5, 7, 10]
-    closest = min(available, key=lambda h: abs(h - horizonYears))
+    closest = horizonYears
     row = get_latest_cache(archetype_id, closest)
 
     if not row:
@@ -230,8 +252,7 @@ def get_stress_test(archetype_id: str, horizonYears: int = Query(default=7)):
 @app.get("/api/bouquets/{archetype_id}/overlap")
 def get_overlap(archetype_id: str, horizonYears: int = Query(default=7)):
     """Returns portfolio overlap analysis."""
-    available = [5, 7, 10]
-    closest = min(available, key=lambda h: abs(h - horizonYears))
+    closest = horizonYears
     row = get_latest_cache(archetype_id, closest)
 
     if not row:

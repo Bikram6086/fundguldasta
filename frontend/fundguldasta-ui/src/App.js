@@ -95,12 +95,12 @@ body{font-family:'Outfit',sans-serif;background:${G.bg};color:${G.fog};min-heigh
 .hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px;position:relative}
 .mesh{position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 20% 50%,rgba(212,175,55,0.06) 0%,transparent 60%),radial-gradient(ellipse 60% 80% at 80% 30%,rgba(66,130,208,0.04) 0%,transparent 60%);pointer-events:none}
 .brand{display:flex;align-items:center;gap:14px;margin-bottom:52px;animation:up .9s ease .1s both}
-.bmark{width:46px;height:46px;background:linear-gradient(135deg,${G.gold},${G.goldD});border-radius:10px;display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-size:22px;font-weight:700;color:${G.bg}}
-.bname{font-family:'Cormorant Garamond',serif;font-size:26px;font-weight:600;color:${G.gold}}
-.btag{font-size:11px;color:${G.mist};margin-top:2px;letter-spacing:.08em}
-.h1{font-family:'Cormorant Garamond',serif;font-size:clamp(38px,6vw,74px);font-weight:700;line-height:1.06;text-align:center;color:${G.white};max-width:840px;margin-bottom:14px;animation:up .9s ease .3s both}
+.bmark{width:72px;height:72px;background:linear-gradient(135deg,${G.gold},${G.goldD});border-radius:14px;display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-size:34px;font-weight:700;color:${G.bg};box-shadow:0 0 32px rgba(212,175,55,0.45)}
+.bname{font-family:'Cormorant Garamond',serif;font-size:42px;font-weight:700;color:${G.gold}}
+.btag{font-size:15px;color:${G.gold};margin-top:4px;letter-spacing:.04em;font-style:italic;font-family:'Cormorant Garamond',serif}
+.h1{font-family:'Cormorant Garamond',serif;font-size:clamp(48px,8vw,84px);font-weight:700;line-height:1.06;text-align:center;color:${G.white};max-width:900px;margin-bottom:14px;animation:up .9s ease .3s both}
 .h1 em{color:${G.gold};font-style:normal}
-.tagline{font-family:'Cormorant Garamond',serif;font-size:clamp(18px,2.4vw,26px);color:${G.gold};margin-bottom:14px;letter-spacing:.04em;font-style:italic;animation:up .9s ease .38s both}
+.tagline{font-family:'Cormorant Garamond',serif;font-size:clamp(20px,2.8vw,28px);color:${G.gold};margin-bottom:10px;letter-spacing:.04em;font-style:italic;animation:up .9s ease .38s both}.gold-rule{width:52px;height:1px;background:${G.gold};margin:10px auto 20px;opacity:0.6}.sec-tag{font-family:'Outfit',sans-serif;font-size:13px;color:${G.slate};letter-spacing:.12em;text-transform:uppercase;text-align:center;margin-bottom:28px;animation:up .9s ease .36s both}
 .sub{font-size:15px;color:${G.slate};text-align:center;max-width:480px;line-height:1.8;margin-bottom:50px;font-weight:300;animation:up .9s ease .44s both}
 .icard{background:${G.sur};border:1px solid ${G.bordG};border-radius:20px;padding:36px;width:100%;max-width:600px;box-shadow:0 40px 80px rgba(0,0,0,0.5);animation:up .9s ease .54s both;position:relative}
 .icard::before{content:'';position:absolute;inset:-1px;border-radius:20px;background:linear-gradient(135deg,rgba(212,175,55,0.14),transparent 60%);pointer-events:none}
@@ -115,7 +115,7 @@ body{font-family:'Outfit',sans-serif;background:${G.bg};color:${G.fog};min-heigh
 .inp:focus{border-color:rgba(212,175,55,0.4)}
 .inp-sm{font-size:16px;padding:12px 46px 12px 16px}
 .sfx{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:12px;color:${G.gold};font-weight:600;pointer-events:none}
-.warn-box{background:rgba(232,160,0,0.08);border:1px solid rgba(232,160,0,0.25);border-radius:10px;padding:14px 16px;font-size:13px;color:${G.am};line-height:1.7;margin-bottom:20px}
+.warn-box{background:rgba(232,160,0,0.08);border:1px solid rgba(232,160,0,0.25);border-radius:10px;padding:14px 16px;font-size:13px;color:${G.am};line-height:1.7;margin-bottom:20px}.advisory{background:rgba(146,64,14,0.15);border:1px solid rgba(212,175,55,0.3);border-radius:10px;padding:16px 20px;margin-bottom:22px;display:flex;align-items:flex-start;gap:14px}.adv-icon{font-size:20px;flex-shrink:0;margin-top:1px}.adv-body{flex:1}.adv-cat{font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;margin-bottom:4px}.adv-cat.aggressive{color:#F0A500}.adv-cat.unrealistic{color:#E05555}.adv-msg{font-size:13px;color:${G.fog};line-height:1.7;margin-bottom:10px}.adv-dismiss{font-size:11px;color:${G.mist};background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:4px 12px;cursor:pointer;font-family:Outfit,sans-serif}.adv-dismiss:hover{color:${G.gold};border-color:rgba(212,175,55,0.3)}
 .implied{padding:10px 14px;border-radius:8px;background:rgba(212,175,55,0.08);border:1px solid rgba(212,175,55,0.15);font-size:13px;color:${G.gold};margin-bottom:18px;line-height:1.6}
 .btn-p{width:100%;padding:15px;background:linear-gradient(135deg,${G.gold},${G.goldD});border:none;border-radius:11px;font-family:'Outfit',sans-serif;font-size:15px;font-weight:600;color:${G.bg};cursor:pointer;transition:all .2s;margin-bottom:2px}
 .btn-p:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 10px 40px rgba(212,175,55,0.35)}
@@ -227,6 +227,7 @@ export default function App() {
   const [showBehav, setShowBehav] = useState(true);
   const [freshness, setFreshness] = useState(null);
   const [apiError, setApiError] = useState(null);
+  const [cagrAdvisory, setCagrAdvisory] = useState(null);
 
   const impliedCAGR = (() => {
     if (mode === "return") return parseFloat(cagr) || null;
@@ -265,6 +266,9 @@ export default function App() {
         horizonYears: parseFloat(yrs) || 7,
       });
       setCurationResult(result);
+      if (result.archetypes?.length > 0) {
+        setCagrAdvisory(result.archetypes[0].realisticAssessment || null);
+      }
       const fdata = await getFreshness().catch(() => null);
       setFreshness(fdata);
       setScreen("results");
@@ -290,7 +294,7 @@ export default function App() {
   };
 
   const reset = () => {
-    setScreen("hero"); setSelectedArch(null); setBStep(0);
+    setScreen("hero"); setSelectedArch(null); setBStep(0); setCagrAdvisory(null);
     setBAns({}); setBDone(false); setBProf(null);
     setShowBehav(true); setCurationResult(null); setApiError(null);
   };
@@ -307,8 +311,10 @@ export default function App() {
           <div className="bmark">F</div>
           <div><div className="bname">FundGuldasta</div><div className="btag">fundguldasta.com · Mutual Fund Research · Unfiltered</div></div>
         </div>
-        <h1 className="h1">Curated fund bouquets.<br /><em>Honest by design.</em></h1>
         <div className="tagline">Mutual Fund Research. Unfiltered.</div>
+        <div className="gold-rule" />
+        <div className="sec-tag">India's First Honest-by-Design Mutual Fund Research Platform</div>
+        <h1 className="h1">Curated fund bouquets.<br /><em>Honest by design.</em></h1>
         <p className="sub">Two inputs. Four bouquet archetypes. Ten layers of transparent research. No commission. No false assurance.</p>
         {apiError && <div className="warn-box" style={{ maxWidth: 600, marginBottom: 20 }}>⚠️ {apiError}</div>}
         <div className="icard">
@@ -448,6 +454,17 @@ export default function App() {
             </div>
           )}
 
+          {cagrAdvisory && cagrAdvisory.category !== "realistic" && (
+            <div className="advisory">
+              <div className="adv-icon">{cagrAdvisory.category === "unrealistic" ? "🚫" : "⚠️"}</div>
+              <div className="adv-body">
+                <div className={`adv-cat ${cagrAdvisory.category}`}>{cagrAdvisory.category === "unrealistic" ? "Historically Unrealistic" : "Aggressive Target"}</div>
+                <div className="adv-msg">{cagrAdvisory.message}</div>
+                <button className="adv-dismiss" onClick={() => setCagrAdvisory(null)}>Proceed anyway →</button>
+              </div>
+            </div>
+          )}
+
           <div style={{ marginBottom: 26 }}>
             <div className="slbl">Select Your Risk Archetype</div>
             <div className="spec">
@@ -507,8 +524,8 @@ export default function App() {
                   <table className="mt">
                     <thead>
                       <tr>
-                        <th>Period</th><th>Bouquet CAGR</th><th>Real CAGR*</th><th>Post-Tax†</th>
-                        <th>Nifty 50</th><th>FD Rate</th>
+                        <th>Period</th><th>Bouquet CAGR</th><th>Post-Tax†</th><th>Real CAGR*</th>
+                        <th>Nifty 50</th><th>FD Rate</th><th>FD Real‡</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -516,16 +533,17 @@ export default function App() {
                         <tr key={p}>
                           <td>{p}</td>
                           <td className="gc">{r.bouquet}%</td>
-                          <td className="ec">{r.realCAGR}%</td>
                           <td className="zc">{r.postTax}%</td>
+                          <td className="ec">{r.realCAGR}%</td>
                           <td className="dc">{r.nifty50 ? `${r.nifty50.toFixed(1)}%` : "—"}</td>
                           <td className="dc">{r.fdRate}%</td>
+                          <td className="dc">{(r.fdRate - 6.0).toFixed(1)}%</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                   <div style={{ marginTop: 14, fontSize: 11, color: G.mist, lineHeight: 1.8 }}>
-                    * Real CAGR adjusted for 6% inflation · † Post-Tax assumes 30% slab, 12.5% LTCG · All figures computed from live AMFI NAV data
+                    * Real CAGR adjusted for 6% inflation · † Post-Tax assumes 30% slab, 12.5% LTCG · ‡ FD Real = FD Rate minus 6% inflation · All figures from live AMFI NAV data
                   </div>
                   {a.intlTaxWarning && (
                     <div className="itax">⚠️ Tax Alert: Motilal Oswal Nasdaq 100 FOF is taxed as a DEBT fund regardless of holding period. Income slab rate applies — not 12.5% LTCG.</div>
