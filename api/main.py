@@ -575,3 +575,67 @@ def customize_bouquet(request: CustomizeRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── ALTERNATIVE BOUQUET GENERATION ───────────────────────────
+
+class GenerateMoreRequest(BaseModel):
+    horizonYears: float = 7
+    targetCAGR: float = 16.0
+    excludedFunds: list = []
+    roundNumber: int = 2
+
+
+@app.post("/api/bouquets/generate-more")
+def generate_more_bouquets(request: GenerateMoreRequest):
+    """
+    Generate an alternative round of bouquets using the broader fund universe,
+    excluding funds already shown in previous rounds.
+    This endpoint triggers live computation (~2-4 minutes).
+    """
+    from engine.alternative_bouquet import build_alternative_round
+    from engine.cagr_advisor import assess_realism
+
+    if request.roundNumber > 4:
+        raise HTTPException(status_code=400, detail="Maximum 4 rounds supported.")
+
+    try:
+        advisory = assess_realism(request.targetCAGR, request.horizonYears)
+        result = build_alternative_round(
+            horizon_years=int(request.horizonYears),
+            target_cagr=float(request.targetCAGR),
+            excluded_codes=[str(c) for c in request.excludedFunds],
+            round_number=request.roundNumber,
+        )
+
+        if result["pool_exhausted"] and not result["archetypes"]:
+            raise HTTPException(
+                status_code=409,
+                detail=f"Fund pool exhausted — only {result['pool_size']} eligible funds remain after exclusions. No further unique bouquets can be generated."
+            )
+
+        # Add relevance scoring and advisory to each archetype
+        from api.main import _archetype_relevance
+        archetypes = result["archetypes"]
+        for arch in archetypes:
+            dist, label = _archetype_relevance(arch["id"], request.targetCAGR)
+            arch["relevanceScore"] = round(dist, 1)
+            arch["matchLabel"] = label
+            arch["realisticAssessment"] = advisory
+        archetypes.sort(key=lambda x: x["relevanceScore"])
+        if archetypes and archetypes[0]["matchLabel"] != "Best Match":
+            archetypes[0]["matchLabel"] = "Closest Match"
+
+        return {
+            "impliedCAGR": request.targetCAGR,
+            "archetypes": archetypes,
+            "roundNumber": request.roundNumber,
+            "poolSize": result["pool_size"],
+            "poolExhausted": result["pool_exhausted"],
+            "computedAt": datetime.now().isoformat(),
+            "horizonUsed": int(request.horizonYears),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

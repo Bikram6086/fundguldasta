@@ -205,7 +205,7 @@ body{font-family:'Outfit',sans-serif;background:${G.bg};color:${G.fog};min-heigh
 .fdg{background:${G.em}}.fda{background:${G.am}}
 .slbl{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:${G.gold};margin-bottom:14px}
 .itax{margin-top:14px;padding:13px 15px;background:rgba(232,160,0,0.07);border:1px solid rgba(232,160,0,0.2);border-radius:10px;font-size:12px;color:${G.am};line-height:1.7}
-.customize-toggle{display:flex;align-items:center;gap:8px;background:transparent;border:1px solid rgba(212,175,55,0.25);border-radius:8px;padding:8px 16px;color:${G.mist};font-family:'Outfit',sans-serif;font-size:12px;cursor:pointer;transition:all .2s;margin-top:16px}.customize-toggle:hover{border-color:rgba(212,175,55,0.5);color:${G.gold}}.customize-panel{margin-top:16px;border:1px solid rgba(212,175,55,0.15);border-radius:12px;padding:20px;background:rgba(212,175,55,0.03)}.cx-search{width:100%;background:${G.elv};border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px 14px;color:${G.white};font-family:'Outfit',sans-serif;font-size:13px;outline:none;box-sizing:border-box}.cx-search:focus{border-color:rgba(212,175,55,0.35)}.cx-results{margin-top:4px;background:${G.sur};border:1px solid ${G.bord};border-radius:8px;overflow:hidden}.cx-result{padding:12px 14px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.04);transition:background .15s}.cx-result:last-child{border-bottom:none}.cx-result:hover{background:rgba(212,175,55,0.06)}.cx-result-name{font-size:13px;color:${G.white};margin-bottom:2px}.cx-result-meta{font-size:11px;color:${G.mist}}.cx-compare{margin-top:16px}.cx-table{width:100%;border-collapse:collapse;margin-top:10px}.cx-table th{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:${G.mist};padding:8px 10px;text-align:left;border-bottom:1px solid ${G.bord}}.cx-table th:not(:first-child){text-align:right}.cx-table td{padding:9px 10px;font-size:12px;color:${G.fog};border-bottom:1px solid rgba(255,255,255,0.03)}.cx-table td:not(:first-child){text-align:right;font-family:'JetBrains Mono',monospace}.cx-table tr:last-child td{border-bottom:none}.cx-better{color:#27AE78}.cx-worse{color:#E05555}.cx-impact{margin-top:12px;padding:12px 14px;background:rgba(255,255,255,0.03);border-radius:8px;font-size:12px;color:${G.mist};line-height:1.7}.cx-actions{display:flex;gap:10px;margin-top:14px}.cx-accept{flex:1;padding:10px;background:rgba(39,174,120,0.15);border:1px solid rgba(39,174,120,0.3);border-radius:8px;color:#27AE78;font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s}.cx-accept:hover{background:rgba(39,174,120,0.25)}.cx-reject{flex:1;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:${G.mist};font-family:'Outfit',sans-serif;font-size:13px;cursor:pointer;transition:all .2s}.cx-reject:hover{background:rgba(255,255,255,0.07)}.cx-applied{display:inline-flex;align-items:center;gap:5px;font-size:10px;background:rgba(39,174,120,0.12);border:1px solid rgba(39,174,120,0.25);border-radius:6px;padding:3px 8px;color:#27AE78;margin-left:8px}.match-best{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:rgba(39,174,120,0.15);border:1px solid rgba(39,174,120,0.3);border-radius:4px;padding:2px 7px;color:#27AE78;margin-top:7px;display:inline-block}.match-label{font-size:9px;color:rgba(255,255,255,0.3);margin-top:6px;letter-spacing:.04em}@keyframes up{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+.customize-toggle{display:flex;align-items:center;gap:8px;background:transparent;border:1px solid rgba(212,175,55,0.25);border-radius:8px;padding:8px 16px;color:${G.mist};font-family:'Outfit',sans-serif;font-size:12px;cursor:pointer;transition:all .2s;margin-top:16px}.customize-toggle:hover{border-color:rgba(212,175,55,0.5);color:${G.gold}}.customize-panel{margin-top:16px;border:1px solid rgba(212,175,55,0.15);border-radius:12px;padding:20px;background:rgba(212,175,55,0.03)}.cx-search{width:100%;background:${G.elv};border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px 14px;color:${G.white};font-family:'Outfit',sans-serif;font-size:13px;outline:none;box-sizing:border-box}.cx-search:focus{border-color:rgba(212,175,55,0.35)}.cx-results{margin-top:4px;background:${G.sur};border:1px solid ${G.bord};border-radius:8px;overflow:hidden}.cx-result{padding:12px 14px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.04);transition:background .15s}.cx-result:last-child{border-bottom:none}.cx-result:hover{background:rgba(212,175,55,0.06)}.cx-result-name{font-size:13px;color:${G.white};margin-bottom:2px}.cx-result-meta{font-size:11px;color:${G.mist}}.cx-compare{margin-top:16px}.cx-table{width:100%;border-collapse:collapse;margin-top:10px}.cx-table th{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:${G.mist};padding:8px 10px;text-align:left;border-bottom:1px solid ${G.bord}}.cx-table th:not(:first-child){text-align:right}.cx-table td{padding:9px 10px;font-size:12px;color:${G.fog};border-bottom:1px solid rgba(255,255,255,0.03)}.cx-table td:not(:first-child){text-align:right;font-family:'JetBrains Mono',monospace}.cx-table tr:last-child td{border-bottom:none}.cx-better{color:#27AE78}.cx-worse{color:#E05555}.cx-impact{margin-top:12px;padding:12px 14px;background:rgba(255,255,255,0.03);border-radius:8px;font-size:12px;color:${G.mist};line-height:1.7}.cx-actions{display:flex;gap:10px;margin-top:14px}.cx-accept{flex:1;padding:10px;background:rgba(39,174,120,0.15);border:1px solid rgba(39,174,120,0.3);border-radius:8px;color:#27AE78;font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s}.cx-accept:hover{background:rgba(39,174,120,0.25)}.cx-reject{flex:1;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:${G.mist};font-family:'Outfit',sans-serif;font-size:13px;cursor:pointer;transition:all .2s}.cx-reject:hover{background:rgba(255,255,255,0.07)}.cx-applied{display:inline-flex;align-items:center;gap:5px;font-size:10px;background:rgba(39,174,120,0.12);border:1px solid rgba(39,174,120,0.25);border-radius:6px;padding:3px 8px;color:#27AE78;margin-left:8px}.match-best{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:rgba(39,174,120,0.15);border:1px solid rgba(39,174,120,0.3);border-radius:4px;padding:2px 7px;color:#27AE78;margin-top:7px;display:inline-block}.match-label{font-size:9px;color:rgba(255,255,255,0.3);margin-top:6px;letter-spacing:.04em}.gen-more-cta{margin:32px 0 0;padding:28px 24px;border:1px dashed rgba(212,175,55,0.25);border-radius:16px;text-align:center;background:rgba(212,175,55,0.02)}.gen-more-title{font-family:Cormorant Garamond,serif;font-size:20px;color:;margin-bottom:8px;font-weight:600}.gen-more-sub{font-size:13px;color:;line-height:1.7;margin-bottom:20px;max-width:480px;margin-left:auto;margin-right:auto}.gen-more-btn{background:transparent;border:1px solid rgba(212,175,55,0.4);border-radius:10px;padding:12px 32px;color:;font-family:Outfit,sans-serif;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.04em;transition:all .2s}.gen-more-btn:hover{background:rgba(212,175,55,0.08);border-color:rgba(212,175,55,0.7)}.gen-more-btn:disabled{opacity:.4;cursor:not-allowed}.alt-round-header{display:flex;align-items:center;gap:14px;margin:40px 0 20px}.alt-round-divider{flex:1;height:1px;background:linear-gradient(90deg,rgba(212,175,55,0.2),transparent)}.alt-round-label{font-family:Cormorant Garamond,serif;font-size:16px;color:;white-space:nowrap;letter-spacing:.04em}.alt-round-note{font-size:11px;color:;margin-top:4px;text-align:center}.gen-loading{display:flex;flex-direction:column;align-items:center;gap:16px;padding:40px;color:;font-size:13px}.gen-spinner{width:36px;height:36px;border:2px solid rgba(212,175,55,0.15);border-top-color:rgba(212,175,55,0.7);border-radius:50%;animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.gen-exhausted{margin:24px 0;padding:16px 20px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;text-align:center;font-size:12px;color:}@keyframes up{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.1)}}
 `;
 
@@ -235,6 +235,10 @@ export default function App() {
   const [customizeComparing, setCustomizeComparing] = useState(null);
   const [customizeApplied, setCustomizeApplied] = useState(null);
   const [customizeLoading, setCustomizeLoading] = useState(false);
+  const [altRounds, setAltRounds] = useState([]);
+  const [altLoading, setAltLoading] = useState(false);
+  const [altError, setAltError] = useState(null);
+  const [altPoolExhausted, setAltPoolExhausted] = useState(false);
 
   const impliedCAGR = (() => {
     if (mode === "return") return parseFloat(cagr) || null;
@@ -286,6 +290,36 @@ export default function App() {
     }
   };
 
+  const handleGenerateMore = async () => {
+    setAltLoading(true);
+    setAltError(null);
+    const currentRound = altRounds.length + 2;
+    // Collect all fund codes shown so far (round 1 + all alt rounds)
+    const usedCodes = [
+      ...(curationResult?.archetypes?.flatMap(a => a.funds?.map(f => f.scheme_code) || []) || []),
+      ...altRounds.flatMap(r => r.archetypes?.flatMap(a => a.funds?.map(f => f.scheme_code) || []) || []),
+    ];
+    try {
+      const result = await apiCall('POST', '/api/bouquets/generate-more', {
+        horizonYears: parseFloat(yrs) || 7,
+        targetCAGR: parseFloat(cagr) || 16,
+        excludedFunds: [...new Set(usedCodes)],
+        roundNumber: currentRound,
+      });
+      setAltRounds(prev => [...prev, result]);
+      if (result.poolExhausted) setAltPoolExhausted(true);
+    } catch (e) {
+      const msg = e?.message || 'Generation failed';
+      if (msg.includes('exhausted') || msg.includes('409')) {
+        setAltPoolExhausted(true);
+      } else {
+        setAltError('Could not generate alternative bouquets. Please try again.');
+      }
+    } finally {
+      setAltLoading(false);
+    }
+  };
+
   const handleCustomizeSearch = async (q) => {
     setCustomizeSearch(q);
     if (q.length < 2) { setCustomizeResults([]); return; }
@@ -332,7 +366,7 @@ export default function App() {
   };
 
   const reset = () => {
-    setScreen("hero"); setSelectedArch(null); setBStep(0); setCagrAdvisory(null); setApproxHorizon(null); setCustomizeApplied(null); setCustomizeOpen(false);
+    setScreen("hero"); setSelectedArch(null); setBStep(0); setCagrAdvisory(null); setApproxHorizon(null); setCustomizeApplied(null); setCustomizeOpen(false); setAltRounds([]); setAltLoading(false); setAltError(null); setAltPoolExhausted(false);
     setBAns({}); setBDone(false); setBProf(null);
     setShowBehav(true); setCurationResult(null); setApiError(null);
   };
@@ -661,6 +695,74 @@ export default function App() {
               ))}
             </div>
           </div>
+
+          {/* GENERATE MORE BOUQUETS */}
+          {archetypes.length > 0 && (
+            <div>
+              {/* Alternative rounds */}
+              {altRounds.map((round, ri) => (
+                <div key={round.roundNumber}>
+                  <div className="alt-round-header">
+                    <div className="alt-round-divider" />
+                    <div style={{ textAlign: "center" }}>
+                      <div className="alt-round-label">Alternative Bouquet Set {round.roundNumber}</div>
+                      <div className="alt-round-note">{round.poolSize} eligible funds in universe after previous exclusions</div>
+                    </div>
+                    <div className="alt-round-divider" style={{ background: "linear-gradient(270deg,rgba(212,175,55,0.2),transparent)" }} />
+                  </div>
+                  <div className="slbl">Archetype Options — Round {round.roundNumber}</div>
+                  <div className="spec">
+                    {round.archetypes.map(at => (
+                      <div key={at.id + "-r" + round.roundNumber}
+                        className={`arch${selectedArch?.id === at.id && selectedArch?.roundNumber === round.roundNumber ? " sel" : ""}`}
+                        style={{ "--ac": at.color, "--ar": at.rgb }}
+                        onClick={() => setSelectedArch({ ...at, roundNumber: round.roundNumber })}>
+                        <div style={{ fontSize: 22, marginBottom: 8 }}>{at.icon}</div>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: G.white, marginBottom: 4 }}>{at.label}</div>
+                        <div style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 18, fontWeight: 500, color: at.color, marginBottom: 4 }}>{at.cagrRange}</div>
+                        <div style={{ fontSize: 11, color: G.mist }}>{at.risk} Risk</div>
+                        {(at.matchLabel === "Best Match" || at.matchLabel === "Closest Match")
+                          ? <div className="match-best">{at.matchLabel}</div>
+                          : at.matchLabel && at.matchLabel !== "Alternative" && <div className="match-label">{at.matchLabel}</div>}
+                        <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", marginTop: 5, letterSpacing: ".04em" }}>Alt Round {round.roundNumber}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+
+              {/* Loading state */}
+              {altLoading && (
+                <div className="gen-loading">
+                  <div className="gen-spinner" />
+                  <div>Scoring {300 - altRounds.length * 20}+ funds from the eligible universe...</div>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.2)" }}>This takes 2-4 minutes. Same engine, different fund pool.</div>
+                </div>
+              )}
+
+              {/* Pool exhausted */}
+              {altPoolExhausted && !altLoading && (
+                <div className="gen-exhausted">
+                  All unique bouquet combinations from our eligible fund universe have been shown. {altRounds.length + 1} rounds of options curated.
+                </div>
+              )}
+
+              {/* Generate More CTA */}
+              {!altLoading && !altPoolExhausted && altRounds.length < 3 && (
+                <div className="gen-more-cta">
+                  <div className="gen-more-title">Want another set of bouquets?</div>
+                  <div className="gen-more-sub">
+                    We will curate another round using different funds from our eligible universe — same scoring engine, no repetition from previous rounds.
+                    {altRounds.length === 0 ? " Takes 2-4 minutes." : ""}
+                  </div>
+                  {altError && <div style={{ color: "#E05555", fontSize: 12, marginBottom: 12 }}>{altError}</div>}
+                  <button className="gen-more-btn" onClick={handleGenerateMore}>
+                    Curate {altRounds.length === 0 ? "Another" : "One More"} Bouquet Set
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {a && (
             <>
