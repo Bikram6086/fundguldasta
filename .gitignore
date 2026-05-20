@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.env
+config/.env
+frontend/fundguldasta-ui/node_modules/
+frontend/fundguldasta-ui/build/
+*.log
+.DS_Store
+.pytest_cache/
+*.egg-info/
