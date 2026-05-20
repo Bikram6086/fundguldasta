@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 
-const API_BASE = "http://localhost:8000";
+const API_BASE = process.env.REACT_APP_API_URL || "http://localhost:8000";
 
 const USE_LIVE_DATA = true;
 
@@ -94,10 +94,10 @@ const css = `
 body{font-family:'Outfit',sans-serif;background:${G.bg};color:${G.fog};min-height:100vh;overflow-x:hidden}
 .hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:48px 24px;position:relative}
 .mesh{position:absolute;inset:0;background:radial-gradient(ellipse 80% 60% at 20% 50%,rgba(212,175,55,0.06) 0%,transparent 60%),radial-gradient(ellipse 60% 80% at 80% 30%,rgba(66,130,208,0.04) 0%,transparent 60%);pointer-events:none}
-.brand{display:flex;align-items:center;gap:14px;margin-bottom:52px;animation:up .9s ease .1s both}
-.bmark{width:72px;height:72px;background:linear-gradient(135deg,${G.gold},${G.goldD});border-radius:14px;display:flex;align-items:center;justify-content:center;font-family:'Cormorant Garamond',serif;font-size:34px;font-weight:700;color:${G.bg};box-shadow:0 0 32px rgba(212,175,55,0.45)}
-.bname{font-family:'Cormorant Garamond',serif;font-size:42px;font-weight:700;color:${G.gold}}
-.btag{font-size:15px;color:${G.gold};margin-top:4px;letter-spacing:.04em;font-style:italic;font-family:'Cormorant Garamond',serif}
+.brand{display:flex;align-items:center;gap:20px;margin-bottom:52px;animation:up .9s ease .1s both}
+.bmark{width:108px;height:108px;background:linear-gradient(145deg,${G.gold} 0%,${G.goldD} 55%,#7A5810 100%);border-radius:18px;display:flex;align-items:center;justify-content:center;box-shadow:0 0 48px rgba(212,175,55,0.55),inset 0 1px 0 rgba(255,255,255,0.18);flex-shrink:0}
+.bname{font-family:'Cormorant Garamond',serif;font-size:52px;font-weight:700;color:${G.gold};line-height:1.05}
+.btag{font-size:18px;color:${G.gold};margin-top:6px;letter-spacing:.04em;font-style:italic;font-family:'Cormorant Garamond',serif;line-height:1.3}
 .h1{font-family:'Cormorant Garamond',serif;font-size:clamp(48px,8vw,84px);font-weight:700;line-height:1.06;text-align:center;color:${G.white};max-width:900px;margin-bottom:14px;animation:up .9s ease .3s both}
 .h1 em{color:${G.gold};font-style:normal}
 .tagline{font-family:'Cormorant Garamond',serif;font-size:clamp(20px,2.8vw,28px);color:${G.gold};margin-bottom:10px;letter-spacing:.04em;font-style:italic;animation:up .9s ease .38s both}.gold-rule{width:52px;height:1px;background:${G.gold};margin:10px auto 20px;opacity:0.6}.sec-tag{font-family:'Outfit',sans-serif;font-size:13px;color:${G.slate};letter-spacing:.12em;text-transform:uppercase;text-align:center;margin-bottom:28px;animation:up .9s ease .36s both}
@@ -115,7 +115,7 @@ body{font-family:'Outfit',sans-serif;background:${G.bg};color:${G.fog};min-heigh
 .inp:focus{border-color:rgba(212,175,55,0.4)}
 .inp-sm{font-size:16px;padding:12px 46px 12px 16px}
 .sfx{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:12px;color:${G.gold};font-weight:600;pointer-events:none}
-.warn-box{background:rgba(232,160,0,0.08);border:1px solid rgba(232,160,0,0.25);border-radius:10px;padding:14px 16px;font-size:13px;color:${G.am};line-height:1.7;margin-bottom:20px}.advisory{background:rgba(146,64,14,0.15);border:1px solid rgba(212,175,55,0.3);border-radius:10px;padding:16px 20px;margin-bottom:22px;display:flex;align-items:flex-start;gap:14px}.adv-icon{font-size:20px;flex-shrink:0;margin-top:1px}.adv-body{flex:1}.adv-cat{font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;margin-bottom:4px}.adv-cat.aggressive{color:#F0A500}.adv-cat.unrealistic{color:#E05555}.adv-msg{font-size:13px;color:${G.fog};line-height:1.7;margin-bottom:10px}.adv-dismiss{font-size:11px;color:${G.mist};background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:4px 12px;cursor:pointer;font-family:Outfit,sans-serif}.adv-dismiss:hover{color:${G.gold};border-color:rgba(212,175,55,0.3)}
+.warn-box{background:rgba(232,160,0,0.08);border:1px solid rgba(232,160,0,0.25);border-radius:10px;padding:14px 16px;font-size:13px;color:${G.am};line-height:1.7;margin-bottom:20px}.advisory{background:rgba(146,64,14,0.12);border:1px solid rgba(212,175,55,0.25);border-radius:12px;padding:20px 24px;margin-bottom:24px}.adv-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.adv-title{font-family:'Cormorant Garamond',serif;font-size:16px;font-weight:600;color:${G.gold};letter-spacing:.04em}.adv-close{background:none;border:none;color:${G.mist};font-size:18px;cursor:pointer;line-height:1;padding:2px 6px;border-radius:4px}.adv-close:hover{color:${G.fog}}.adv-sections{display:flex;flex-direction:column;gap:12px}.adv-row{background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:8px;padding:12px 14px}.adv-row-label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:${G.mist};margin-bottom:6px;font-weight:600}.adv-row-content{font-size:13px;color:${G.fog};line-height:1.7}.adv-badge{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;border-radius:4px;padding:2px 8px;margin-right:8px;vertical-align:middle}.adv-badge.unsuitable{background:rgba(224,85,85,0.2);color:#E05555;border:1px solid rgba(224,85,85,0.3)}.adv-badge.caution{background:rgba(240,165,0,0.15);color:#F0A500;border:1px solid rgba(240,165,0,0.25)}.adv-badge.acceptable{background:rgba(212,175,55,0.12);color:${G.gold};border:1px solid rgba(212,175,55,0.2)}.adv-badge.good,.adv-badge.ideal{background:rgba(39,174,120,0.15);color:#27AE78;border:1px solid rgba(39,174,120,0.25)}.adv-badge.unrealistic{background:rgba(224,85,85,0.2);color:#E05555;border:1px solid rgba(224,85,85,0.3)}.adv-badge.aggressive{background:rgba(240,165,0,0.15);color:#F0A500;border:1px solid rgba(240,165,0,0.25)}.adv-badge.realistic,.adv-badge.below_realistic{background:rgba(39,174,120,0.12);color:#27AE78;border:1px solid rgba(39,174,120,0.22)}.adv-badge.below_fd{background:rgba(212,175,55,0.12);color:${G.gold};border:1px solid rgba(212,175,55,0.2)}.adv-prob{margin-top:6px;font-size:11px;color:${G.mist}}.adv-prob strong{color:${G.fog}}.ra-table{width:100%;border-collapse:collapse;margin-top:8px}.ra-table th{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:${G.mist};padding:6px 10px;text-align:left;border-bottom:1px solid rgba(255,255,255,0.07)}.ra-table th:not(:first-child){text-align:right}.ra-table td{font-size:12px;color:${G.fog};padding:8px 10px;border-bottom:1px solid rgba(255,255,255,0.03)}.ra-table td:not(:first-child){text-align:right;font-family:'JetBrains Mono',monospace}.ra-table tr:last-child td{border-bottom:none}.ra-target-row td{color:${G.gold}!important;font-weight:600}.adv-proceed{margin-top:14px;display:flex;justify-content:flex-end}.adv-proceed-btn{font-size:12px;color:${G.mist};background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:6px 16px;cursor:pointer;font-family:Outfit,sans-serif}.adv-proceed-btn:hover{color:${G.gold};border-color:rgba(212,175,55,0.3)}.adv-icon{font-size:20px;flex-shrink:0;margin-top:1px}.adv-body{flex:1}.adv-cat{font-size:11px;letter-spacing:.1em;text-transform:uppercase;font-weight:600;margin-bottom:4px}.adv-cat.aggressive{color:#F0A500}.adv-cat.unrealistic{color:#E05555}.adv-msg{font-size:13px;color:${G.fog};line-height:1.7;margin-bottom:10px}.adv-dismiss{font-size:11px;color:${G.mist};background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);border-radius:6px;padding:4px 12px;cursor:pointer;font-family:Outfit,sans-serif}.adv-dismiss:hover{color:${G.gold};border-color:rgba(212,175,55,0.3)}
 .implied{padding:10px 14px;border-radius:8px;background:rgba(212,175,55,0.08);border:1px solid rgba(212,175,55,0.15);font-size:13px;color:${G.gold};margin-bottom:18px;line-height:1.6}
 .btn-p{width:100%;padding:15px;background:linear-gradient(135deg,${G.gold},${G.goldD});border:none;border-radius:11px;font-family:'Outfit',sans-serif;font-size:15px;font-weight:600;color:${G.bg};cursor:pointer;transition:all .2s;margin-bottom:2px}
 .btn-p:hover:not(:disabled){transform:translateY(-2px);box-shadow:0 10px 40px rgba(212,175,55,0.35)}
@@ -228,6 +228,7 @@ export default function App() {
   const [freshness, setFreshness] = useState(null);
   const [apiError, setApiError] = useState(null);
   const [cagrAdvisory, setCagrAdvisory] = useState(null);
+  const [approxHorizon, setApproxHorizon] = useState(null);
   const [customizeOpen, setCustomizeOpen] = useState(false);
   const [customizeSearch, setCustomizeSearch] = useState('');
   const [customizeResults, setCustomizeResults] = useState([]);
@@ -274,6 +275,7 @@ export default function App() {
       setCurationResult(result);
       if (result.archetypes?.length > 0) {
         setCagrAdvisory(result.archetypes[0].realisticAssessment || null);
+      setApproxHorizon(result.horizonApproximate ? { used: result.horizonUsed, requested: result.horizonRequested } : null);
       }
       const fdata = await getFreshness().catch(() => null);
       setFreshness(fdata);
@@ -330,7 +332,7 @@ export default function App() {
   };
 
   const reset = () => {
-    setScreen("hero"); setSelectedArch(null); setBStep(0); setCagrAdvisory(null); setCustomizeApplied(null); setCustomizeOpen(false);
+    setScreen("hero"); setSelectedArch(null); setBStep(0); setCagrAdvisory(null); setApproxHorizon(null); setCustomizeApplied(null); setCustomizeOpen(false);
     setBAns({}); setBDone(false); setBProf(null);
     setShowBehav(true); setCurationResult(null); setApiError(null);
   };
@@ -353,8 +355,74 @@ export default function App() {
       <div className="hero">
         <div className="mesh" />
         <div className="brand">
-          <div className="bmark">F</div>
-          <div><div className="bname">FundGuldasta</div><div className="btag">fundguldasta.com · Mutual Fund Research · Unfiltered</div></div>
+          <div className="bmark">
+            <svg viewBox="0 0 100 100" width="98" height="98" xmlns="http://www.w3.org/2000/svg">
+
+              {/* ── Soil / pot base ── */}
+              <ellipse cx="50" cy="86" rx="18" ry="4.5" fill="rgba(0,0,0,0.32)"/>
+              <ellipse cx="50" cy="83" rx="13" ry="3" fill="rgba(0,0,0,0.22)"/>
+
+              {/* ── Stalks from common base (50, 82) ── */}
+
+              {/* LC — Large Cap — far left */}
+              <path d="M50 82 Q28 65 16 46" stroke="rgba(0,0,0,0.45)" strokeWidth="2.2" strokeLinecap="round" fill="none"/>
+
+              {/* MC — Mid Cap — left */}
+              <path d="M50 82 Q36 60 28 38" stroke="rgba(0,0,0,0.45)" strokeWidth="2.2" strokeLinecap="round" fill="none"/>
+
+              {/* FC — Flexi Cap — centre, tallest */}
+              <line x1="50" y1="82" x2="50" y2="18" stroke="rgba(0,0,0,0.45)" strokeWidth="2.2" strokeLinecap="round"/>
+
+              {/* VF — Value Fund — right */}
+              <path d="M50 82 Q64 60 72 38" stroke="rgba(0,0,0,0.45)" strokeWidth="2.2" strokeLinecap="round" fill="none"/>
+
+              {/* SC — Small Cap — far right */}
+              <path d="M50 82 Q72 65 84 46" stroke="rgba(0,0,0,0.45)" strokeWidth="2.2" strokeLinecap="round" fill="none"/>
+
+              {/* ── Leaves (proper pointed shape) ── */}
+
+              {/* LC — deep green, rotate −38° */}
+              <g transform="translate(14,40) rotate(-38)">
+                <path d="M0 10 C-7 5 -7 -5 0 -10 C7 -5 7 5 0 10Z" fill="#145C37"/>
+                <line x1="0" y1="8" x2="0" y2="-8" stroke="rgba(255,255,255,0.22)" strokeWidth="0.9"/>
+              </g>
+              <text x="14" y="42.5" fontSize="6.2" textAnchor="middle" fill="white" fontWeight="700" fontFamily="'Outfit',sans-serif">LC</text>
+
+              {/* MC — deep blue, rotate −18° */}
+              <g transform="translate(26,31) rotate(-18)">
+                <path d="M0 10 C-7 5 -7 -5 0 -10 C7 -5 7 5 0 10Z" fill="#14437A"/>
+                <line x1="0" y1="8" x2="0" y2="-8" stroke="rgba(255,255,255,0.22)" strokeWidth="0.9"/>
+              </g>
+              <text x="26" y="33.5" fontSize="6.2" textAnchor="middle" fill="white" fontWeight="700" fontFamily="'Outfit',sans-serif">MC</text>
+
+              {/* FC — dark translucent centre */}
+              <g transform="translate(50,12)">
+                <path d="M0 10 C-7 5 -7 -5 0 -10 C7 -5 7 5 0 10Z" fill="rgba(0,0,0,0.48)"/>
+                <line x1="0" y1="8" x2="0" y2="-8" stroke="rgba(255,255,255,0.22)" strokeWidth="0.9"/>
+              </g>
+              <text x="50" y="14.5" fontSize="6.2" textAnchor="middle" fill="white" fontWeight="700" fontFamily="'Outfit',sans-serif">FC</text>
+
+              {/* VF — deep plum, rotate +18° */}
+              <g transform="translate(74,31) rotate(18)">
+                <path d="M0 10 C-7 5 -7 -5 0 -10 C7 -5 7 5 0 10Z" fill="#4E2880"/>
+                <line x1="0" y1="8" x2="0" y2="-8" stroke="rgba(255,255,255,0.22)" strokeWidth="0.9"/>
+              </g>
+              <text x="74" y="33.5" fontSize="6.2" textAnchor="middle" fill="white" fontWeight="700" fontFamily="'Outfit',sans-serif">VF</text>
+
+              {/* SC — deep crimson, rotate +38° */}
+              <g transform="translate(86,40) rotate(38)">
+                <path d="M0 10 C-7 5 -7 -5 0 -10 C7 -5 7 5 0 10Z" fill="#8B1A1A"/>
+                <line x1="0" y1="8" x2="0" y2="-8" stroke="rgba(255,255,255,0.22)" strokeWidth="0.9"/>
+              </g>
+              <text x="86" y="42.5" fontSize="6.2" textAnchor="middle" fill="white" fontWeight="700" fontFamily="'Outfit',sans-serif">SC</text>
+
+            </svg>
+          </div>
+          <div>
+            <div className="bname">FundGuldasta</div>
+            <div className="btag">Fund selection ka ek rasta</div>
+            <div style={{ fontSize: 13, color: "rgba(212,175,55,0.5)", fontFamily: "Outfit,sans-serif", marginTop: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>Mutual Fund Research · Unfiltered</div>
+          </div>
         </div>
         <div className="tagline">Mutual Fund Research. Unfiltered.</div>
         <div className="gold-rule" />
@@ -370,11 +438,26 @@ export default function App() {
           </div>
           {mode === "return" && (
             <div style={{ marginBottom: 24 }}>
-              <label className="lbl">Target CAGR & investment horizon</label>
+              <label className="lbl">Target CAGR & investment horizon (any value — we'll show you what it means)</label>
               <div className="row">
-                <div className="iw"><input className="inp" type="number" placeholder="16" value={cagr} onChange={e => setCAGR(e.target.value)} /><span className="sfx">% CAGR</span></div>
-                <div className="iw"><input className="inp" type="number" placeholder="7" value={yrs} onChange={e => setYrs(e.target.value)} /><span className="sfx">Years</span></div>
+                <div className="iw"><input className="inp" type="number" placeholder="16" min="1" max="50" value={cagr} onChange={e => setCAGR(e.target.value)} /><span className="sfx">% CAGR</span></div>
+                <div className="iw"><input className="inp" type="number" placeholder="7" min="1" max="40" value={yrs} onChange={e => setYrs(e.target.value)} /><span className="sfx">Years</span></div>
               </div>
+              {cagr && yrs && (() => {
+                const c = parseFloat(cagr), y = parseFloat(yrs);
+                if (!c || !y) return null;
+                const fd = (10 * Math.pow(1.07, y)).toFixed(1);
+                const target = (10 * Math.pow(1 + c/100, y)).toFixed(1);
+                const isShort = y <= 2;
+                const isHigh = c > 20;
+                const hint = isShort
+                  ? `${y}-year horizon: equity MFs carry high risk — markets can be down 40%+ at the 2-year mark.`
+                  : isHigh
+                  ? `${c}% over ${y} years: historically rare. At FD (7%): ₹${fd}L. At ${c}%: ₹${target}L.`
+                  : `₹10L at ${c}% over ${y} years → ₹${target}L. FD (7%) → ₹${fd}L.`;
+                const hintColor = isShort || isHigh ? "#F0A500" : G.mist;
+                return <div style={{ fontSize: 11, color: hintColor, marginTop: 6, lineHeight: 1.5 }}>{hint}</div>;
+              })()}
             </div>
           )}
           {mode === "corpus" && (
@@ -499,13 +582,63 @@ export default function App() {
             </div>
           )}
 
+          {approxHorizon && (
+            <div className="advisory" style={{ background: "rgba(39,174,120,0.08)", borderColor: "rgba(39,174,120,0.25)" }}>
+              <div className="adv-icon">ℹ️</div>
+              <div className="adv-body">
+                <div className="adv-cat" style={{ color: "#27AE78" }}>Approximate Results</div>
+                <div className="adv-msg">Showing bouquets for <strong>{approxHorizon.used}-year</strong> horizon. Your {approxHorizon.requested}-year analysis is computing in background — refresh in ~2 minutes for exact results.</div>
+                <button className="adv-dismiss" onClick={() => setApproxHorizon(null)}>Got it</button>
+              </div>
+            </div>
+          )}
+
           {cagrAdvisory && cagrAdvisory.category !== "realistic" && (
             <div className="advisory">
-              <div className="adv-icon">{cagrAdvisory.category === "unrealistic" ? "🚫" : "⚠️"}</div>
-              <div className="adv-body">
-                <div className={`adv-cat ${cagrAdvisory.category}`}>{cagrAdvisory.category === "unrealistic" ? "Historically Unrealistic" : "Aggressive Target"}</div>
-                <div className="adv-msg">{cagrAdvisory.message}</div>
-                <button className="adv-dismiss" onClick={() => setCagrAdvisory(null)}>Proceed anyway →</button>
+              <div className="adv-header">
+                <span className="adv-title">Research Advisory</span>
+                <button className="adv-close" onClick={() => setCagrAdvisory(null)}>×</button>
+              </div>
+              <div className="adv-sections">
+                {cagrAdvisory.horizon_suitability && cagrAdvisory.horizon_suitability.level !== "good" && cagrAdvisory.horizon_suitability.level !== "ideal" && (
+                  <div className="adv-row">
+                    <div className="adv-row-label">Investment Horizon</div>
+                    <div className="adv-row-content">
+                      <span className={`adv-badge ${cagrAdvisory.horizon_suitability.level}`}>
+                        {{unsuitable:"Not Suitable",caution:"Short Horizon",acceptable:"Acceptable",good:"Good",ideal:"Ideal"}[cagrAdvisory.horizon_suitability.level]}
+                      </span>
+                      {cagrAdvisory.horizon_suitability.message}
+                    </div>
+                  </div>
+                )}
+                <div className="adv-row">
+                  <div className="adv-row-label">CAGR Realism Assessment</div>
+                  <div className="adv-row-content">
+                    <span className={`adv-badge ${cagrAdvisory.category}`}>
+                      {{unrealistic:"Historically Unrealistic",aggressive:"Aggressive Target",below_realistic:"Below Typical",below_fd:"Below FD Rate",realistic:"Realistic"}[cagrAdvisory.category] || cagrAdvisory.category}
+                    </span>
+                    {cagrAdvisory.message}
+                  </div>
+                  {cagrAdvisory.probability != null && (
+                    <div className="adv-prob">Historical probability of achieving this target: <strong>~{cagrAdvisory.probability}%</strong> of rolling windows since 2001</div>
+                  )}
+                </div>
+                {cagrAdvisory.corpus_comparison && (
+                  <div className="adv-row">
+                    <div className="adv-row-label">₹10 Lakh projection over {cagrAdvisory.corpus_comparison.horizon_years} years</div>
+                    <table className="ra-table">
+                      <thead><tr><th>Scenario</th><th>CAGR</th><th>Corpus</th></tr></thead>
+                      <tbody>
+                        <tr><td>FD (approx.)</td><td>{cagrAdvisory.corpus_comparison.fd_cagr}%</td><td>₹{(cagrAdvisory.corpus_comparison.fd_corpus/100000).toFixed(1)}L</td></tr>
+                        <tr><td>Realistic MF mid</td><td>{cagrAdvisory.corpus_comparison.realistic_cagr}%</td><td>₹{(cagrAdvisory.corpus_comparison.realistic_corpus/100000).toFixed(1)}L</td></tr>
+                        <tr className="ra-target-row"><td>Your target</td><td>{cagrAdvisory.corpus_comparison.target_cagr}%</td><td>₹{(cagrAdvisory.corpus_comparison.target_corpus/100000).toFixed(1)}L</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+              <div className="adv-proceed">
+                <button className="adv-proceed-btn" onClick={() => setCagrAdvisory(null)}>I understand — show my bouquets →</button>
               </div>
             </div>
           )}

@@ -200,99 +200,96 @@ def run_precomputation(horizon_years=7, target_cagr=DEFAULT_TARGET_CAGR):
 
     for arch_id, arch_meta in ARCHETYPES.items():
         print(f"\nProcessing archetype: {arch_id.upper()}")
+        try:
+            fund_weights = ARCHETYPE_FUNDS[arch_id]
+            fund_details = [
+                {
+                    "scheme_code": code,
+                    "weight": weight,
+                    "name": VERIFIED_FUNDS.get(code, {}).get("name", ""),
+                    "category": VERIFIED_FUNDS.get(code, {}).get("category", "Unknown"),
+                    "tier": VERIFIED_FUNDS.get(code, {}).get("tier", 1),
+                    "amc": VERIFIED_FUNDS.get(code, {}).get("amc", ""),
+                }
+                for code, weight in fund_weights
+            ]
 
-        fund_weights = ARCHETYPE_FUNDS[arch_id]
-        fund_details = [
-            {
-                'scheme_code': code,
-                'weight': weight,
-                'name': VERIFIED_FUNDS.get(code, {}).get('name', ''),
-                'category': VERIFIED_FUNDS.get(code, {}).get('category', 'Unknown'),
-                'tier': VERIFIED_FUNDS.get(code, {}).get('tier', 1),
-                'amc': VERIFIED_FUNDS.get(code, {}).get('amc', ''),
+            bouquet = build_bouquet(arch_id, horizon_years, target_cagr)
+            if not bouquet:
+                print(f"  FAILED to build bouquet for {arch_id}")
+                continue
+
+            print(f"  Computing confidence score...")
+            confidence = compute_bouquet_confidence(
+                fund_weights, fund_details, horizon_years, target_cagr
+            )
+
+            print(f"  Computing stress test...")
+            stress_test = compute_bouquet_stress_test(fund_weights)
+
+            bouquet_7yr_cagr = bouquet["metrics"].get("7 Yr", {}).get("bouquet", 16)
+            comparator = compute_comparator(bouquet_7yr_cagr, horizon_years)
+
+            cache_entry = {
+                "archetype_id": arch_id,
+                "label": arch_meta["label"],
+                "cagrRange": arch_meta["cagr_range"],
+                "risk": arch_meta["risk"],
+                "color": arch_meta["color"],
+                "description": arch_meta["description"],
+                "funds": bouquet["funds"],
+                "metrics": bouquet["metrics"],
+                "confidence": confidence,
+                "stressTest": stress_test,
+                "overlap": {
+                    "avgOverlapPct": bouquet["avg_overlap_pct"],
+                    "avgCorrelation": bouquet["avg_correlation"],
+                },
+                "methodology": arch_meta["methodology"],
+                "devils": arch_meta["devils"],
+                "comparator": comparator,
+                "intlTaxWarning": arch_meta.get("intl_tax_warning", False),
             }
-            for code, weight in fund_weights
-        ]
 
-        # Build bouquet with live metrics
-        bouquet = build_bouquet(arch_id, horizon_years, target_cagr)
-        if not bouquet:
-            print(f"  FAILED to build bouquet for {arch_id}")
-            continue
-
-        # Confidence score
-        print(f"  Computing confidence score...")
-        confidence = compute_bouquet_confidence(
-            fund_weights, fund_details, horizon_years, target_cagr
-        )
-
-        # Stress test
-        print(f"  Computing stress test...")
-        stress_test = compute_bouquet_stress_test(fund_weights)
-
-        # Comparator
-        bouquet_7yr_cagr = bouquet['metrics'].get('7 Yr', {}).get('bouquet', 16)
-        comparator = compute_comparator(bouquet_7yr_cagr, horizon_years)
-
-        # Build complete cache entry
-        cache_entry = {
-            'archetype_id': arch_id,
-            'label': arch_meta['label'],
-            'cagrRange': arch_meta['cagr_range'],
-            'risk': arch_meta['risk'],
-            'color': arch_meta['color'],
-            'description': arch_meta['description'],
-            'funds': bouquet['funds'],
-            'metrics': bouquet['metrics'],
-            'confidence': confidence,
-            'stressTest': stress_test,
-            'overlap': {
-                'avgOverlapPct': bouquet['avg_overlap_pct'],
-                'avgCorrelation': bouquet['avg_correlation'],
-            },
-            'methodology': arch_meta['methodology'],
-            'devils': arch_meta['devils'],
-            'comparator': comparator,
-            'intlTaxWarning': arch_meta.get('intl_tax_warning', False),
-        }
-
-        # Save to database
-        cursor.execute("""
-            INSERT INTO bouquet_cache (
-                archetype_id, horizon_years, target_cagr, computation_date,
-                funds_json, metrics_json, confidence_json, stress_test_json,
-                overlap_json, methodology_json, devils_json, comparator_json,
-                is_active
-            ) VALUES (%s, %s, %s, CURRENT_DATE, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
-            ON CONFLICT (archetype_id, horizon_years, computation_date)
-            DO UPDATE SET
-                funds_json       = EXCLUDED.funds_json,
-                metrics_json     = EXCLUDED.metrics_json,
-                confidence_json  = EXCLUDED.confidence_json,
-                stress_test_json = EXCLUDED.stress_test_json,
-                overlap_json     = EXCLUDED.overlap_json,
-                methodology_json = EXCLUDED.methodology_json,
-                devils_json      = EXCLUDED.devils_json,
-                comparator_json  = EXCLUDED.comparator_json,
-                is_active        = TRUE
-        """, (
-            arch_id,
-            horizon_years,
-            target_cagr,
-            json.dumps(bouquet['funds']),
-            json.dumps(bouquet['metrics']),
-            json.dumps(confidence),
-            json.dumps(stress_test),
-            json.dumps({'avgOverlapPct': bouquet['avg_overlap_pct'],
-                        'avgCorrelation': bouquet['avg_correlation']}),
-            json.dumps(arch_meta['methodology']),
-            json.dumps(arch_meta['devils']),
-            json.dumps(comparator),
-        ))
-
-        conn.commit()
-        results[arch_id] = cache_entry
-        print(f"  ✅ {arch_id} cached — Confidence: {confidence['score']}/100 ({confidence['level']})")
+            cursor.execute("""
+                INSERT INTO bouquet_cache (
+                    archetype_id, horizon_years, target_cagr, computation_date,
+                    funds_json, metrics_json, confidence_json, stress_test_json,
+                    overlap_json, methodology_json, devils_json, comparator_json,
+                    is_active
+                ) VALUES (%s, %s, %s, CURRENT_DATE, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
+                ON CONFLICT (archetype_id, horizon_years, computation_date)
+                DO UPDATE SET
+                    funds_json       = EXCLUDED.funds_json,
+                    metrics_json     = EXCLUDED.metrics_json,
+                    confidence_json  = EXCLUDED.confidence_json,
+                    stress_test_json = EXCLUDED.stress_test_json,
+                    overlap_json     = EXCLUDED.overlap_json,
+                    methodology_json = EXCLUDED.methodology_json,
+                    devils_json      = EXCLUDED.devils_json,
+                    comparator_json  = EXCLUDED.comparator_json,
+                    is_active        = TRUE
+            """, (
+                arch_id, horizon_years, target_cagr,
+                json.dumps(bouquet["funds"]),
+                json.dumps(bouquet["metrics"]),
+                json.dumps(confidence),
+                json.dumps(stress_test),
+                json.dumps({"avgOverlapPct": bouquet["avg_overlap_pct"],
+                             "avgCorrelation": bouquet["avg_correlation"]}),
+                json.dumps(arch_meta["methodology"]),
+                json.dumps(arch_meta["devils"]),
+                json.dumps(comparator),
+            ))
+            conn.commit()
+            results[arch_id] = cache_entry
+            print(f"  \u2705 {arch_id} cached \u2014 Confidence: {confidence['score']}/100 ({confidence['level']})")
+        except Exception as arch_err:
+            print(f"  \u274c {arch_id} FAILED: {arch_err}")
+            try:
+                conn.rollback()
+            except Exception:
+                pass
 
     cursor.close()
     conn.close()

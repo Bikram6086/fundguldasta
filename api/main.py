@@ -71,6 +71,33 @@ def get_latest_cache(archetype_id, horizon_years):
     conn.close()
     return row
 
+
+def get_nearest_horizon(requested_horizon):
+    """Return the cached horizon_years closest to the requested one."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT horizon_years FROM bouquet_cache
+        WHERE is_active = TRUE
+        GROUP BY horizon_years
+        HAVING COUNT(DISTINCT archetype_id) = 4
+        ORDER BY ABS(horizon_years - %s)
+        LIMIT 1
+    """, (requested_horizon,))
+    row = cursor.fetchone()
+    cursor.close()
+    conn.close()
+    return row[0] if row else None
+
+
+def _safe_precompute(horizon, cagr):
+    try:
+        run_precomputation(horizon_years=horizon, target_cagr=cagr)
+        print(f"Background precompute done: {horizon}yr/{cagr}%")
+    except Exception as e:
+        print(f"Background precompute failed for {horizon}yr: {e}")
+
+
 # ── REQUEST/RESPONSE MODELS ──────────────────────────────────
 
 class CurateRequest(BaseModel):
@@ -136,15 +163,27 @@ def curate_bouquets(request: CurateRequest):
     # Get CAGR advisory
     advisory = assess_realism(implied_cagr or 16.0, request.horizonYears)
 
-    # Check cache for exact horizon; trigger on-demand computation if missing
-    probe = get_latest_cache('steady', horizon)
+    # Check cache for exact horizon; fall back to nearest if missing, compute exact in background
+    # Probe all 4 archetypes to ensure cache is complete for this horizon
+    all_cached = all(get_latest_cache(a, horizon) for a in ['steady', 'balanced', 'aggressive', 'conviction'])
+    probe = all_cached
+    horizon_approximate = False
     if not probe:
-        print(f'Cache miss for {horizon}yr — computing on demand...')
-        try:
-            run_precomputation(horizon_years=horizon, target_cagr=implied_cagr or 16.0)
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f'Computation failed: {e}')
-    closest_horizon = horizon
+        nearest = get_nearest_horizon(horizon)
+        if nearest:
+            print(f"Cache miss for {horizon}yr — serving {nearest}yr immediately, computing {horizon}yr in background")
+            threading.Thread(target=_safe_precompute, args=(horizon, implied_cagr or 16.0), daemon=True).start()
+            closest_horizon = nearest
+            horizon_approximate = True
+        else:
+            print(f"Cache empty — computing {horizon}yr on demand (first run)...")
+            try:
+                run_precomputation(horizon_years=horizon, target_cagr=implied_cagr or 16.0)
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Computation failed: {e}")
+            closest_horizon = horizon
+    else:
+        closest_horizon = horizon
 
     # Load all 4 archetypes from cache
     archetypes = []
@@ -208,6 +247,8 @@ def curate_bouquets(request: CurateRequest):
         'fundUniverse':             331,
         'combinationsEvaluated':    48420,
         'horizonUsed':              closest_horizon,
+        'horizonApproximate':       horizon_approximate,
+        'horizonRequested':         horizon,
     }
 
 @app.get("/api/bouquets/{archetype_id}/metrics")

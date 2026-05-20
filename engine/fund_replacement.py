@@ -62,15 +62,15 @@ def search_eligible_funds(query: str, limit: int = 10) -> list:
         LEFT JOIN nav_data nd ON fm.scheme_code = nd.scheme_code
         WHERE fm.plan_type = 'Direct'
         AND fm.is_active = TRUE
-        AND fm.scheme_name ILIKE '%growth%'
-        AND fm.scheme_name NOT ILIKE '%idcw%'
-        AND fm.scheme_name NOT ILIKE '%dividend%'
-        AND fm.scheme_name NOT ILIKE '%debt%'
-        AND fm.scheme_name NOT ILIKE '%liquid%'
-        AND fm.scheme_name NOT ILIKE '%overnight%'
-        AND fm.scheme_name NOT ILIKE '%gilt%'
-        AND fm.scheme_name NOT ILIKE '%bond%'
-        AND fm.scheme_name NOT ILIKE '%arbitrage%'
+        AND fm.scheme_name ILIKE '%%growth%%'
+        AND fm.scheme_name NOT ILIKE '%%idcw%%'
+        AND fm.scheme_name NOT ILIKE '%%dividend%%'
+        AND fm.scheme_name NOT ILIKE '%%debt%%'
+        AND fm.scheme_name NOT ILIKE '%%liquid%%'
+        AND fm.scheme_name NOT ILIKE '%%overnight%%'
+        AND fm.scheme_name NOT ILIKE '%%gilt%%'
+        AND fm.scheme_name NOT ILIKE '%%bond%%'
+        AND fm.scheme_name NOT ILIKE '%%arbitrage%%'
         AND (fm.scheme_name ILIKE %s OR fm.amc_name ILIKE %s OR fm.scheme_code::text = %s)
         GROUP BY
             fm.scheme_code, fm.scheme_name, fm.amc_name,
