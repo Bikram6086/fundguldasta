@@ -343,7 +343,7 @@ if __name__ == "__main__":
         print(f"ERROR: {e}")
         log_precompute_run('failed', 0, str(e))
         raise
-﻿
+
 
 def run_all_horizons(target_cagr: float = 16.0):
     """Pre-warm cache for all common horizons. Called at API startup in a background thread."""

@@ -92,16 +92,8 @@ class CustomizeRequest(BaseModel):
 
 # ── ENDPOINTS ────────────────────────────────────────────────
 
-@app.on_event("startup")
-def startup_prewarm():
-    """Pre-warm cache for common horizons in background on server start."""
-    def prewarm():
-        import time
-        time.sleep(8)  # wait for server to be fully ready
-        print("Pre-warming bouquet cache for horizons [3, 5, 7, 10, 15]...")
-        run_all_horizons(target_cagr=16.0)
-        print("Pre-warm complete.")
-    threading.Thread(target=prewarm, daemon=True).start()
+# Startup pre-warm disabled — on-demand computation handles cache misses.
+# To pre-warm manually: python3 -c "from engine.precompute import run_all_horizons; run_all_horizons()"
 
 
 @app.get("/health")
