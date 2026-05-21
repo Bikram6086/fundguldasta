@@ -205,7 +205,7 @@ body{font-family:'Outfit',sans-serif;background:${G.bg};color:${G.fog};min-heigh
 .fdg{background:${G.em}}.fda{background:${G.am}}
 .slbl{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:${G.gold};margin-bottom:14px}
 .itax{margin-top:14px;padding:13px 15px;background:rgba(232,160,0,0.07);border:1px solid rgba(232,160,0,0.2);border-radius:10px;font-size:12px;color:${G.am};line-height:1.7}
-.customize-toggle{display:flex;align-items:center;gap:8px;background:transparent;border:1px solid rgba(212,175,55,0.25);border-radius:8px;padding:8px 16px;color:${G.mist};font-family:'Outfit',sans-serif;font-size:12px;cursor:pointer;transition:all .2s;margin-top:16px}.customize-toggle:hover{border-color:rgba(212,175,55,0.5);color:${G.gold}}.customize-panel{margin-top:16px;border:1px solid rgba(212,175,55,0.15);border-radius:12px;padding:20px;background:rgba(212,175,55,0.03)}.cx-search{width:100%;background:${G.elv};border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px 14px;color:${G.white};font-family:'Outfit',sans-serif;font-size:13px;outline:none;box-sizing:border-box}.cx-search:focus{border-color:rgba(212,175,55,0.35)}.cx-results{margin-top:4px;background:${G.sur};border:1px solid ${G.bord};border-radius:8px;overflow:hidden}.cx-result{padding:12px 14px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.04);transition:background .15s}.cx-result:last-child{border-bottom:none}.cx-result:hover{background:rgba(212,175,55,0.06)}.cx-result-name{font-size:13px;color:${G.white};margin-bottom:2px}.cx-result-meta{font-size:11px;color:${G.mist}}.cx-compare{margin-top:16px}.cx-table{width:100%;border-collapse:collapse;margin-top:10px}.cx-table th{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:${G.mist};padding:8px 10px;text-align:left;border-bottom:1px solid ${G.bord}}.cx-table th:not(:first-child){text-align:right}.cx-table td{padding:9px 10px;font-size:12px;color:${G.fog};border-bottom:1px solid rgba(255,255,255,0.03)}.cx-table td:not(:first-child){text-align:right;font-family:'JetBrains Mono',monospace}.cx-table tr:last-child td{border-bottom:none}.cx-better{color:#27AE78}.cx-worse{color:#E05555}.cx-impact{margin-top:12px;padding:12px 14px;background:rgba(255,255,255,0.03);border-radius:8px;font-size:12px;color:${G.mist};line-height:1.7}.cx-actions{display:flex;gap:10px;margin-top:14px}.cx-accept{flex:1;padding:10px;background:rgba(39,174,120,0.15);border:1px solid rgba(39,174,120,0.3);border-radius:8px;color:#27AE78;font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s}.cx-accept:hover{background:rgba(39,174,120,0.25)}.cx-reject{flex:1;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:${G.mist};font-family:'Outfit',sans-serif;font-size:13px;cursor:pointer;transition:all .2s}.cx-reject:hover{background:rgba(255,255,255,0.07)}.cx-applied{display:inline-flex;align-items:center;gap:5px;font-size:10px;background:rgba(39,174,120,0.12);border:1px solid rgba(39,174,120,0.25);border-radius:6px;padding:3px 8px;color:#27AE78;margin-left:8px}.match-best{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:rgba(39,174,120,0.15);border:1px solid rgba(39,174,120,0.3);border-radius:4px;padding:2px 7px;color:#27AE78;margin-top:7px;display:inline-block}.match-label{font-size:9px;color:rgba(255,255,255,0.3);margin-top:6px;letter-spacing:.04em}.gen-more-cta{margin:32px 0 0;padding:28px 24px;border:1px dashed rgba(212,175,55,0.25);border-radius:16px;text-align:center;background:rgba(212,175,55,0.02)}.gen-more-title{font-family:Cormorant Garamond,serif;font-size:20px;color:;margin-bottom:8px;font-weight:600}.gen-more-sub{font-size:13px;color:;line-height:1.7;margin-bottom:20px;max-width:480px;margin-left:auto;margin-right:auto}.gen-more-btn{background:transparent;border:1px solid rgba(212,175,55,0.4);border-radius:10px;padding:12px 32px;color:;font-family:Outfit,sans-serif;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.04em;transition:all .2s}.gen-more-btn:hover{background:rgba(212,175,55,0.08);border-color:rgba(212,175,55,0.7)}.gen-more-btn:disabled{opacity:.4;cursor:not-allowed}.alt-round-header{display:flex;align-items:center;gap:14px;margin:40px 0 20px}.alt-round-divider{flex:1;height:1px;background:linear-gradient(90deg,rgba(212,175,55,0.2),transparent)}.alt-round-label{font-family:Cormorant Garamond,serif;font-size:16px;color:;white-space:nowrap;letter-spacing:.04em}.alt-round-note{font-size:11px;color:;margin-top:4px;text-align:center}.gen-loading{display:flex;flex-direction:column;align-items:center;gap:16px;padding:40px;color:;font-size:13px}.gen-spinner{width:36px;height:36px;border:2px solid rgba(212,175,55,0.15);border-top-color:rgba(212,175,55,0.7);border-radius:50%;animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.gen-exhausted{margin:24px 0;padding:16px 20px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;text-align:center;font-size:12px;color:}@keyframes up{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+.customize-toggle{display:flex;align-items:center;gap:8px;background:transparent;border:1px solid rgba(212,175,55,0.25);border-radius:8px;padding:8px 16px;color:${G.mist};font-family:'Outfit',sans-serif;font-size:12px;cursor:pointer;transition:all .2s;margin-top:16px}.customize-toggle:hover{border-color:rgba(212,175,55,0.5);color:${G.gold}}.customize-panel{margin-top:16px;border:1px solid rgba(212,175,55,0.15);border-radius:12px;padding:20px;background:rgba(212,175,55,0.03)}.cx-search{width:100%;background:${G.elv};border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:10px 14px;color:${G.white};font-family:'Outfit',sans-serif;font-size:13px;outline:none;box-sizing:border-box}.cx-search:focus{border-color:rgba(212,175,55,0.35)}.cx-results{margin-top:4px;background:${G.sur};border:1px solid ${G.bord};border-radius:8px;overflow:hidden}.cx-result{padding:12px 14px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.04);transition:background .15s}.cx-result:last-child{border-bottom:none}.cx-result:hover{background:rgba(212,175,55,0.06)}.cx-result-name{font-size:13px;color:${G.white};margin-bottom:2px}.cx-result-meta{font-size:11px;color:${G.mist}}.cx-compare{margin-top:16px}.cx-table{width:100%;border-collapse:collapse;margin-top:10px}.cx-table th{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:${G.mist};padding:8px 10px;text-align:left;border-bottom:1px solid ${G.bord}}.cx-table th:not(:first-child){text-align:right}.cx-table td{padding:9px 10px;font-size:12px;color:${G.fog};border-bottom:1px solid rgba(255,255,255,0.03)}.cx-table td:not(:first-child){text-align:right;font-family:'JetBrains Mono',monospace}.cx-table tr:last-child td{border-bottom:none}.cx-better{color:#27AE78}.cx-worse{color:#E05555}.cx-impact{margin-top:12px;padding:12px 14px;background:rgba(255,255,255,0.03);border-radius:8px;font-size:12px;color:${G.mist};line-height:1.7}.cx-actions{display:flex;gap:10px;margin-top:14px}.cx-accept{flex:1;padding:10px;background:rgba(39,174,120,0.15);border:1px solid rgba(39,174,120,0.3);border-radius:8px;color:#27AE78;font-family:'Outfit',sans-serif;font-size:13px;font-weight:600;cursor:pointer;transition:all .2s}.cx-accept:hover{background:rgba(39,174,120,0.25)}.cx-reject{flex:1;padding:10px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.1);border-radius:8px;color:${G.mist};font-family:'Outfit',sans-serif;font-size:13px;cursor:pointer;transition:all .2s}.cx-reject:hover{background:rgba(255,255,255,0.07)}.cx-applied{display:inline-flex;align-items:center;gap:5px;font-size:10px;background:rgba(39,174,120,0.12);border:1px solid rgba(39,174,120,0.25);border-radius:6px;padding:3px 8px;color:#27AE78;margin-left:8px}.match-best{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;background:rgba(39,174,120,0.15);border:1px solid rgba(39,174,120,0.3);border-radius:4px;padding:2px 7px;color:#27AE78;margin-top:7px;display:inline-block}.match-label{font-size:9px;color:rgba(255,255,255,0.3);margin-top:6px;letter-spacing:.04em}.gen-more-cta{margin:32px 0 0;padding:28px 24px;border:1px dashed rgba(212,175,55,0.25);border-radius:16px;text-align:center;background:rgba(212,175,55,0.02)}.gen-more-title{font-family:Cormorant Garamond,serif;font-size:20px;color:;margin-bottom:8px;font-weight:600}.gen-more-sub{font-size:13px;color:;line-height:1.7;margin-bottom:20px;max-width:480px;margin-left:auto;margin-right:auto}.gen-more-btn{background:transparent;border:1px solid rgba(212,175,55,0.4);border-radius:10px;padding:12px 32px;color:;font-family:Outfit,sans-serif;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.04em;transition:all .2s}.gen-more-btn:hover{background:rgba(212,175,55,0.08);border-color:rgba(212,175,55,0.7)}.gen-more-btn:disabled{opacity:.4;cursor:not-allowed}.alt-round-header{display:flex;align-items:center;gap:14px;margin:40px 0 20px}.alt-round-divider{flex:1;height:1px;background:linear-gradient(90deg,rgba(212,175,55,0.2),transparent)}.alt-round-label{font-family:Cormorant Garamond,serif;font-size:16px;color:;white-space:nowrap;letter-spacing:.04em}.alt-round-note{font-size:11px;color:;margin-top:4px;text-align:center}.gen-loading{display:flex;flex-direction:column;align-items:center;gap:16px;padding:40px;color:;font-size:13px}.gen-spinner{width:36px;height:36px;border:2px solid rgba(212,175,55,0.15);border-top-color:rgba(212,175,55,0.7);border-radius:50%;animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}.gen-exhausted{margin:24px 0;padding:16px 20px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);border-radius:10px;text-align:center;font-size:12px;color:}.byob-entry{display:inline-flex;align-items:center;gap:8px;background:transparent;border:1px solid rgba(212,175,55,0.3);border-radius:10px;padding:10px 22px;color:${G.gold};font-family:'Outfit',sans-serif;font-size:13px;cursor:pointer;transition:all .2s;margin-top:12px}.byob-entry:hover{background:rgba(212,175,55,0.07);border-color:rgba(212,175,55,0.6)}.byob-screen{min-height:100vh;background:${G.bg};padding:48px 24px 80px}.byob-inner{max-width:780px;margin:0 auto}.byob-back{background:none;border:none;color:${G.mist};font-size:13px;cursor:pointer;font-family:Outfit,sans-serif;display:flex;align-items:center;gap:6px;padding:0;margin-bottom:32px}.byob-back:hover{color:${G.gold}}.byob-title{font-family:'Cormorant Garamond',serif;font-size:36px;color:${G.white};margin-bottom:6px;font-weight:600}.byob-sub{font-size:13px;color:${G.mist};margin-bottom:36px;line-height:1.7}.byob-search{position:relative}.byob-input{width:100%;background:${G.elv};border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:13px 16px;color:${G.white};font-family:'Outfit',sans-serif;font-size:14px;outline:none;box-sizing:border-box}.byob-input:focus{border-color:rgba(212,175,55,0.4)}.byob-dropdown{position:absolute;top:calc(100% + 4px);left:0;right:0;background:${G.sur};border:1px solid ${G.bord};border-radius:10px;overflow:hidden;z-index:50;box-shadow:0 8px 32px rgba(0,0,0,0.4)}.byob-opt{padding:13px 16px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,0.04);transition:background .12s}.byob-opt:last-child{border-bottom:none}.byob-opt:hover{background:rgba(212,175,55,0.07)}.byob-opt-name{font-size:13px;color:${G.white};margin-bottom:2px}.byob-opt-meta{font-size:11px;color:${G.mist}}.byob-fund-list{margin-top:20px}.byob-fund-row{display:flex;align-items:center;gap:12px;padding:14px 16px;background:${G.elv};border:1px solid rgba(255,255,255,0.07);border-radius:10px;margin-bottom:8px}.byob-fund-info{flex:1;min-width:0}.byob-fund-name{font-size:13px;color:${G.white};white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.byob-fund-meta{font-size:11px;color:${G.mist};margin-top:2px}.byob-weight-input{width:64px;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;padding:6px 10px;color:${G.white};font-family:'JetBrains Mono',monospace;font-size:13px;text-align:right;outline:none}.byob-weight-input:focus{border-color:rgba(212,175,55,0.4)}.byob-pct{font-size:12px;color:${G.mist}}.byob-remove{background:none;border:none;color:${G.mist};font-size:16px;cursor:pointer;padding:4px;line-height:1;border-radius:4px}.byob-remove:hover{color:#E05555}.byob-total{text-align:right;font-size:12px;margin-top:8px;font-family:'JetBrains Mono',monospace}.byob-total.ok{color:#27AE78}.byob-total.warn{color:#E05555}.byob-controls{display:flex;align-items:center;gap:16px;margin-top:28px;flex-wrap:wrap}.byob-horizon-wrap{display:flex;align-items:center;gap:10px}.byob-horizon-label{font-size:12px;color:${G.mist}}.byob-horizon-input{width:56px;background:${G.elv};border:1px solid rgba(255,255,255,0.1);border-radius:8px;padding:8px 10px;color:${G.white};font-family:'JetBrains Mono',monospace;font-size:14px;text-align:center;outline:none}.byob-horizon-input:focus{border-color:rgba(212,175,55,0.4)}.byob-analyse-btn{flex:1;min-width:200px;padding:13px 24px;background:rgba(212,175,55,0.12);border:1px solid rgba(212,175,55,0.4);border-radius:10px;color:${G.gold};font-family:'Outfit',sans-serif;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.04em;transition:all .2s}.byob-analyse-btn:hover{background:rgba(212,175,55,0.2);border-color:rgba(212,175,55,0.7)}.byob-analyse-btn:disabled{opacity:.4;cursor:not-allowed}.byob-results{margin-top:40px}.byob-result-header{display:flex;gap:20px;flex-wrap:wrap;margin-bottom:28px}.byob-metric-card{flex:1;min-width:160px;background:${G.elv};border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:20px 22px}.byob-metric-label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:${G.mist};margin-bottom:8px}.byob-metric-value{font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:500;color:${G.gold}}.byob-metric-sub{font-size:11px;color:${G.mist};margin-top:4px}.byob-table{width:100%;border-collapse:collapse;margin-top:6px}.byob-table th{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:${G.mist};padding:8px 12px;text-align:left;border-bottom:1px solid ${G.bord}}.byob-table th:not(:first-child){text-align:right}.byob-table td{font-size:12px;color:${G.fog};padding:11px 12px;border-bottom:1px solid rgba(255,255,255,0.03)}.byob-table td:not(:first-child){text-align:right;font-family:'JetBrains Mono',monospace}.byob-table tr:last-child td{border-bottom:none}.byob-score-bar{display:inline-block;width:36px;height:4px;border-radius:2px;margin-left:8px;vertical-align:middle}.byob-section{margin-top:24px;background:${G.elv};border:1px solid rgba(255,255,255,0.07);border-radius:14px;padding:20px 22px}.byob-section-title{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:${G.mist};margin-bottom:14px;font-weight:600}.byob-warn-item{font-size:12px;color:${G.fog};line-height:1.7;margin-bottom:8px;padding-left:14px;position:relative}.byob-warn-item::before{content:'';position:absolute;left:0;top:7px;width:5px;height:5px;border-radius:50%;background:#F0A500}.byob-warn-item.danger::before{background:#E05555}.byob-suggestion{background:rgba(39,174,120,0.06);border:1px solid rgba(39,174,120,0.15);border-radius:10px;padding:14px 16px;margin-bottom:10px}.byob-sug-header{font-size:12px;color:${G.fog};margin-bottom:6px}.byob-sug-funds{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.byob-sug-from{font-size:13px;color:${G.mist};text-decoration:line-through}.byob-sug-arrow{color:${G.gold};font-size:16px}.byob-sug-to{font-size:13px;color:#27AE78;font-weight:500}.byob-sug-delta{font-size:11px;color:#27AE78;background:rgba(39,174,120,0.12);border-radius:4px;padding:2px 7px;margin-left:6px}.byob-sug-rationale{font-size:11px;color:${G.mist};margin-top:6px;line-height:1.6}@keyframes up{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
 @keyframes pulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.1)}}
 `;
 
@@ -239,6 +239,14 @@ export default function App() {
   const [altLoading, setAltLoading] = useState(false);
   const [altError, setAltError] = useState(null);
   const [altPoolExhausted, setAltPoolExhausted] = useState(false);
+  // Custom builder
+  const [cbFunds, setCbFunds] = useState([]);
+  const [cbSearch, setCbSearch] = useState('');
+  const [cbResults, setCbResults] = useState([]);
+  const [cbHorizon, setCbHorizon] = useState('7');
+  const [cbLoading, setCbLoading] = useState(false);
+  const [cbAnalysis, setCbAnalysis] = useState(null);
+  const [cbError, setCbError] = useState(null);
 
   const impliedCAGR = (() => {
     if (mode === "return") return parseFloat(cagr) || null;
@@ -287,6 +295,66 @@ export default function App() {
     } catch (err) {
       setApiError("Could not connect to API. Please ensure the backend is running on port 8000.");
       setScreen("hero");
+    }
+  };
+
+  const handleCbSearch = async (q) => {
+    setCbSearch(q);
+    if (q.length < 2) { setCbResults([]); return; }
+    try {
+      const res = await apiCall('GET', `/api/funds/search?q=${encodeURIComponent(q)}&limit=10`);
+      setCbResults(Array.isArray(res) ? res.filter(f => !cbFunds.some(cf => cf.scheme_code === f.scheme_code)) : []);
+    } catch { setCbResults([]); }
+  };
+
+  const handleCbAddFund = (fund) => {
+    if (cbFunds.length >= 12) return;
+    if (cbFunds.some(f => f.scheme_code === fund.scheme_code)) return;
+    const defaultWeight = Math.round(100 / (cbFunds.length + 1));
+    const newFunds = [
+      ...cbFunds.map(f => ({ ...f, weight: defaultWeight })),
+      { scheme_code: fund.scheme_code, name: fund.name, amc: fund.amc,
+        category: fund.category, tier_label: fund.tier_label, weight: defaultWeight }
+    ];
+    // Adjust last fund to make total exactly 100
+    const total = newFunds.reduce((s, f) => s + f.weight, 0);
+    if (total !== 100 && newFunds.length > 0) newFunds[0].weight += (100 - total);
+    setCbFunds(newFunds);
+    setCbSearch(''); setCbResults([]);
+    setCbAnalysis(null);
+  };
+
+  const handleCbRemoveFund = (code) => {
+    const remaining = cbFunds.filter(f => f.scheme_code !== code);
+    if (remaining.length === 0) { setCbFunds([]); return; }
+    const equalW = Math.round(100 / remaining.length);
+    const reweighted = remaining.map((f, i) => ({ ...f, weight: equalW }));
+    const total = reweighted.reduce((s, f) => s + f.weight, 0);
+    if (total !== 100) reweighted[0].weight += (100 - total);
+    setCbFunds(reweighted);
+    setCbAnalysis(null);
+  };
+
+  const handleCbWeightChange = (code, val) => {
+    setCbFunds(prev => prev.map(f => f.scheme_code === code ? { ...f, weight: parseFloat(val) || 0 } : f));
+    setCbAnalysis(null);
+  };
+
+  const handleCbAnalyse = async () => {
+    if (cbFunds.length < 1) return;
+    const total = cbFunds.reduce((s, f) => s + f.weight, 0);
+    if (Math.abs(total - 100) > 2) { setCbError(`Weights sum to ${total.toFixed(1)}% — please adjust to 100%.`); return; }
+    setCbLoading(true); setCbError(null); setCbAnalysis(null);
+    try {
+      const result = await apiCall('POST', '/api/bouquets/analyse-custom', {
+        funds: cbFunds.map(f => ({ scheme_code: f.scheme_code, weight: f.weight })),
+        horizonYears: parseFloat(cbHorizon) || 7,
+      });
+      setCbAnalysis(result);
+    } catch (e) {
+      setCbError('Analysis failed. Please try again.');
+    } finally {
+      setCbLoading(false);
     }
   };
 
@@ -366,7 +434,7 @@ export default function App() {
   };
 
   const reset = () => {
-    setScreen("hero"); setSelectedArch(null); setBStep(0); setCagrAdvisory(null); setApproxHorizon(null); setCustomizeApplied(null); setCustomizeOpen(false); setAltRounds([]); setAltLoading(false); setAltError(null); setAltPoolExhausted(false);
+    setScreen("hero"); setSelectedArch(null); setBStep(0); setCagrAdvisory(null); setApproxHorizon(null); setCustomizeApplied(null); setCustomizeOpen(false); setAltRounds([]); setAltLoading(false); setAltError(null); setAltPoolExhausted(false); setCbFunds([]); setCbSearch(''); setCbResults([]); setCbAnalysis(null); setCbError(null);
     setBAns({}); setBDone(false); setBProf(null);
     setShowBehav(true); setCurationResult(null); setApiError(null);
   };
@@ -530,7 +598,203 @@ export default function App() {
           )}
           {inputWarn && <div className="warn-box">⚠️ {inputWarn}</div>}
           <button className="btn-p" disabled={!isValid} onClick={handleFind}>Curate My Bouquets →</button>
+          <button className="byob-entry" style={{ marginTop: 8 }} onClick={() => setScreen("custom_builder")}>✎ Build Your Own Bouquet</button>
           <p className="note">Research & education only · Not investment advice · Past performance does not guarantee future returns<br />All fund data sourced from AMFI · No commission earned on any recommendation · fundguldasta.com</p>
+        </div>
+      </div>
+    </>
+  );
+
+  if (screen === "custom_builder") return (
+    <>
+      <style>{css}</style>
+      <div className="byob-screen">
+        <div className="byob-inner">
+          <button className="byob-back" onClick={() => setScreen("hero")}>← Back to search</button>
+          <div className="byob-title">Build Your Own Bouquet</div>
+          <div className="byob-sub">Search and add funds you are considering. Assign weights, set your horizon, and our engine will score your bouquet — and suggest where it can be stronger.</div>
+
+          {/* Fund search */}
+          <div style={{ marginBottom: 20 }}>
+            <div className="byob-search">
+              <input
+                className="byob-input"
+                type="text"
+                placeholder="Search fund by name or AMC (e.g. Axis Midcap, HDFC, Parag Parikh...)"
+                value={cbSearch}
+                onChange={e => handleCbSearch(e.target.value)}
+              />
+              {cbResults.length > 0 && (
+                <div className="byob-dropdown">
+                  {cbResults.map(f => (
+                    <div key={f.scheme_code} className="byob-opt" onClick={() => handleCbAddFund(f)}>
+                      <div className="byob-opt-name">{f.name}</div>
+                      <div className="byob-opt-meta">{f.amc} · {f.category} · {f.tier_label}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Fund list */}
+          {cbFunds.length > 0 && (
+            <div className="byob-fund-list">
+              <div style={{ fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase", color: G.mist, marginBottom: 10 }}>Your Bouquet ({cbFunds.length} fund{cbFunds.length !== 1 ? "s" : ""})</div>
+              {cbFunds.map(f => (
+                <div key={f.scheme_code} className="byob-fund-row">
+                  <div className="byob-fund-info">
+                    <div className="byob-fund-name">{f.name}</div>
+                    <div className="byob-fund-meta">{f.amc} · {f.category}</div>
+                  </div>
+                  <input
+                    className="byob-weight-input"
+                    type="number"
+                    min="1" max="100"
+                    value={f.weight}
+                    onChange={e => handleCbWeightChange(f.scheme_code, e.target.value)}
+                  />
+                  <span className="byob-pct">%</span>
+                  <button className="byob-remove" onClick={() => handleCbRemoveFund(f.scheme_code)}>✕</button>
+                </div>
+              ))}
+              {(() => {
+                const total = cbFunds.reduce((s, f) => s + (parseFloat(f.weight) || 0), 0);
+                return <div className={`byob-total ${Math.abs(total - 100) <= 0.5 ? "ok" : "warn"}`}>Total: {total.toFixed(1)}%{Math.abs(total - 100) > 0.5 ? " — must equal 100%" : " ✓"}</div>;
+              })()}
+            </div>
+          )}
+
+          {/* Controls */}
+          <div className="byob-controls">
+            <div className="byob-horizon-wrap">
+              <span className="byob-horizon-label">Investment horizon</span>
+              <input className="byob-horizon-input" type="number" min="1" max="25" value={cbHorizon} onChange={e => setCbHorizon(e.target.value)} />
+              <span className="byob-horizon-label">years</span>
+            </div>
+            <button
+              className="byob-analyse-btn"
+              disabled={cbFunds.length < 1 || cbLoading}
+              onClick={handleCbAnalyse}
+            >
+              {cbLoading ? "Analysing..." : "Analyse My Bouquet"}
+            </button>
+          </div>
+          {cbError && <div style={{ color: "#E05555", fontSize: 12, marginTop: 10 }}>{cbError}</div>}
+          {cbLoading && <div style={{ color: G.mist, fontSize: 12, marginTop: 16 }}>Scoring funds and computing correlations — usually under 60 seconds...</div>}
+
+          {/* Analysis Results */}
+          {cbAnalysis && (
+            <div className="byob-results">
+              <div style={{ width: 40, height: 1, background: "rgba(212,175,55,0.3)", margin: "0 0 28px" }} />
+
+              {/* Key metrics row */}
+              <div className="byob-result-header">
+                <div className="byob-metric-card">
+                  <div className="byob-metric-label">Projected CAGR</div>
+                  <div className="byob-metric-value">{cbAnalysis.projected_cagr != null ? cbAnalysis.projected_cagr + "%" : "—"}</div>
+                  <div className="byob-metric-sub">Weighted median rolling return over {cbHorizon}yr</div>
+                </div>
+                <div className="byob-metric-card">
+                  <div className="byob-metric-label">Composite Score</div>
+                  <div className="byob-metric-value" style={{ color: cbAnalysis.quality_color }}>{cbAnalysis.weighted_composite_score ?? "—"}</div>
+                  <div className="byob-metric-sub">{cbAnalysis.quality_label} · /100 scale</div>
+                </div>
+                <div className="byob-metric-card">
+                  <div className="byob-metric-label">Avg Correlation</div>
+                  <div className="byob-metric-value" style={{ color: cbAnalysis.avg_correlation > 0.9 ? "#E05555" : cbAnalysis.avg_correlation > 0.8 ? "#F0A500" : "#27AE78" }}>
+                    {cbAnalysis.avg_correlation != null ? cbAnalysis.avg_correlation.toFixed(2) : "—"}
+                  </div>
+                  <div className="byob-metric-sub">{cbAnalysis.avg_correlation > 0.9 ? "High — low true diversification" : cbAnalysis.avg_correlation > 0.8 ? "Moderate" : "Good diversification"}</div>
+                </div>
+              </div>
+
+              {/* CAGR realism advisory */}
+              {cbAnalysis.realism_advisory && cbAnalysis.realism_advisory.category !== "realistic" && (
+                <div className="warn-box" style={{ marginBottom: 20 }}>
+                  <strong>CAGR Advisory — {cbAnalysis.realism_advisory.category.replace("_", " ")}:</strong> {cbAnalysis.realism_advisory.message}
+                </div>
+              )}
+
+              {/* Fund-level analysis table */}
+              <div className="byob-section">
+                <div className="byob-section-title">Fund-Level Analysis</div>
+                <table className="byob-table">
+                  <thead>
+                    <tr><th>Fund</th><th>Weight</th><th>Score</th><th>Rolling CAGR</th><th>Tier</th><th>Category</th></tr>
+                  </thead>
+                  <tbody>
+                    {cbAnalysis.funds.map(f => (
+                      <tr key={f.scheme_code}>
+                        <td style={{ maxWidth: 200, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name}</td>
+                        <td>{f.weight}%</td>
+                        <td>
+                          {f.composite_score != null ? (
+                            <span style={{ color: f.composite_score >= 65 ? "#27AE78" : f.composite_score >= 50 ? "#F0A500" : "#E05555" }}>
+                              {f.composite_score.toFixed(1)}
+                            </span>
+                          ) : "—"}
+                        </td>
+                        <td>{f.rolling_cagr != null ? f.rolling_cagr + "%" : "—"}</td>
+                        <td><span style={{ color: f.tier === 1 ? "#27AE78" : f.tier === 2 ? "#F0A500" : "#E05555" }}>T{f.tier}</span></td>
+                        <td style={{ color: G.mist, fontSize: 11 }}>{f.category || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Improvement suggestions */}
+              {cbAnalysis.suggestions.length > 0 && (
+                <div className="byob-section">
+                  <div className="byob-section-title">Improvement Suggestions</div>
+                  <div style={{ fontSize: 12, color: G.mist, marginBottom: 14 }}>These substitutions could strengthen your bouquet — same category, higher composite score. Your choice entirely.</div>
+                  {cbAnalysis.suggestions.map((s, i) => (
+                    <div key={i} className="byob-suggestion">
+                      <div className="byob-sug-header">Consider replacing:</div>
+                      <div className="byob-sug-funds">
+                        <span className="byob-sug-from">{s.replace_fund.name}</span>
+                        <span className="byob-sug-arrow">→</span>
+                        <span className="byob-sug-to">{s.with_fund.name}</span>
+                        <span className="byob-sug-delta">+{s.score_improvement} pts</span>
+                      </div>
+                      <div className="byob-sug-rationale">{s.rationale}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {cbAnalysis.suggestions.length === 0 && (
+                <div className="byob-section" style={{ borderColor: "rgba(39,174,120,0.2)" }}>
+                  <div className="byob-section-title">Improvement Suggestions</div>
+                  <div style={{ fontSize: 13, color: "#27AE78" }}>All your funds score above the bouquet median — no obvious substitution recommended. Strong selection.</div>
+                </div>
+              )}
+
+              {/* Warnings */}
+              {(() => {
+                const allWarnings = [
+                  ...(cbAnalysis.warnings.correlation || []).map(w => ({ text: w, danger: true })),
+                  ...(cbAnalysis.warnings.concentration || []).map(w => ({ text: w, danger: false })),
+                  ...(cbAnalysis.warnings.amc || []).map(w => ({ text: w, danger: false })),
+                  ...(cbAnalysis.warnings.tier || []).map(w => ({ text: w, danger: false })),
+                  ...(cbAnalysis.warnings.expense_ratio || []).map(w => ({ text: w, danger: false })),
+                ];
+                if (allWarnings.length === 0) return null;
+                return (
+                  <div className="byob-section">
+                    <div className="byob-section-title">Cautions & Advisories</div>
+                    {allWarnings.map((w, i) => (
+                      <div key={i} className={`byob-warn-item${w.danger ? " danger" : ""}`}>{w.text}</div>
+                    ))}
+                  </div>
+                );
+              })()}
+
+              <div style={{ marginTop: 28, padding: "14px 16px", background: "rgba(255,255,255,0.02)", borderRadius: 10, fontSize: 11, color: G.mist, lineHeight: 1.7 }}>
+                Research & education only. Projected CAGR is based on historical rolling returns — not a guarantee. All scores use the same algorithm as FundGuldasta curated bouquets.
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </>
@@ -562,6 +826,7 @@ export default function App() {
           <div className="rbar-l">
             <div className="rbn">FundGuldasta</div>
             <button className="bbtn" onClick={reset}>← New Search</button>
+            <button className="byob-entry" style={{ marginTop: 0, fontSize: 11, padding: "5px 14px" }} onClick={() => setScreen("custom_builder")}>✎ Build Your Own</button>
             <div className="pill">{goalPill}</div>
           </div>
           <div style={{ fontSize: 11, color: G.mist }}>fundguldasta.com · Research & Education · Not Investment Advice</div>

@@ -639,3 +639,48 @@ def generate_more_bouquets(request: GenerateMoreRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── CUSTOM BOUQUET ANALYSER ───────────────────────────────────
+
+class CustomBouquetFund(BaseModel):
+    scheme_code: str
+    weight: float
+
+
+class CustomBouquetRequest(BaseModel):
+    funds: list  # [CustomBouquetFund]
+    horizonYears: float = 7
+    targetCAGR: Optional[float] = None   # if None, we use projected CAGR from analysis
+
+
+@app.post("/api/bouquets/analyse-custom")
+def analyse_custom_bouquet_endpoint(request: CustomBouquetRequest):
+    """
+    Analyse a user-defined bouquet.
+    Scores each fund, projects CAGR, finds high-correlation pairs,
+    and suggests targeted fund replacements.
+    """
+    from engine.custom_bouquet import analyse_custom_bouquet
+
+    if len(request.funds) < 1:
+        raise HTTPException(status_code=400, detail="Please add at least 1 fund.")
+    if len(request.funds) > 12:
+        raise HTTPException(status_code=400, detail="Maximum 12 funds per bouquet.")
+
+    funds_with_weights = [
+        {'scheme_code': str(f['scheme_code']), 'weight': float(f['weight'])}
+        for f in request.funds
+    ]
+
+    target = request.targetCAGR or 16.0
+
+    try:
+        result = analyse_custom_bouquet(
+            funds_with_weights=funds_with_weights,
+            horizon_years=int(request.horizonYears),
+            target_cagr=float(target),
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
