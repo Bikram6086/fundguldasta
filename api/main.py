@@ -1596,3 +1596,186 @@ def delete_saved_bouquet(
     if not deleted:
         raise HTTPException(status_code=404, detail="Bouquet not found or not yours")
     return {"deleted": bouquet_id}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PORTFOLIO ANALYSER (Priority 10d)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/funds/search")
+def search_funds(q: str = Query(..., min_length=2), limit: int = 10):
+    """Search funds by name or AMC for portfolio builder autocomplete."""
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """SELECT scheme_code, scheme_name, amc_name, sebi_category, expense_ratio
+               FROM fund_metadata
+               WHERE (scheme_name ILIKE %s OR amc_name ILIKE %s)
+                 AND plan_type = 'Direct'
+               ORDER BY aum_crores DESC NULLS LAST
+               LIMIT %s""",
+            (f"%{q}%", f"%{q}%", limit),
+        )
+        rows = cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
+    return [
+        {"scheme_code": r[0], "scheme_name": r[1], "amc_name": r[2],
+         "sebi_category": r[3], "expense_ratio": r[4]}
+        for r in rows
+    ]
+
+
+class PortfolioFund(BaseModel):
+    scheme_code: int
+    allocation_pct: float
+
+
+class PortfolioRequest(BaseModel):
+    funds: List[PortfolioFund]
+    horizon_years: int = 7
+
+
+@app.post("/api/portfolio/analyse")
+def analyse_portfolio(request: PortfolioRequest):
+    """Analyse user portfolio: metrics + archetype similarity."""
+    funds = request.funds
+    if not funds:
+        raise HTTPException(status_code=400, detail="No funds provided")
+    total_alloc = sum(f.allocation_pct for f in funds)
+    if total_alloc < 80 or total_alloc > 120:
+        raise HTTPException(status_code=400, detail=f"Allocations sum to {total_alloc:.0f}% — must be near 100%")
+
+    # Normalise allocations to 100
+    scale = 100.0 / total_alloc
+    alloc_map = {f.scheme_code: f.allocation_pct * scale for f in funds}
+    codes = list(alloc_map.keys())
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Fund metadata
+        cur.execute(
+            "SELECT scheme_code, scheme_name, amc_name, sebi_category, expense_ratio FROM fund_metadata WHERE scheme_code = ANY(%s)",
+            (codes,),
+        )
+        meta = {r[0]: {"scheme_name": r[1], "amc_name": r[2], "sebi_category": r[3], "expense_ratio": r[4]} for r in cur.fetchall()}
+
+        # Computed metrics for requested horizon (fallback to 7yr)
+        cur.execute(
+            """SELECT DISTINCT ON (scheme_code) scheme_code, cagr_pct, rolling_cagr_mean, sortino_ratio,
+                      max_drawdown_pct, fund_score, expense_ratio
+               FROM computed_metrics
+               WHERE scheme_code = ANY(%s) AND horizon_years = %s
+               ORDER BY scheme_code, computation_date DESC""",
+            (codes, request.horizon_years),
+        )
+        metrics = {r[0]: {"cagr_pct": r[1], "rolling_cagr_mean": r[2], "sortino_ratio": r[3],
+                          "max_drawdown_pct": r[4], "fund_score": r[5]} for r in cur.fetchall()}
+
+        # Archetypes from cache for same horizon
+        cur.execute(
+            """SELECT archetype_id, funds_json, metrics_json, confidence_json
+               FROM bouquet_cache
+               WHERE horizon_years = %s AND is_active = true
+               ORDER BY archetype_id""",
+            (request.horizon_years,),
+        )
+        archetypes = []
+        for r in cur.fetchall():
+            funds_json = r[1] if isinstance(r[1], list) else json.loads(r[1])
+            metrics_json = r[2] if isinstance(r[2], dict) else json.loads(r[2])
+            conf_json = r[3] if isinstance(r[3], dict) else json.loads(r[3])
+            archetypes.append({"id": r[0], "funds": funds_json, "metrics": metrics_json, "confidence": conf_json})
+    finally:
+        cur.close()
+        conn.close()
+
+    # ── Weighted portfolio metrics ──────────────────────────────────────────
+    w_cagr = 0.0
+    w_sortino = 0.0
+    w_drawdown = 0.0
+    w_expense = 0.0
+    w_score = 0.0
+    cat_dist = {}
+    fund_details = []
+
+    for code, alloc in alloc_map.items():
+        w = alloc / 100.0
+        m = metrics.get(code, {})
+        fm = meta.get(code, {})
+        cat = (fm.get("sebi_category") or "Unknown").split(" - ")[-1][:30]
+        cat_dist[cat] = cat_dist.get(cat, 0) + alloc
+
+        w_cagr += (m.get("cagr_pct") or 0) * w
+        w_sortino += (m.get("sortino_ratio") or 0) * w
+        w_drawdown += (m.get("max_drawdown_pct") or 0) * w
+        w_score += (m.get("fund_score") or 0) * w
+        er = fm.get("expense_ratio") or m.get("expense_ratio") or 0
+        w_expense += er * w
+
+        fund_details.append({
+            "scheme_code": code,
+            "scheme_name": fm.get("scheme_name", f"Fund {code}"),
+            "amc_name": fm.get("amc_name", ""),
+            "sebi_category": fm.get("sebi_category", ""),
+            "allocation_pct": round(alloc, 1),
+            "cagr_pct": round(m.get("cagr_pct") or 0, 2),
+            "sortino_ratio": round(m.get("sortino_ratio") or 0, 2),
+            "fund_score": round(m.get("fund_score") or 0, 1),
+            "expense_ratio": fm.get("expense_ratio"),
+        })
+
+    portfolio_metrics = {
+        "weighted_cagr": round(w_cagr, 2),
+        "weighted_sortino": round(w_sortino, 2),
+        "weighted_max_drawdown": round(w_drawdown, 2),
+        "weighted_expense_ratio": round(w_expense, 3),
+        "weighted_fund_score": round(w_score, 1),
+        "category_distribution": {k: round(v, 1) for k, v in sorted(cat_dist.items(), key=lambda x: -x[1])},
+        "fund_count": len(codes),
+    }
+
+    # ── Archetype similarity ────────────────────────────────────────────────
+    archetype_matches = []
+    user_codes = set(codes)
+
+    for at in archetypes:
+        at_codes = {f["scheme_code"] if isinstance(f, dict) else f for f in at["funds"]}
+        at_alloc = {(f["scheme_code"] if isinstance(f, dict) else f): (f.get("weight_pct", 20) if isinstance(f, dict) else 20) for f in at["funds"]}
+
+        # Fund overlap score (Jaccard + weighted)
+        common = user_codes & at_codes
+        jaccard = len(common) / len(user_codes | at_codes) if (user_codes | at_codes) else 0
+
+        # Weighted overlap: sum of min(user_alloc, archetype_alloc) for common funds
+        w_overlap = sum(min(alloc_map.get(c, 0), at_alloc.get(c, 0)) for c in common)
+
+        # Category similarity
+        at_metrics = at.get("metrics", {})
+        at_cagr = at_metrics.get("expected_cagr") or at_metrics.get("cagr_pct") or 0
+        at_cagr = float(at_cagr) if at_cagr else 0
+
+        similarity_score = round((jaccard * 40 + min(w_overlap, 60)) * 1.0, 1)
+
+        archetype_matches.append({
+            "archetype_id": at["id"],
+            "similarity_score": similarity_score,
+            "common_funds": len(common),
+            "total_archetype_funds": len(at_codes),
+            "weighted_overlap_pct": round(w_overlap, 1),
+            "archetype_cagr": at_cagr,
+            "archetype_confidence": at.get("confidence", {}).get("overall_score") or at.get("confidence", {}).get("score") or 0,
+        })
+
+    archetype_matches.sort(key=lambda x: -x["similarity_score"])
+
+    return {
+        "portfolio_metrics": portfolio_metrics,
+        "fund_details": fund_details,
+        "archetype_matches": archetype_matches,
+        "horizon_years": request.horizon_years,
+        "missing_data_codes": [c for c in codes if c not in metrics],
+    }

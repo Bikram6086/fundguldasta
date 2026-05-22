@@ -44,6 +44,21 @@ async function apiSaveBouquet(token, payload) {
   if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "Save failed"); }
   return res.json();
 }
+async function apiFundSearch(q) {
+  const res = await fetch(`${API_BASE}/api/funds/search?q=${encodeURIComponent(q)}&limit=8`);
+  if (!res.ok) return [];
+  return res.json();
+}
+async function apiAnalysePortfolio(funds, horizonYears = 7) {
+  const res = await fetch(`${API_BASE}/api/portfolio/analyse`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ funds, horizon_years: horizonYears }),
+  });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "Analysis failed"); }
+  return res.json();
+}
+
 async function apiListSaved(token) {
   const res = await fetch(`${API_BASE}/api/user/saved-bouquets`, {
     headers: { "Authorization": `Bearer ${token}` },
@@ -341,6 +356,13 @@ export default function App() {
   const [savedList, setSavedList] = useState([]);
   const [savedPanel, setSavedPanel] = useState(false);
   const [savedMsg, setSavedMsg] = useState({});
+  const [pfFunds, setPfFunds] = useState([]);
+  const [pfSearch, setPfSearch] = useState('');
+  const [pfResults, setPfResults] = useState([]);
+  const [pfSearching, setPfSearching] = useState(false);
+  const [pfAnalysis, setPfAnalysis] = useState(null);
+  const [pfAnalysing, setPfAnalysing] = useState(false);
+  const [pfError, setPfError] = useState(null);
 
   const impliedCAGR = (() => {
     if (mode === "return") return parseFloat(cagr) || null;
@@ -773,6 +795,24 @@ useEffect(() => {
     setAuthLoading(false);
   };
 
+  const handlePfAddFund = (fund) => {
+    if (pfFunds.find(f => f.scheme_code === fund.scheme_code)) return;
+    const remaining = Math.max(0, 100 - pfFunds.reduce((s, f) => s + f.allocation_pct, 0));
+    setPfFunds(prev => [...prev, { ...fund, allocation_pct: remaining || 20 }]);
+    setPfSearch(''); setPfResults([]);
+  };
+  const handlePfRemoveFund = (code) => setPfFunds(prev => prev.filter(f => f.scheme_code !== code));
+  const handlePfAlloc = (code, val) => setPfFunds(prev => prev.map(f => f.scheme_code === code ? { ...f, allocation_pct: parseFloat(val) || 0 } : f));
+  const handlePfAnalyse = async () => {
+    if (pfFunds.length < 1) { setPfError("Add at least one fund"); return; }
+    setPfAnalysing(true); setPfError(null); setPfAnalysis(null);
+    try {
+      const result = await apiAnalysePortfolio(pfFunds.map(f => ({ scheme_code: f.scheme_code, allocation_pct: f.allocation_pct })));
+      setPfAnalysis(result);
+    } catch(e) { setPfError(e.message); }
+    finally { setPfAnalysing(false); }
+  };
+
   const handleSignOut = () => {
     localStorage.removeItem("fg_token");
     setUser(null);
@@ -867,6 +907,172 @@ useEffect(() => {
       </div>
     </div>
   );
+
+  const ARCHETYPE_LABELS = {
+    "steady_compounder": "Steady Compounder",
+    "balanced_growther": "Balanced Growther",
+    "aggressive_achiever": "Aggressive Achiever",
+    "high_conviction": "High Conviction",
+  };
+
+  if (screen === "portfolio") {
+    const total = pfFunds.reduce((s, f) => s + (f.allocation_pct || 0), 0);
+    const totalOk = total >= 95 && total <= 105;
+    return (
+      <>
+        <style>{css}</style>
+        <div style={{ minHeight:"100vh", background:G.bg, fontFamily:"Outfit,sans-serif", padding:24 }}>
+          <div style={{ maxWidth:800, margin:"0 auto" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:28 }}>
+              <button onClick={() => { setScreen("hero"); setPfAnalysis(null); setPfError(null); }} style={{ background:"none", border:`1px solid ${G.bord}`, borderRadius:8, padding:"5px 14px", color:G.slate, fontSize:12, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>← Back</button>
+              <span style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:26, fontWeight:700 }}>My Portfolio Analyser</span>
+            </div>
+
+            {/* Fund Search */}
+            <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20, marginBottom:20 }}>
+              <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:12 }}>Add Funds to Your Portfolio</div>
+              <div style={{ position:"relative" }}>
+                <input
+                  value={pfSearch}
+                  onChange={async e => {
+                    const q = e.target.value;
+                    setPfSearch(q);
+                    if (q.length >= 2) {
+                      setPfSearching(true);
+                      const r = await apiFundSearch(q);
+                      setPfResults(r); setPfSearching(false);
+                    } else { setPfResults([]); }
+                  }}
+                  placeholder="Search by fund name or AMC..."
+                  style={{ width:"100%", background:G.elv, border:`1px solid ${G.bord}`, borderRadius:8, padding:"10px 14px", color:G.white, fontSize:13, fontFamily:"Outfit,sans-serif", outline:"none", boxSizing:"border-box" }}
+                />
+                {pfSearching && <span style={{ position:"absolute", right:12, top:"50%", transform:"translateY(-50%)", color:G.slate, fontSize:12 }}>...</span>}
+                {pfResults.length > 0 && (
+                  <div style={{ position:"absolute", top:"100%", left:0, right:0, background:G.sur, border:`1px solid ${G.bordG}`, borderRadius:8, zIndex:100, maxHeight:240, overflowY:"auto", marginTop:4 }}>
+                    {pfResults.map(r => (
+                      <div key={r.scheme_code} onClick={() => handlePfAddFund(r)} style={{ padding:"10px 14px", cursor:"pointer", borderBottom:`1px solid ${G.bord}` }}
+                        onMouseEnter={e => e.currentTarget.style.background=G.elv}
+                        onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                        <div style={{ color:G.white, fontSize:13, fontWeight:600 }}>{r.scheme_name}</div>
+                        <div style={{ color:G.slate, fontSize:11, marginTop:2 }}>{r.amc_name} · {r.sebi_category}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Fund List */}
+            {pfFunds.length > 0 && (
+              <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20, marginBottom:20 }}>
+                <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:12 }}>Your Funds</div>
+                {pfFunds.map(f => (
+                  <div key={f.scheme_code} style={{ display:"flex", alignItems:"center", gap:12, marginBottom:10, padding:"10px 14px", background:G.elv, borderRadius:8 }}>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ color:G.white, fontSize:12, fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{f.scheme_name}</div>
+                      <div style={{ color:G.slate, fontSize:11, marginTop:2 }}>{f.sebi_category}</div>
+                    </div>
+                    <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
+                      <input type="number" min={1} max={100} value={f.allocation_pct}
+                        onChange={e => handlePfAlloc(f.scheme_code, e.target.value)}
+                        style={{ width:56, background:G.bg, border:`1px solid ${G.bordG}`, borderRadius:6, padding:"4px 8px", color:G.gold, fontSize:13, fontFamily:"Outfit,sans-serif", textAlign:"right" }} />
+                      <span style={{ color:G.slate, fontSize:12 }}>%</span>
+                    </div>
+                    <button onClick={() => handlePfRemoveFund(f.scheme_code)} style={{ background:"none", border:"none", color:G.ro, cursor:"pointer", fontSize:16, padding:"0 4px", flexShrink:0 }}>&#x2715;</button>
+                  </div>
+                ))}
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:12, paddingTop:12, borderTop:`1px solid ${G.bord}` }}>
+                  <span style={{ color: totalOk ? G.green : "#FF6B6B", fontSize:13, fontWeight:600 }}>Total: {total.toFixed(1)}%{!totalOk && " (must be ~100%)"}</span>
+                  <button onClick={handlePfAnalyse} disabled={pfAnalysing || !totalOk}
+                    style={{ background: totalOk ? "linear-gradient(135deg,rgba(212,175,55,0.2),rgba(212,175,55,0.08))" : G.elv,
+                      border:`1px solid ${totalOk ? G.bordG : G.bord}`, borderRadius:10, padding:"8px 24px",
+                      color: totalOk ? G.gold : G.slate, fontSize:13, fontWeight:600, cursor: totalOk ? "pointer" : "not-allowed",
+                      fontFamily:"Outfit,sans-serif" }}>
+                    {pfAnalysing ? "Analysing..." : "Analyse Portfolio →"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {pfError && <div style={{ background:"rgba(255,107,107,0.1)", border:"1px solid rgba(255,107,107,0.3)", borderRadius:8, padding:"12px 16px", color:"#FF6B6B", fontSize:13, marginBottom:16 }}>{pfError}</div>}
+
+            {/* Analysis Results */}
+            {pfAnalysis && (
+              <div>
+                {/* Portfolio Metrics */}
+                <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20, marginBottom:16 }}>
+                  <div style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:18, fontWeight:700, marginBottom:16 }}>Portfolio Metrics</div>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:12 }}>
+                    {[
+                      ["Wtd CAGR", `${pfAnalysis.portfolio_metrics.weighted_cagr}%`, G.green],
+                      ["Sortino", pfAnalysis.portfolio_metrics.weighted_sortino, G.gold],
+                      ["Max Drawdown", `${pfAnalysis.portfolio_metrics.weighted_max_drawdown.toFixed(1)}%`, "#FF6B6B"],
+                      ["Expense Ratio", `${(pfAnalysis.portfolio_metrics.weighted_expense_ratio * 100).toFixed(2)}%`, G.mist],
+                      ["Fund Score", pfAnalysis.portfolio_metrics.weighted_fund_score, G.gold],
+                      ["No. of Funds", pfAnalysis.portfolio_metrics.fund_count, G.white],
+                    ].map(([label, val, col]) => (
+                      <div key={label} style={{ background:G.elv, borderRadius:8, padding:"12px 14px" }}>
+                        <div style={{ color:G.slate, fontSize:10, marginBottom:4 }}>{label}</div>
+                        <div style={{ color:col, fontSize:18, fontWeight:700, fontFamily:"JetBrains Mono,monospace" }}>{val}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Category Distribution */}
+                <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20, marginBottom:16 }}>
+                  <div style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:18, fontWeight:700, marginBottom:14 }}>Category Distribution</div>
+                  {Object.entries(pfAnalysis.portfolio_metrics.category_distribution).map(([cat, pct]) => (
+                    <div key={cat} style={{ marginBottom:10 }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                        <span style={{ color:G.white, fontSize:12 }}>{cat}</span>
+                        <span style={{ color:G.gold, fontSize:12, fontWeight:600 }}>{pct.toFixed(1)}%</span>
+                      </div>
+                      <div style={{ background:G.elv, borderRadius:4, height:6 }}>
+                        <div style={{ background:`linear-gradient(90deg,${G.gold},rgba(212,175,55,0.4))`, width:`${pct}%`, height:"100%", borderRadius:4, transition:"width .5s" }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Archetype Similarity */}
+                <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20, marginBottom:16 }}>
+                  <div style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:18, fontWeight:700, marginBottom:14 }}>Archetype Similarity</div>
+                  <p style={{ color:G.slate, fontSize:12, marginBottom:16, marginTop:0 }}>How closely your portfolio resembles each FundGuldasta archetype bouquet.</p>
+                  {pfAnalysis.archetype_matches.map((am, i) => (
+                    <div key={am.archetype_id} style={{ display:"flex", alignItems:"center", gap:14, marginBottom:14, padding:"12px 16px", background:G.elv, borderRadius:10, border:`1px solid ${i === 0 ? G.bordG : G.bord}` }}>
+                      <div style={{ flex:1 }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                          {i === 0 && <span style={{ background:"rgba(212,175,55,0.15)", border:`1px solid ${G.bordG}`, borderRadius:4, padding:"1px 7px", fontSize:10, color:G.gold, fontWeight:600 }}>Closest Match</span>}
+                          <span style={{ color:G.white, fontSize:13, fontWeight:600 }}>{ARCHETYPE_LABELS[am.archetype_id] || am.archetype_id}</span>
+                        </div>
+                        <div style={{ color:G.slate, fontSize:11 }}>{am.common_funds} of {am.total_archetype_funds} funds in common · {am.weighted_overlap_pct.toFixed(0)}% allocation overlap</div>
+                      </div>
+                      <div style={{ textAlign:"right", flexShrink:0 }}>
+                        <div style={{ color: i === 0 ? G.gold : G.slate, fontSize:22, fontWeight:700, fontFamily:"JetBrains Mono,monospace" }}>{am.similarity_score.toFixed(0)}<span style={{ fontSize:12 }}>/100</span></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {pfAnalysis.missing_data_codes?.length > 0 && (
+                  <div style={{ color:G.slate, fontSize:11, marginTop:8 }}>Note: No computed data for scheme codes {pfAnalysis.missing_data_codes.join(", ")} — those funds were not scored.</div>
+                )}
+              </div>
+            )}
+
+            {pfFunds.length === 0 && !pfAnalysis && (
+              <div style={{ textAlign:"center", padding:"60px 20px", color:G.slate, fontSize:13 }}>
+                <div style={{ fontSize:32, marginBottom:12 }}>📊</div>
+                <div>Search for funds above to build your portfolio.</div>
+                <div style={{ marginTop:8, fontSize:12 }}>Then click "Analyse Portfolio" to see how it compares to our bouquets.</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </>
+    );
+  }
 
     if (screen === "hero") return (
     <>
@@ -969,6 +1175,7 @@ useEffect(() => {
           {inputWarn && <div className="warn-box">⚠️ {inputWarn}</div>}
           <button className="btn-p" disabled={!isValid} onClick={handleFind}>Curate My Bouquets →</button>
           <button className="byob-entry" style={{ marginTop: 8 }} onClick={() => setScreen("custom_builder")}>✎ Build Your Own Bouquet</button>
+          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.08)" }} onClick={() => setScreen("portfolio")}>📊 Analyse My Portfolio</button>
           <p className="note">Research & education only · Not investment advice · Past performance does not guarantee future returns<br />All fund data sourced from AMFI · No commission earned on any recommendation · fundguldasta.com</p>
         </div>
       </div>
@@ -1414,6 +1621,7 @@ useEffect(() => {
             <button className="bbtn" style={{ color: G.mist }} onClick={() => setScreen("about")}>About</button>
             <button className="bbtn" onClick={reset}>← New Search</button>
             <button className="byob-entry" style={{ marginTop: 0, fontSize: 11, padding: "5px 14px" }} onClick={() => setScreen("custom_builder")}>✎ Build Your Own</button>
+            <button className="byob-entry" style={{ marginTop: 0, fontSize: 11, padding: "5px 14px", background:"rgba(212,175,55,0.08)" }} onClick={() => setScreen("portfolio")}>📊 My Portfolio</button>
             <div className="pill">{goalPill}</div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
