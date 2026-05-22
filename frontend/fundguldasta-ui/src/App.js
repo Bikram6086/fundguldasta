@@ -73,6 +73,21 @@ async function apiDeleteSaved(token, id) {
   });
 }
 
+async function apiBacktest(archetypeId, sip, horizonYears, futureYears = 5) {
+  const res = await fetch(`${API_BASE}/api/bouquets/${archetypeId}/backtest`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ monthly_sip: sip, horizon_years: horizonYears, future_years: futureYears }),
+  });
+  if (!res.ok) throw new Error("Backtest failed");
+  return res.json();
+}
+async function apiFundDetail(schemeCode) {
+  const res = await fetch(`${API_BASE}/api/funds/${schemeCode}/detail`);
+  if (!res.ok) throw new Error("Fund detail not available");
+  return res.json();
+}
+
 async function curateBouquets(params) {
   if (USE_LIVE_DATA) {
     return apiCall("POST", "/api/bouquets/curate", params);
@@ -356,6 +371,16 @@ export default function App() {
   const [savedList, setSavedList] = useState([]);
   const [savedPanel, setSavedPanel] = useState(false);
   const [savedMsg, setSavedMsg] = useState({});
+  const [btModal, setBtModal] = useState(false);
+  const [btArchetype, setBtArchetype] = useState(null);
+  const [btSip, setBtSip] = useState(10000);
+  const [btHorizon, setBtHorizon] = useState(7);
+  const [btResult, setBtResult] = useState(null);
+  const [btLoading, setBtLoading] = useState(false);
+  const [fdModal, setFdModal] = useState(false);
+  const [fdCode, setFdCode] = useState(null);
+  const [fdResult, setFdResult] = useState(null);
+  const [fdLoading, setFdLoading] = useState(false);
   const [calcTab, setCalcTab] = useState('sip');
   const [calcPreFill, setCalcPreFill] = useState(null);
   const [sipMode, setSipMode] = useState('to-corpus');
@@ -787,6 +812,30 @@ useEffect(() => {
     setSavedList(prev => prev.filter(b => b.id !== id));
   };
 
+  const handleBacktest = async (at) => {
+    setBtArchetype(at);
+    setBtResult(null);
+    setBtModal(true);
+    setBtLoading(true);
+    try {
+      const result = await apiBacktest(at.id, btSip, btHorizon, 5);
+      setBtResult(result);
+    } catch (e) { alert(e.message); }
+    finally { setBtLoading(false); }
+  };
+
+  const handleFundDetail = async (code) => {
+    setFdCode(code);
+    setFdResult(null);
+    setFdModal(true);
+    setFdLoading(true);
+    try {
+      const result = await apiFundDetail(code);
+      setFdResult(result);
+    } catch (e) { alert(e.message); }
+    finally { setFdLoading(false); }
+  };
+
   const handleAuthSubmit = async () => {
     setAuthError("");
     setAuthLoading(true);
@@ -1082,6 +1131,300 @@ useEffect(() => {
       </>
     );
   }
+
+  // ── SVG helpers shared by charts ────────────────────────────────────────────
+  const svgLine = (pts) => pts.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(" ");
+
+  // ── Backtest Modal ────────────────────────────────────────────────────────
+  const BacktestModal = () => {
+    const PL = 52, PT = 10, PR = 12, PB = 28;
+    const W = 560, H = 180, CW = W - PL - PR, CH = H - PT - PB;
+    const fmt = (n) => n >= 1e7 ? `₹${(n/1e7).toFixed(2)}Cr` : n >= 1e5 ? `₹${(n/1e5).toFixed(1)}L` : `₹${n.toLocaleString("en-IN")}`;
+    const fmtCr = (n) => n >= 1e7 ? `${(n/1e7).toFixed(2)} Cr` : n >= 1e5 ? `${(n/1e5).toFixed(1)}L` : n?.toLocaleString("en-IN");
+    const s = btResult?.series || [];
+    const fp = btResult?.future || [];
+    const sum = btResult?.summary || {};
+    const maxVal = s.length ? Math.max(...s.map(d => d.b)) * 1.08 : 1;
+    const xS = (i) => PL + (i / Math.max(s.length - 1, 1)) * CW;
+    const yS = (v) => PT + CH - (v / maxVal) * CH;
+    const maxFan = fp.length ? Math.max(...fp.map(b => b.p90)) * 1.08 : 1;
+    const xF = (yr) => PL + ((yr - 1) / Math.max(fp.length - 1, 1)) * CW;
+    const yF = (v) => PT + CH - (v / maxFan) * CH;
+    const band90pts = fp.length ? [
+      ...fp.map(b => [xF(b.y), yF(b.p90)]),
+      ...fp.slice().reverse().map(b => [xF(b.y), yF(b.p10)]),
+    ] : [];
+    const band75pts = fp.length ? [
+      ...fp.map(b => [xF(b.y), yF(b.p75)]),
+      ...fp.slice().reverse().map(b => [xF(b.y), yF(b.p25)]),
+    ] : [];
+
+    return (
+      <div style={{ position:"fixed", inset:0, zIndex:2000, background:"rgba(0,0,0,0.75)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}
+        onClick={e => { if (e.target === e.currentTarget) setBtModal(false); }}>
+        <div style={{ background:G.sur, border:`1px solid ${G.bordG}`, borderRadius:16, width:"100%", maxWidth:640, maxHeight:"90vh", overflowY:"auto", padding:"28px 28px 32px", fontFamily:"Outfit,sans-serif" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:20 }}>
+            <div>
+              <div style={{ fontFamily:"Cormorant Garamond,serif", fontSize:20, color:G.gold, fontWeight:700 }}>Historical SIP Backtest</div>
+              <div style={{ fontSize:12, color:G.mist, marginTop:3 }}>{btArchetype?.label} · Actual NAV data, no hypothetical returns</div>
+            </div>
+            <button onClick={() => setBtModal(false)} style={{ background:"none", border:"none", color:G.slate, cursor:"pointer", fontSize:20, lineHeight:1 }}>&#x2715;</button>
+          </div>
+
+          {/* Controls */}
+          <div style={{ display:"flex", gap:12, marginBottom:20, flexWrap:"wrap" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, flex:1, minWidth:180 }}>
+              <span style={{ fontSize:12, color:G.mist, whiteSpace:"nowrap" }}>Monthly SIP ₹</span>
+              <input type="number" value={btSip} onChange={e => setBtSip(Number(e.target.value))} min={1000} step={1000}
+                style={{ flex:1, background:G.elv, border:`1px solid rgba(255,255,255,0.1)`, borderRadius:8, padding:"6px 10px", color:G.white, fontFamily:"JetBrains Mono,monospace", fontSize:14, outline:"none" }} />
+            </div>
+            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+              <span style={{ fontSize:12, color:G.mist, whiteSpace:"nowrap" }}>History</span>
+              <select value={btHorizon} onChange={e => setBtHorizon(Number(e.target.value))}
+                style={{ background:G.elv, border:`1px solid rgba(255,255,255,0.1)`, borderRadius:8, padding:"6px 10px", color:G.white, fontFamily:"Outfit,sans-serif", fontSize:13, outline:"none" }}>
+                {[3,5,7,10,12].map(y => <option key={y} value={y}>{y} years</option>)}
+              </select>
+            </div>
+            <button onClick={() => handleBacktest(btArchetype)}
+              style={{ padding:"6px 20px", background:"rgba(212,175,55,0.12)", border:`1px solid rgba(212,175,55,0.4)`, borderRadius:8, color:G.gold, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+              Run
+            </button>
+          </div>
+
+          {btLoading && <div style={{ textAlign:"center", padding:"40px 0", color:G.mist, fontSize:13 }}>Computing backtest...</div>}
+
+          {!btLoading && s.length > 0 && (
+            <>
+              {/* Historical line chart */}
+              <div style={{ background:G.bg, borderRadius:10, padding:"12px 8px", marginBottom:16 }}>
+                <div style={{ fontSize:11, color:G.mist, marginBottom:8, paddingLeft:PL }}>Historical SIP Performance ({sum.actual_start?.slice(0,7)} → today)</div>
+                <svg viewBox={`0 0 ${W} ${H}`} style={{ width:"100%", height:"auto", display:"block" }}>
+                  {/* Y-axis labels */}
+                  {[0, 0.5, 1].map(pct => (
+                    <text key={pct} x={PL - 6} y={PT + CH - pct * CH + 4} textAnchor="end" style={{ fontSize:9, fill:G.mist }}>{fmt(maxVal * pct)}</text>
+                  ))}
+                  {/* Lines */}
+                  <polyline points={s.map((d, i) => `${xS(i)},${yS(d.i)}`).join(" ")} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5" strokeDasharray="4,3" />
+                  <polyline points={s.map((d, i) => `${xS(i)},${yS(d.n)}`).join(" ")} fill="none" stroke="#4A8FE0" strokeWidth="1.8" />
+                  <polyline points={s.map((d, i) => `${xS(i)},${yS(d.b)}`).join(" ")} fill="none" stroke={G.gold} strokeWidth="2.2" />
+                  {/* X labels */}
+                  {[0, Math.floor((s.length-1)/2), s.length-1].filter((v,i,a) => a.indexOf(v)===i).map(i => (
+                    <text key={i} x={xS(i)} y={H - 6} textAnchor="middle" style={{ fontSize:9, fill:G.mist }}>{s[i].m}</text>
+                  ))}
+                </svg>
+                {/* Legend */}
+                <div style={{ display:"flex", gap:16, justifyContent:"center", marginTop:8 }}>
+                  {[["Amount Invested","rgba(255,255,255,0.4)","---"],["Nifty 50 SIP","#4A8FE0","—"],["Bouquet SIP",G.gold,"—"]].map(([lbl,col,dash]) => (
+                    <div key={lbl} style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, color:G.mist }}>
+                      <span style={{ width:18, borderTop:`2px ${dash==="---"?"dashed":"solid"} ${col}`, display:"inline-block" }} />
+                      {lbl}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Summary stats */}
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fit,minmax(120px,1fr))", gap:10, marginBottom:20 }}>
+                {[
+                  ["Invested", fmt(sum.total_invested), G.mist],
+                  ["Bouquet Value", fmt(sum.bouquet_final), G.gold],
+                  ["vs Nifty", fmt(sum.nifty_final), "#4A8FE0"],
+                  ["vs FD (7%)", fmt(sum.fd_final), "rgba(255,255,255,0.5)"],
+                  ["Bouquet CAGR", `${sum.bouquet_cagr}%`, sum.bouquet_cagr >= 12 ? "#27AE78" : sum.bouquet_cagr >= 8 ? G.gold : "#E05555"],
+                  ["Nifty CAGR", `${sum.nifty_cagr}%`, "#4A8FE0"],
+                ].map(([lbl, val, col]) => (
+                  <div key={lbl} style={{ background:G.elv, borderRadius:8, padding:"10px 12px" }}>
+                    <div style={{ fontSize:10, color:G.mist, letterSpacing:".08em", textTransform:"uppercase", marginBottom:4 }}>{lbl}</div>
+                    <div style={{ fontFamily:"JetBrains Mono,monospace", fontSize:15, fontWeight:600, color:col }}>{val}</div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+
+          {/* Future projection fan chart */}
+          {!btLoading && fp.length > 0 && (
+            <>
+              <div style={{ fontSize:12, color:G.mist, marginBottom:12 }}>
+                <span style={{ color:G.gold, fontWeight:600 }}>Forward Projection</span>
+                &nbsp;· 500 Monte Carlo simulations using this bouquet's historical return distribution
+              </div>
+              <div style={{ background:G.bg, borderRadius:10, padding:"12px 8px", marginBottom:16 }}>
+                <svg viewBox={`0 0 ${W} ${H}`} style={{ width:"100%", height:"auto", display:"block" }}>
+                  {/* Bands */}
+                  {band90pts.length > 0 && (
+                    <polygon points={band90pts.map(p => p.join(",")).join(" ")} fill={`rgba(212,175,55,0.08)`} />
+                  )}
+                  {band75pts.length > 0 && (
+                    <polygon points={band75pts.map(p => p.join(",")).join(" ")} fill={`rgba(212,175,55,0.18)`} />
+                  )}
+                  {/* Invested line */}
+                  <polyline points={fp.map(b => `${xF(b.y)},${yF(b.i)}`).join(" ")} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5" strokeDasharray="4,3" />
+                  {/* Median line */}
+                  <polyline points={fp.map(b => `${xF(b.y)},${yF(b.p50)}`).join(" ")} fill="none" stroke={G.gold} strokeWidth="2.2" />
+                  {/* X axis labels */}
+                  {fp.map(b => (
+                    <text key={b.y} x={xF(b.y)} y={H - 6} textAnchor="middle" style={{ fontSize:9, fill:G.mist }}>Yr {b.y}</text>
+                  ))}
+                  {/* Y labels */}
+                  {[0, 0.5, 1].map(pct => (
+                    <text key={pct} x={PL - 6} y={PT + CH - pct * CH + 4} textAnchor="end" style={{ fontSize:9, fill:G.mist }}>{fmt(maxFan * pct)}</text>
+                  ))}
+                </svg>
+                <div style={{ display:"flex", gap:16, justifyContent:"center", marginTop:8 }}>
+                  {[["p10–p90 range","rgba(212,175,55,0.2)"],["p25–p75 range","rgba(212,175,55,0.45)"],["Median (p50)",G.gold]].map(([lbl,col]) => (
+                    <div key={lbl} style={{ display:"flex", alignItems:"center", gap:5, fontSize:11, color:G.mist }}>
+                      <span style={{ width:14, height:10, background:col, display:"inline-block", borderRadius:2 }} />
+                      {lbl}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Future year table */}
+              <div style={{ overflowX:"auto" }}>
+                <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                  <thead>
+                    <tr>{["Year","Invested","Pessimistic (p25)","Median","Optimistic (p75)"].map(h => (
+                      <th key={h} style={{ padding:"6px 10px", color:G.mist, textAlign:h==="Year"?"left":"right", fontSize:10, textTransform:"uppercase", letterSpacing:".06em", borderBottom:`1px solid ${G.bord}` }}>{h}</th>
+                    ))}</tr>
+                  </thead>
+                  <tbody>
+                    {fp.map(b => (
+                      <tr key={b.y}>
+                        <td style={{ padding:"7px 10px", color:G.fog }}>Year {b.y}</td>
+                        <td style={{ padding:"7px 10px", textAlign:"right", color:G.mist, fontFamily:"JetBrains Mono,monospace" }}>{fmt(b.i)}</td>
+                        <td style={{ padding:"7px 10px", textAlign:"right", color:"rgba(212,175,55,0.6)", fontFamily:"JetBrains Mono,monospace" }}>{fmt(b.p25)}</td>
+                        <td style={{ padding:"7px 10px", textAlign:"right", color:G.gold, fontFamily:"JetBrains Mono,monospace", fontWeight:600 }}>{fmt(b.p50)}</td>
+                        <td style={{ padding:"7px 10px", textAlign:"right", color:"#27AE78", fontFamily:"JetBrains Mono,monospace" }}>{fmt(b.p75)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div style={{ fontSize:10, color:G.mist, marginTop:10, lineHeight:1.7, fontStyle:"italic" }}>
+                Projections based on {sum.months}-month historical return distribution via bootstrap resampling. Past distribution does not guarantee future results. For education only.
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // ── Fund Detail Modal ─────────────────────────────────────────────────────
+  const FundDetailModal = () => {
+    const fd = fdResult;
+    const PL = 48, PT = 10, PR = 10, PB = 28;
+    const W = 520, H = 160, CW = W - PL - PR, CH = H - PT - PB;
+    const ns = fd?.nav_series || [];
+    const maxNAV = ns.length ? Math.max(...ns.map(d => d.v)) * 1.05 : 1;
+    const minNAV = ns.length ? Math.min(...ns.map(d => d.v)) * 0.97 : 0;
+    const range = maxNAV - minNAV || 1;
+    const xN = (i) => PL + (i / Math.max(ns.length - 1, 1)) * CW;
+    const yN = (v) => PT + CH - ((v - minNAV) / range) * CH;
+    const rr = fd?.rolling_returns || {};
+    const nr = fd?.nifty_rolling || {};
+
+    return (
+      <div style={{ position:"fixed", inset:0, zIndex:2100, background:"rgba(0,0,0,0.8)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}
+        onClick={e => { if (e.target === e.currentTarget) setFdModal(false); }}>
+        <div style={{ background:G.sur, border:`1px solid ${G.bordG}`, borderRadius:16, width:"100%", maxWidth:580, maxHeight:"88vh", overflowY:"auto", padding:"24px 24px 28px", fontFamily:"Outfit,sans-serif" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:16 }}>
+            <div style={{ flex:1, paddingRight:16 }}>
+              <div style={{ fontFamily:"Cormorant Garamond,serif", fontSize:18, color:G.white, fontWeight:600, lineHeight:1.3 }}>{fdLoading ? "Loading…" : fd?.name}</div>
+              {fd && <div style={{ fontSize:11, color:G.mist, marginTop:4 }}>{fd.category} · {fd.fund_type}</div>}
+            </div>
+            <button onClick={() => setFdModal(false)} style={{ background:"none", border:"none", color:G.slate, cursor:"pointer", fontSize:20 }}>&#x2715;</button>
+          </div>
+
+          {fdLoading && <div style={{ padding:"40px 0", textAlign:"center", color:G.mist, fontSize:13 }}>Loading fund data…</div>}
+
+          {!fdLoading && fd && (
+            <>
+              {/* Fund info chips */}
+              <div style={{ display:"flex", flexWrap:"wrap", gap:10, marginBottom:20 }}>
+                {[
+                  ["Manager", fd.manager_name || "—"],
+                  ["TER", fd.expense_ratio != null ? `${fd.expense_ratio.toFixed(2)}%` : "—"],
+                  ["AUM", fd.aum_cr != null ? (fd.aum_cr >= 1000 ? `₹${(fd.aum_cr/1000).toFixed(1)}K Cr` : `₹${fd.aum_cr} Cr`) : "—"],
+                  ["Current NAV", fd.current_nav != null ? `₹${fd.current_nav.toFixed(2)}` : "—"],
+                ].map(([lbl, val]) => (
+                  <div key={lbl} style={{ background:G.elv, borderRadius:8, padding:"8px 14px" }}>
+                    <div style={{ fontSize:10, color:G.mist, letterSpacing:".06em", textTransform:"uppercase", marginBottom:3 }}>{lbl}</div>
+                    <div style={{ fontSize:13, color:G.fog, fontWeight:500 }}>{val}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* NAV chart */}
+              {ns.length > 0 && (
+                <div style={{ background:G.bg, borderRadius:10, padding:"12px 8px", marginBottom:16 }}>
+                  <div style={{ fontSize:11, color:G.mist, marginBottom:8, paddingLeft:PL }}>NAV — last 5 years</div>
+                  <svg viewBox={`0 0 ${W} ${H}`} style={{ width:"100%", height:"auto", display:"block" }}>
+                    <defs>
+                      <linearGradient id="navGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor={G.gold} stopOpacity="0.25" />
+                        <stop offset="100%" stopColor={G.gold} stopOpacity="0.01" />
+                      </linearGradient>
+                    </defs>
+                    {/* Fill area */}
+                    <polygon points={[
+                      ...ns.map((d, i) => `${xN(i)},${yN(d.v)}`),
+                      `${xN(ns.length-1)},${PT + CH}`,
+                      `${xN(0)},${PT + CH}`,
+                    ].join(" ")} fill="url(#navGrad)" />
+                    {/* Line */}
+                    <polyline points={ns.map((d, i) => `${xN(i)},${yN(d.v)}`).join(" ")} fill="none" stroke={G.gold} strokeWidth="2" />
+                    {/* Y labels */}
+                    {[minNAV, (minNAV+maxNAV)/2, maxNAV].map((v, i) => (
+                      <text key={i} x={PL - 5} y={yN(v) + 4} textAnchor="end" style={{ fontSize:9, fill:G.mist }}>₹{Math.round(v)}</text>
+                    ))}
+                    {/* X labels */}
+                    {[0, Math.floor((ns.length-1)/2), ns.length-1].filter((v,i,a) => a.indexOf(v)===i && ns[v]).map(i => (
+                      <text key={i} x={xN(i)} y={H - 6} textAnchor="middle" style={{ fontSize:9, fill:G.mist }}>{ns[i].m}</text>
+                    ))}
+                  </svg>
+                </div>
+              )}
+
+              {/* Rolling returns table */}
+              {(Object.keys(rr).length > 0 || Object.keys(nr).length > 0) && (
+                <div style={{ background:G.elv, border:`1px solid rgba(255,255,255,0.07)`, borderRadius:10, overflow:"hidden" }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                    <thead>
+                      <tr style={{ borderBottom:`1px solid ${G.bord}` }}>
+                        {["Period","Fund CAGR","Nifty 50 CAGR","Alpha"].map((h, i) => (
+                          <th key={h} style={{ padding:"9px 12px", color:G.mist, textAlign:i===0?"left":"right", fontSize:10, textTransform:"uppercase", letterSpacing:".08em" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {["1yr","3yr","5yr"].filter(p => rr[p] != null || nr[p] != null).map(period => {
+                        const fv = rr[period]; const nv = nr[period];
+                        const alpha = (fv != null && nv != null) ? (fv - nv).toFixed(2) : "—";
+                        const alphaNum = parseFloat(alpha);
+                        return (
+                          <tr key={period} style={{ borderBottom:`1px solid rgba(255,255,255,0.04)` }}>
+                            <td style={{ padding:"9px 12px", color:G.fog, textTransform:"uppercase", fontSize:11 }}>{period}</td>
+                            <td style={{ padding:"9px 12px", textAlign:"right", fontFamily:"JetBrains Mono,monospace", color:fv >= 0 ? "#27AE78" : "#E05555" }}>{fv != null ? `${fv > 0 ? "+" : ""}${fv}%` : "—"}</td>
+                            <td style={{ padding:"9px 12px", textAlign:"right", fontFamily:"JetBrains Mono,monospace", color:G.mist }}>{nv != null ? `${nv > 0 ? "+" : ""}${nv}%` : "—"}</td>
+                            <td style={{ padding:"9px 12px", textAlign:"right", fontFamily:"JetBrains Mono,monospace", color:!isNaN(alphaNum) && alphaNum >= 0 ? "#27AE78" : "#E05555" }}>{!isNaN(alphaNum) ? `${alphaNum >= 0 ? "+" : ""}${alpha}%` : "—"}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              <div style={{ fontSize:10, color:G.mist, marginTop:10, fontStyle:"italic" }}>
+                Rolling returns use actual NAV data. Alpha = fund return − Nifty 50 return. For research only.
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
 
     if (screen === "hero") return (
     <>
@@ -2180,6 +2523,8 @@ useEffect(() => {
     <>
       {authModal && <AuthModal />}
       {savedPanel && <SavedPanel />}
+      {btModal && <BacktestModal />}
+      {fdModal && <FundDetailModal />}
       <style>{css}</style>
       <div onClick={() => healthOpen && setHealthOpen(false)}>
         <div className="rbar">
@@ -2373,13 +2718,22 @@ useEffect(() => {
                   {(at.matchLabel === 'Best Match' || at.matchLabel === 'Closest Match')
                     ? <div className="match-best">{at.matchLabel}</div>
                     : at.matchLabel && <div className="match-label">{at.matchLabel}</div>}
-                  <button onClick={e => { e.stopPropagation(); handleSaveBouquet(at); }}
-                    title={savedMsg[at.id] ? "Saved!" : "Save bouquet"}
-                    style={{ marginTop:8, background:"none", border:`1px solid ${savedMsg[at.id] ? at.color : "rgba(255,255,255,0.12)"}`,
-                      borderRadius:6, padding:"3px 10px", color:savedMsg[at.id] ? at.color : G.mist,
-                      fontSize:10, cursor:"pointer", fontFamily:"Outfit,sans-serif", fontWeight:600, transition:"all .2s" }}>
-                    {savedMsg[at.id] ? "✓ Saved" : "☆ Save"}
-                  </button>
+                  <div style={{ display:"flex", gap:6, marginTop:8, flexWrap:"wrap" }}>
+                    <button onClick={e => { e.stopPropagation(); handleSaveBouquet(at); }}
+                      title={savedMsg[at.id] ? "Saved!" : "Save bouquet"}
+                      style={{ background:"none", border:`1px solid ${savedMsg[at.id] ? at.color : "rgba(255,255,255,0.12)"}`,
+                        borderRadius:6, padding:"3px 10px", color:savedMsg[at.id] ? at.color : G.mist,
+                        fontSize:10, cursor:"pointer", fontFamily:"Outfit,sans-serif", fontWeight:600, transition:"all .2s" }}>
+                      {savedMsg[at.id] ? "✓ Saved" : "☆ Save"}
+                    </button>
+                    <button onClick={e => { e.stopPropagation(); handleBacktest(at); }}
+                      title="Historical SIP backtest"
+                      style={{ background:"none", border:"1px solid rgba(255,255,255,0.12)",
+                        borderRadius:6, padding:"3px 10px", color:G.mist,
+                        fontSize:10, cursor:"pointer", fontFamily:"Outfit,sans-serif", fontWeight:600, transition:"all .2s" }}>
+                      ⬡ Backtest
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -2818,7 +3172,9 @@ useEffect(() => {
                             {isTarget && <div className="cx-target-label">← replacing this</div>}
                             {isCustomized && <div className="cx-replaced-label">✎ Customized</div>}
                             <div className="fw">{f.weight}%</div>
-                            <div className="fn">{f.name}</div>
+                            <div className="fn" onClick={e => { e.stopPropagation(); handleFundDetail(String(f.scheme_code)); }}
+                              style={{ cursor:"pointer", textDecoration:"underline dotted", textDecorationColor:"rgba(255,255,255,0.25)", textUnderlineOffset:3 }}
+                              title="View fund detail">{f.name}</div>
                             <div className="fcat">{f.category}</div>
                             <div className="fm">
                               AMC: <span>{f.amc}</span><br />

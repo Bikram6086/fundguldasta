@@ -1746,3 +1746,291 @@ def analyse_portfolio(request: PortfolioRequest):
         "horizon_years": request.horizon_years,
         "missing_data_codes": [c for c in codes if c not in fund_scores_cache],
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PRIORITY 13a+13b — HISTORICAL SIP BACKTEST + PROBABILISTIC SIMULATION
+# ══════════════════════════════════════════════════════════════════════════════
+
+class BacktestRequest(BaseModel):
+    monthly_sip: float = 10000
+    horizon_years: int = 7
+    future_years: int = 5
+
+
+@app.post("/api/bouquets/{archetype_id}/backtest")
+async def bouquet_backtest(archetype_id: str, body: BacktestRequest):
+    import random
+    horizon_years = max(1, min(15, body.horizon_years))
+    future_years = max(1, min(10, body.future_years))
+
+    # ── Fetch archetype fund weights from cache ────────────────────────────────
+    row = get_latest_cache(archetype_id, 7)
+    if not row:
+        # Try any cached entry for this archetype
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT funds_json FROM bouquet_cache WHERE archetype_id = %s "
+            "AND is_active = TRUE ORDER BY computation_date DESC LIMIT 1",
+            (archetype_id,)
+        )
+        r = cur.fetchone()
+        cur.close(); conn.close()
+        if not r:
+            raise HTTPException(404, "Archetype not found in cache")
+        funds_raw = json.loads(r[0]) if isinstance(r[0], str) else r[0]
+    else:
+        funds_raw = json.loads(row[0]) if isinstance(row[0], str) else row[0]
+
+    fund_weights = {}
+    for f in funds_raw:
+        code = str(f["scheme_code"])
+        w = float(f.get("weight") or f.get("weight_pct") or 20)
+        fund_weights[code] = w
+    total_w = sum(fund_weights.values())
+    fund_weights = {k: v / total_w for k, v in fund_weights.items()}
+
+    # ── Determine start date (horizon or fund availability) ───────────────────
+    from datetime import timedelta
+    today = date.today()
+    requested_start = today.replace(year=today.year - horizon_years)
+
+    conn = get_db()
+    cur = conn.cursor()
+
+    # Get monthly first NAV for each fund
+    fund_navs = {}
+    actual_starts = []
+    for code in fund_weights:
+        cur.execute("""
+            SELECT DISTINCT ON (DATE_TRUNC('month', nav_date))
+                DATE_TRUNC('month', nav_date)::date AS month,
+                nav_value
+            FROM nav_data
+            WHERE scheme_code = %s AND nav_date >= %s
+            ORDER BY DATE_TRUNC('month', nav_date), nav_date
+        """, (code, requested_start))
+        rows = cur.fetchall()
+        if rows:
+            fund_navs[code] = {r[0].strftime("%Y-%m"): float(r[1]) for r in rows}
+            actual_starts.append(rows[0][0])
+
+    # Nifty 50 monthly
+    cur.execute("""
+        SELECT DISTINCT ON (DATE_TRUNC('month', price_date))
+            DATE_TRUNC('month', price_date)::date AS month,
+            closing_value
+        FROM benchmark_data
+        WHERE index_name = 'Nifty 50' AND price_date >= %s
+        ORDER BY DATE_TRUNC('month', price_date), price_date
+    """, (requested_start,))
+    nifty_navs = {r[0].strftime("%Y-%m"): float(r[1]) for r in cur.fetchall()}
+    cur.close(); conn.close()
+
+    # ── Build common month list ────────────────────────────────────────────────
+    common_start = max(actual_starts) if actual_starts else requested_start
+    months = []
+    m = common_start.replace(day=1)
+    end_month = today.replace(day=1)
+    while m <= end_month:
+        months.append(m.strftime("%Y-%m"))
+        if m.month == 12:
+            m = m.replace(year=m.year + 1, month=1)
+        else:
+            m = m.replace(month=m.month + 1)
+
+    # ── SIP simulation ─────────────────────────────────────────────────────────
+    fund_units = {code: 0.0 for code in fund_weights}
+    nifty_units = 0.0
+    total_invested = 0.0
+    series = []
+
+    # Also collect weighted monthly returns for Monte Carlo
+    prev_nav = None
+    monthly_returns = []
+
+    for month in months:
+        navs = {}
+        all_ok = True
+        for code in fund_weights:
+            nav = fund_navs.get(code, {}).get(month)
+            if nav is None:
+                all_ok = False
+                break
+            navs[code] = nav
+        nifty_nav = nifty_navs.get(month)
+        if not all_ok or not nifty_nav:
+            continue
+
+        # Record weighted return before investing this month
+        curr_nav_wtd = sum(fund_weights[c] * navs[c] for c in fund_weights)
+        if prev_nav is not None and prev_nav > 0:
+            monthly_returns.append(curr_nav_wtd / prev_nav - 1)
+        prev_nav = curr_nav_wtd
+
+        # Invest
+        total_invested += body.monthly_sip
+        for code, w in fund_weights.items():
+            fund_units[code] += (body.monthly_sip * w) / navs[code]
+        nifty_units += body.monthly_sip / nifty_nav
+
+        # Portfolio value
+        bouquet_val = sum(fund_units[c] * navs[c] for c in fund_weights)
+        nifty_val = nifty_units * nifty_nav
+        series.append({
+            "m": month,
+            "b": round(bouquet_val),
+            "n": round(nifty_val),
+            "i": round(total_invested),
+        })
+
+    # ── Historical summary ─────────────────────────────────────────────────────
+    n_months = len(series)
+    summary = {}
+    if n_months > 0 and total_invested > 0:
+        fin = series[-1]
+        r_mo = 0.07 / 12
+        fd_val = body.monthly_sip * ((1 + r_mo) ** n_months - 1) / r_mo * (1 + r_mo)
+        b_cagr = ((fin["b"] / total_invested) ** (12 / n_months) - 1) * 100 if fin["b"] > 0 else 0
+        n_cagr = ((fin["n"] / total_invested) ** (12 / n_months) - 1) * 100 if fin["n"] > 0 else 0
+        summary = {
+            "total_invested": round(total_invested),
+            "bouquet_final": fin["b"],
+            "nifty_final": fin["n"],
+            "fd_final": round(fd_val),
+            "bouquet_cagr": round(b_cagr, 2),
+            "nifty_cagr": round(n_cagr, 2),
+            "months": n_months,
+            "actual_start": series[0]["m"] if series else None,
+        }
+
+    # ── Monte Carlo future projection ─────────────────────────────────────────
+    future_bands = []
+    if monthly_returns and n_months >= 12:
+        N_SIM = 500
+        n_future = future_years * 12
+        year_buckets = {yr: [] for yr in range(1, future_years + 1)}
+        for _ in range(N_SIM):
+            v = 0.0
+            for mo in range(1, n_future + 1):
+                r = random.choice(monthly_returns)
+                v = (v + body.monthly_sip) * (1 + r)
+                if mo % 12 == 0:
+                    year_buckets[mo // 12].append(v)
+        for yr in range(1, future_years + 1):
+            vals = sorted(year_buckets[yr])
+            n = len(vals)
+            future_bands.append({
+                "y": yr,
+                "p10": round(vals[max(0, int(n * 0.10))]),
+                "p25": round(vals[max(0, int(n * 0.25))]),
+                "p50": round(vals[max(0, int(n * 0.50))]),
+                "p75": round(vals[max(0, int(n * 0.75))]),
+                "p90": round(vals[min(n - 1, int(n * 0.90))]),
+                "i": round(body.monthly_sip * yr * 12),
+            })
+
+    return {
+        "series": series,
+        "summary": summary,
+        "future": future_bands,
+        "monthly_sip": body.monthly_sip,
+        "future_years": future_years,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PRIORITY 13c — FUND DETAIL PAGE
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/funds/{scheme_code}/detail")
+async def fund_detail(scheme_code: str):
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Fund metadata
+        cur.execute("""
+            SELECT scheme_name, sebi_category, fund_type, aum_crores, expense_ratio
+            FROM fund_metadata WHERE scheme_code = %s
+        """, (scheme_code,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(404, "Fund not found")
+        name, category, fund_type, aum, expense_ratio = row
+
+        # Manager
+        cur.execute("""
+            SELECT manager_name, appointment_date FROM fund_managers
+            WHERE scheme_code = %s ORDER BY appointment_date DESC LIMIT 1
+        """, (scheme_code,))
+        mgr = cur.fetchone()
+        manager_name = mgr[0] if mgr else None
+        appt_date = str(mgr[1]) if mgr and mgr[1] else None
+
+        # Monthly NAV last 5 years
+        cur.execute("""
+            SELECT DISTINCT ON (DATE_TRUNC('month', nav_date))
+                DATE_TRUNC('month', nav_date)::date AS month, nav_value
+            FROM nav_data
+            WHERE scheme_code = %s AND nav_date >= CURRENT_DATE - INTERVAL '5 years'
+            ORDER BY DATE_TRUNC('month', nav_date), nav_date
+        """, (scheme_code,))
+        nav_series = [{"m": str(r[0]), "v": float(r[1])} for r in cur.fetchall()]
+
+        # Current NAV
+        cur.execute("SELECT nav_value FROM nav_data WHERE scheme_code = %s ORDER BY nav_date DESC LIMIT 1", (scheme_code,))
+        curr_row = cur.fetchone()
+        curr_nav = float(curr_row[0]) if curr_row else None
+
+        # Rolling returns (fund)
+        def fund_nav_at(interval_str):
+            cur.execute(
+                "SELECT nav_value FROM nav_data WHERE scheme_code = %s "
+                "AND nav_date <= CURRENT_DATE - INTERVAL %s ORDER BY nav_date DESC LIMIT 1",
+                (scheme_code, interval_str)
+            )
+            r = cur.fetchone()
+            return float(r[0]) if r else None
+
+        r1 = fund_nav_at("1 year");  r3 = fund_nav_at("3 years");  r5 = fund_nav_at("5 years")
+        rolling = {}
+        if curr_nav and r1: rolling["1yr"] = round((curr_nav / r1 - 1) * 100, 2)
+        if curr_nav and r3: rolling["3yr"] = round(((curr_nav / r3) ** (1/3) - 1) * 100, 2)
+        if curr_nav and r5: rolling["5yr"] = round(((curr_nav / r5) ** (1/5) - 1) * 100, 2)
+
+        # Nifty 50 rolling returns
+        def nifty_at(interval_str):
+            cur.execute(
+                "SELECT closing_value FROM benchmark_data WHERE index_name = 'Nifty 50' "
+                "AND price_date <= CURRENT_DATE - INTERVAL %s ORDER BY price_date DESC LIMIT 1",
+                (interval_str,)
+            )
+            r = cur.fetchone()
+            return float(r[0]) if r else None
+
+        cur.execute("SELECT closing_value FROM benchmark_data WHERE index_name = 'Nifty 50' ORDER BY price_date DESC LIMIT 1")
+        nc = cur.fetchone(); nc_val = float(nc[0]) if nc else None
+        n1 = nifty_at("1 year"); n3 = nifty_at("3 years"); n5 = nifty_at("5 years")
+        nifty_rolling = {}
+        if nc_val and n1: nifty_rolling["1yr"] = round((nc_val / n1 - 1) * 100, 2)
+        if nc_val and n3: nifty_rolling["3yr"] = round(((nc_val / n3) ** (1/3) - 1) * 100, 2)
+        if nc_val and n5: nifty_rolling["5yr"] = round(((nc_val / n5) ** (1/5) - 1) * 100, 2)
+
+    finally:
+        cur.close(); conn.close()
+
+    return {
+        "scheme_code": scheme_code,
+        "name": name,
+        "category": category,
+        "fund_type": fund_type,
+        "aum_cr": float(aum) if aum else None,
+        "expense_ratio": float(expense_ratio) if expense_ratio else None,
+        "manager_name": manager_name,
+        "appointment_date": appt_date,
+        "nav_series": nav_series,
+        "current_nav": curr_nav,
+        "rolling_returns": rolling,
+        "nifty_rolling": nifty_rolling,
+    }
