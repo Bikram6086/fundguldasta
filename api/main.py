@@ -28,12 +28,26 @@ from engine.fund_replacement import (
 
 load_dotenv(os.path.expanduser('~/fundguldasta/config/.env'))
 
-DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': os.getenv('DB_PORT', '5432'),
-    'dbname': os.getenv('DB_NAME', 'fundguldasta_dev'),
-    'user': os.getenv('DB_USER', 'fundguldasta_user'),
-}
+# Support both individual env vars (local dev) and DATABASE_URL (Railway/Timescale Cloud)
+_DATABASE_URL = os.getenv('DATABASE_URL')
+if _DATABASE_URL:
+    import urllib.parse as _up
+    _u = _up.urlparse(_DATABASE_URL)
+    DB_CONFIG = {
+        'host': _u.hostname,
+        'port': _u.port or 5432,
+        'dbname': _u.path.lstrip('/'),
+        'user': _u.username,
+        'password': _u.password,
+        'sslmode': 'require',
+    }
+else:
+    DB_CONFIG = {
+        'host': os.getenv('DB_HOST', 'localhost'),
+        'port': os.getenv('DB_PORT', '5432'),
+        'dbname': os.getenv('DB_NAME', 'fundguldasta_dev'),
+        'user': os.getenv('DB_USER', 'fundguldasta_user'),
+    }
 
 app = FastAPI(
     title="FundGuldasta API",
@@ -48,6 +62,8 @@ app.add_middleware(
         "http://127.0.0.1:3000",
         "https://fundguldasta.com",
         "https://www.fundguldasta.com",
+        "https://fundguldasta.vercel.app",
+        "https://fundguldasta-git-main-bikram6086.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],
