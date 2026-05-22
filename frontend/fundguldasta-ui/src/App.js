@@ -292,6 +292,7 @@ export default function App() {
   const [cbError, setCbError] = useState(null);
   const cbResultsRef = useRef(null);
   const [cbSelectedSwaps, setCbSelectedSwaps] = useState(new Set());
+  const [pwaPrompt, setPwaPrompt] = useState(null);
 
   const impliedCAGR = (() => {
     if (mode === "return") return parseFloat(cagr) || null;
@@ -547,6 +548,11 @@ export default function App() {
     setCustomizeTargetFund(null);
     setCustomizeLoading(false);
   }, [selectedArch]);
+useEffect(() => {
+    const handler = e => { e.preventDefault(); setPwaPrompt(e); };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
 
   const handleAskAI = async (question, contextType, contextData) => {
     const q = question || aiQuestion;
@@ -686,6 +692,14 @@ export default function App() {
         <div className="sec-tag">Honest-by-Design Mutual Fund Research</div>
         <h1 className="h1">Curated fund bouquets.<br /><em>Honest by design.</em></h1>
         <p className="sub">Two inputs. Four bouquet archetypes. Ten layers of transparent research. No commission. No false assurance.</p>
+        {pwaPrompt && (
+          <button
+            onClick={() => { pwaPrompt.prompt(); pwaPrompt.userChoice.then(() => setPwaPrompt(null)); }}
+            style={{ display:'inline-flex', alignItems:'center', gap:8, background:'rgba(212,175,55,0.1)', border:'1px solid rgba(212,175,55,0.35)', borderRadius:10, padding:'9px 22px', color:'#D4AF37', fontFamily:'Outfit,sans-serif', fontSize:13, fontWeight:600, cursor:'pointer', letterSpacing:'.04em', marginBottom:16 }}
+          >
+            ⬇ Install FundGuldasta App
+          </button>
+        )}
         {apiError && <div className="warn-box" style={{ maxWidth: 600, marginBottom: 20 }}>⚠️ {apiError}</div>}
         <div className="icard">
           <div className="tabs">
@@ -1201,6 +1215,14 @@ export default function App() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div style={{ fontSize: 11, color: G.mist }}>fundguldasta.com · Research & Education · Not Investment Advice</div>
+            {pwaPrompt && (
+              <button
+                onClick={() => { pwaPrompt.prompt(); pwaPrompt.userChoice.then(() => setPwaPrompt(null)); }}
+                style={{ display:'flex', alignItems:'center', gap:6, background:'rgba(212,175,55,0.12)', border:'1px solid rgba(212,175,55,0.4)', borderRadius:8, padding:'5px 14px', color:'#D4AF37', fontFamily:'Outfit,sans-serif', fontSize:11, fontWeight:600, cursor:'pointer', letterSpacing:'.04em' }}
+              >
+                ⬇ Install App
+              </button>
+            )}
             <HealthIndicator />
           </div>
         </div>
