@@ -35,6 +35,29 @@ async function authMe(token) {
   return res.json();
 }
 
+async function apiSaveBouquet(token, payload) {
+  const res = await fetch(`${API_BASE}/api/user/saved-bouquets`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "Save failed"); }
+  return res.json();
+}
+async function apiListSaved(token) {
+  const res = await fetch(`${API_BASE}/api/user/saved-bouquets`, {
+    headers: { "Authorization": `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Could not load saved bouquets");
+  return res.json();
+}
+async function apiDeleteSaved(token, id) {
+  await fetch(`${API_BASE}/api/user/saved-bouquets/${id}`, {
+    method: "DELETE",
+    headers: { "Authorization": `Bearer ${token}` },
+  });
+}
+
 async function curateBouquets(params) {
   if (USE_LIVE_DATA) {
     return apiCall("POST", "/api/bouquets/curate", params);
@@ -315,6 +338,9 @@ export default function App() {
   const [authName, setAuthName] = useState("");
   const [authError, setAuthError] = useState("");
   const [authLoading, setAuthLoading] = useState(false);
+  const [savedList, setSavedList] = useState([]);
+  const [savedPanel, setSavedPanel] = useState(false);
+  const [savedMsg, setSavedMsg] = useState({});
 
   const impliedCAGR = (() => {
     if (mode === "return") return parseFloat(cagr) || null;
@@ -579,7 +605,10 @@ useEffect(() => {
   useEffect(() => {
     const token = localStorage.getItem("fg_token");
     if (!token) return;
-    authMe(token).then(u => setUser(u)).catch(() => {
+    authMe(token).then(u => {
+      setUser(u);
+      apiListSaved(token).then(setSavedList).catch(() => {});
+    }).catch(() => {
       localStorage.removeItem("fg_token");
     });
   }, []);
@@ -699,6 +728,31 @@ useEffect(() => {
     </div>
   );
 
+  const handleSaveBouquet = async (at) => {
+    const token = localStorage.getItem("fg_token");
+    if (!token) { setAuthTab("login"); setAuthModal(true); return; }
+    try {
+      const res = await apiSaveBouquet(token, {
+        archetype_id: at.id,
+        horizon_years: at.horizonYears || 7,
+        target_cagr: parseFloat(at.cagrRange) || 16,
+        name: `${at.label} · ${at.cagrRange}`,
+      });
+      setSavedList(prev => [res, ...prev]);
+      setSavedMsg(prev => ({ ...prev, [at.id]: true }));
+      setTimeout(() => setSavedMsg(prev => ({ ...prev, [at.id]: false })), 2000);
+    } catch (e) {
+      alert(e.message);
+    }
+  };
+
+  const handleDeleteSaved = async (id) => {
+    const token = localStorage.getItem("fg_token");
+    if (!token) return;
+    await apiDeleteSaved(token, id);
+    setSavedList(prev => prev.filter(b => b.id !== id));
+  };
+
   const handleAuthSubmit = async () => {
     setAuthError("");
     setAuthLoading(true);
@@ -722,6 +776,8 @@ useEffect(() => {
   const handleSignOut = () => {
     localStorage.removeItem("fg_token");
     setUser(null);
+    setSavedList([]);
+    setSavedPanel(false);
   };
 
   const AuthModal = () => (
@@ -785,6 +841,33 @@ useEffect(() => {
     </div>
   );
 
+  const SavedPanel = () => (
+    <div style={{ position:"fixed", inset:0, zIndex:1900, display:"flex", justifyContent:"flex-end" }}
+      onClick={e => { if (e.target === e.currentTarget) setSavedPanel(false); }}>
+      <div style={{ background:G.sur, borderLeft:`1px solid ${G.bordG}`, width:360, maxWidth:"90vw",
+        height:"100%", overflowY:"auto", padding:24, fontFamily:"Outfit,sans-serif", display:"flex", flexDirection:"column", gap:16 }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <span style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:20, fontWeight:700 }}>Saved Bouquets</span>
+          <button onClick={() => setSavedPanel(false)} style={{ background:"none", border:"none", color:G.slate, cursor:"pointer", fontSize:18 }}>&#x2715;</button>
+        </div>
+        {savedList.length === 0 && (
+          <p style={{ color:G.slate, fontSize:13 }}>No saved bouquets yet. Click the bookmark icon on any archetype to save it.</p>
+        )}
+        {savedList.map(b => (
+          <div key={b.id} style={{ background:G.elv, border:`1px solid ${G.bord}`, borderRadius:10, padding:"12px 16px", display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+            <div>
+              <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:4 }}>{b.name}</div>
+              <div style={{ color:G.slate, fontSize:11 }}>{b.horizon_years}yr · {b.target_cagr}% CAGR</div>
+              <div style={{ color:G.mist, fontSize:10, marginTop:4 }}>{new Date(b.saved_at).toLocaleDateString("en-IN", {day:"numeric",month:"short",year:"numeric"})}</div>
+            </div>
+            <button onClick={() => handleDeleteSaved(b.id)}
+              style={{ background:"none", border:"none", color:G.ro, cursor:"pointer", fontSize:16, padding:"0 4px", flexShrink:0 }}>&#x2715;</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
     if (screen === "hero") return (
     <>
       {authModal && <AuthModal />}
@@ -814,7 +897,8 @@ useEffect(() => {
             onClick={() => { pwaPrompt.prompt(); pwaPrompt.userChoice.then(() => setPwaPrompt(null)); }}
             style={{ display:'inline-flex', alignItems:'center', gap:8, background:'rgba(212,175,55,0.1)', border:'1px solid rgba(212,175,55,0.35)', borderRadius:10, padding:'9px 22px', color:'#D4AF37', fontFamily:'Outfit,sans-serif', fontSize:13, fontWeight:600, cursor:'pointer', letterSpacing:'.04em', marginBottom:16 }}
           >
-            ⬇ Install FundGuldasta App
+            <img src="/logo-bouquet-real.png" alt="" style={{width:28,height:28,objectFit:'cover',borderRadius:6,flexShrink:0}} />
+            Install App
           </button>
         )}
         {apiError && <div className="warn-box" style={{ maxWidth: 600, marginBottom: 20 }}>⚠️ {apiError}</div>}
@@ -1321,6 +1405,7 @@ useEffect(() => {
   return (
     <>
       {authModal && <AuthModal />}
+      {savedPanel && <SavedPanel />}
       <style>{css}</style>
       <div onClick={() => healthOpen && setHealthOpen(false)}>
         <div className="rbar">
@@ -1338,11 +1423,18 @@ useEffect(() => {
                 onClick={() => { pwaPrompt.prompt(); pwaPrompt.userChoice.then(() => setPwaPrompt(null)); }}
                 style={{ display:'flex', alignItems:'center', gap:6, background:'rgba(212,175,55,0.12)', border:'1px solid rgba(212,175,55,0.4)', borderRadius:8, padding:'5px 14px', color:'#D4AF37', fontFamily:'Outfit,sans-serif', fontSize:11, fontWeight:600, cursor:'pointer', letterSpacing:'.04em' }}
               >
-                ⬇ Install App
+                <img src="/logo-bouquet-real.png" alt="" style={{width:20,height:20,objectFit:'cover',borderRadius:4,flexShrink:0}} />
+                Install App
               </button>
             )}
             {user ? (
               <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <button onClick={() => setSavedPanel(true)}
+                  style={{ background:"rgba(212,175,55,0.1)", border:`1px solid rgba(212,175,55,0.35)`, borderRadius:8,
+                    padding:"5px 12px", color:G.gold, fontSize:11, fontWeight:600, cursor:"pointer",
+                    fontFamily:"Outfit,sans-serif", display:"flex", alignItems:"center", gap:5 }}>
+                  &#9733; {savedList.length > 0 ? savedList.length : ""} Saved
+                </button>
                 <span style={{ fontSize:11, color:G.gold, fontWeight:600 }}>{user.display_name}</span>
                 <button onClick={handleSignOut}
                   style={{ background:"none", border:`1px solid ${G.bord}`, borderRadius:6, padding:"4px 10px",
@@ -1505,6 +1597,13 @@ useEffect(() => {
                   {(at.matchLabel === 'Best Match' || at.matchLabel === 'Closest Match')
                     ? <div className="match-best">{at.matchLabel}</div>
                     : at.matchLabel && <div className="match-label">{at.matchLabel}</div>}
+                  <button onClick={e => { e.stopPropagation(); handleSaveBouquet(at); }}
+                    title={savedMsg[at.id] ? "Saved!" : "Save bouquet"}
+                    style={{ marginTop:8, background:"none", border:`1px solid ${savedMsg[at.id] ? at.color : "rgba(255,255,255,0.12)"}`,
+                      borderRadius:6, padding:"3px 10px", color:savedMsg[at.id] ? at.color : G.mist,
+                      fontSize:10, cursor:"pointer", fontFamily:"Outfit,sans-serif", fontWeight:600, transition:"all .2s" }}>
+                    {savedMsg[at.id] ? "✓ Saved" : "☆ Save"}
+                  </button>
                 </div>
               ))}
             </div>

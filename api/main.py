@@ -234,6 +234,10 @@ def _auto_heal(component_state: dict):
     # Heal stale cache — run precompute in background thread
     if cache.get("status") == "degraded":
         _log_remediation("Cache stale — auto-triggering precompute for horizons [5,7,10]")
+        age_h = cache.get("age_hours") or 0
+        if age_h > 48:
+            from api.alerts import send_cache_stale_alert
+            threading.Thread(target=send_cache_stale_alert, args=(age_h,), daemon=True).start()
         def _bg_precompute():
             try:
                 for h, c in [(7, 16), (5, 14), (10, 16)]:
@@ -959,6 +963,8 @@ def trigger_nav_refresh():
     except Exception as e:
         results['nav_ingestion'] = str(e)
         results['nav_status'] = 'error'
+        from api.alerts import send_pipeline_failure_alert
+        threading.Thread(target=send_pipeline_failure_alert, args=('nav_ingestion', str(e)), daemon=True).start()
 
     # Step 2 — Precompute common horizons
     try:
@@ -1490,3 +1496,103 @@ def get_me(authorization: Optional[str] = _Header(default=None)):
         "display_name": row[2],
         "created_at": str(row[3]),
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SAVED BOUQUETS (Priority 10b)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class SaveBouquetRequest(BaseModel):
+    archetype_id: str
+    horizon_years: int = 7
+    target_cagr: float = 16.0
+    name: Optional[str] = None
+    snapshot: Optional[dict] = None
+
+
+@app.post("/api/user/saved-bouquets")
+def save_bouquet(
+    request: SaveBouquetRequest,
+    authorization: Optional[str] = _Header(default=None),
+):
+    """Save a bouquet to the authenticated user's library."""
+    payload = _get_user_from_token(authorization)
+    user_id = int(payload["sub"])
+
+    name = (request.name or "").strip() or f"{request.archetype_id.title()} · {request.horizon_years}yr · {request.target_cagr}% CAGR"
+    snap = json.dumps(request.snapshot) if request.snapshot else None
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """INSERT INTO saved_bouquets (user_id, name, archetype_id, horizon_years, target_cagr, snapshot_json)
+               VALUES (%s, %s, %s, %s, %s, %s) RETURNING id, saved_at""",
+            (user_id, name, request.archetype_id, request.horizon_years, request.target_cagr, snap),
+        )
+        row = cur.fetchone()
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+    return {"id": row[0], "name": name, "saved_at": str(row[1])}
+
+
+@app.get("/api/user/saved-bouquets")
+def list_saved_bouquets(authorization: Optional[str] = _Header(default=None)):
+    """List all saved bouquets for the authenticated user."""
+    payload = _get_user_from_token(authorization)
+    user_id = int(payload["sub"])
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """SELECT id, name, archetype_id, horizon_years, target_cagr, saved_at
+               FROM saved_bouquets WHERE user_id = %s ORDER BY saved_at DESC""",
+            (user_id,),
+        )
+        rows = cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
+
+    return [
+        {"id": r[0], "name": r[1], "archetype_id": r[2],
+         "horizon_years": r[3], "target_cagr": r[4], "saved_at": str(r[5])}
+        for r in rows
+    ]
+
+
+@app.delete("/api/user/saved-bouquets/{bouquet_id}")
+def delete_saved_bouquet(
+    bouquet_id: int,
+    authorization: Optional[str] = _Header(default=None),
+):
+    """Delete a saved bouquet (must belong to authenticated user)."""
+    payload = _get_user_from_token(authorization)
+    user_id = int(payload["sub"])
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "DELETE FROM saved_bouquets WHERE id = %s AND user_id = %s RETURNING id",
+            (bouquet_id, user_id),
+        )
+        deleted = cur.fetchone()
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Bouquet not found or not yours")
+    return {"deleted": bouquet_id}
