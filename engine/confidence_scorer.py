@@ -134,7 +134,7 @@ def score_manager_stability(fund_weights, fund_details):
             SELECT manager_name, appointment_date
             FROM fund_managers
             WHERE scheme_code = %s AND is_current = TRUE
-            LIMIT 1
+            ORDER BY appointment_date ASC LIMIT 1
         """, (scheme_code,))
         mgr = cursor.fetchone()
 
