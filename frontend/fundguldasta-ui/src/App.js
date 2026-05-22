@@ -953,8 +953,8 @@ useEffect(() => {
                       <div key={r.scheme_code} onClick={() => handlePfAddFund(r)} style={{ padding:"10px 14px", cursor:"pointer", borderBottom:`1px solid ${G.bord}` }}
                         onMouseEnter={e => e.currentTarget.style.background=G.elv}
                         onMouseLeave={e => e.currentTarget.style.background="transparent"}>
-                        <div style={{ color:G.white, fontSize:13, fontWeight:600 }}>{r.scheme_name}</div>
-                        <div style={{ color:G.slate, fontSize:11, marginTop:2 }}>{r.amc_name} · {r.sebi_category}</div>
+                        <div style={{ color:G.white, fontSize:13, fontWeight:600 }}>{r.name || r.scheme_name}</div>
+                        <div style={{ color:G.slate, fontSize:11, marginTop:2 }}>{r.amc || r.amc_name} · {r.category || r.sebi_category}</div>
                       </div>
                     ))}
                   </div>
@@ -969,8 +969,8 @@ useEffect(() => {
                 {pfFunds.map(f => (
                   <div key={f.scheme_code} style={{ display:"flex", alignItems:"center", gap:12, marginBottom:10, padding:"10px 14px", background:G.elv, borderRadius:8 }}>
                     <div style={{ flex:1, minWidth:0 }}>
-                      <div style={{ color:G.white, fontSize:12, fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{f.scheme_name}</div>
-                      <div style={{ color:G.slate, fontSize:11, marginTop:2 }}>{f.sebi_category}</div>
+                      <div style={{ color:G.white, fontSize:12, fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{f.name || f.scheme_name}</div>
+                      <div style={{ color:G.slate, fontSize:11, marginTop:2 }}>{f.category || f.sebi_category}</div>
                     </div>
                     <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
                       <input type="number" min={1} max={100} value={f.allocation_pct}
@@ -1004,11 +1004,8 @@ useEffect(() => {
                   <div style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:18, fontWeight:700, marginBottom:16 }}>Portfolio Metrics</div>
                   <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))", gap:12 }}>
                     {[
-                      ["Wtd CAGR", `${pfAnalysis.portfolio_metrics.weighted_cagr}%`, G.green],
-                      ["Sortino", pfAnalysis.portfolio_metrics.weighted_sortino, G.gold],
-                      ["Max Drawdown", `${pfAnalysis.portfolio_metrics.weighted_max_drawdown.toFixed(1)}%`, "#FF6B6B"],
+                      ["Composite Score", pfAnalysis.portfolio_metrics.weighted_composite_score, G.gold],
                       ["Expense Ratio", `${(pfAnalysis.portfolio_metrics.weighted_expense_ratio * 100).toFixed(2)}%`, G.mist],
-                      ["Fund Score", pfAnalysis.portfolio_metrics.weighted_fund_score, G.gold],
                       ["No. of Funds", pfAnalysis.portfolio_metrics.fund_count, G.white],
                     ].map(([label, val, col]) => (
                       <div key={label} style={{ background:G.elv, borderRadius:8, padding:"12px 14px" }}>
