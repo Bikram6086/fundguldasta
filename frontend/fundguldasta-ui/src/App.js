@@ -1179,6 +1179,184 @@ useEffect(() => {
     </>
   );
 
+  // ── SEO CONTENT SCREENS (Priority 11) ──────────────────────────────────────
+
+  const LearnBack = ({ label = "← Back" }) => (
+    <button onClick={() => setScreen("hero")}
+      style={{ background:"none", border:"none", color:G.mist, fontSize:13, cursor:"pointer",
+        fontFamily:"Outfit,sans-serif", display:"flex", alignItems:"center", gap:6, padding:0, marginBottom:48 }}>
+      {label}
+    </button>
+  );
+
+  const LearnPage = ({ title, subtitle, children }) => (
+    <>
+      <style>{css}</style>
+      <div className="about-screen">
+        <div className="about-inner">
+          <LearnBack />
+          <div style={{ marginBottom:56 }}>
+            <div style={{ fontFamily:"Cormorant Garamond,serif", fontSize:"clamp(28px,5vw,46px)", color:G.white, fontWeight:600, lineHeight:1.15, marginBottom:12 }}>{title}</div>
+            <div style={{ fontSize:15, color:G.gold, fontStyle:"italic", fontFamily:"Cormorant Garamond,serif" }}>{subtitle}</div>
+          </div>
+          {children}
+          <div style={{ marginTop:56, padding:"28px 32px", background:"linear-gradient(135deg,rgba(212,175,55,0.07),rgba(212,175,55,0.02))", border:`1px solid rgba(212,175,55,0.2)`, borderRadius:16 }}>
+            <div style={{ color:G.white, fontSize:14, fontWeight:600, marginBottom:8 }}>Try it yourself</div>
+            <div style={{ color:G.fog, fontSize:13, lineHeight:1.8, marginBottom:16 }}>FundGuldasta applies all of these principles automatically. Enter your investment horizon and target CAGR to see research-backed bouquets.</div>
+            <button onClick={() => setScreen("hero")}
+              style={{ background:"rgba(212,175,55,0.15)", border:`1px solid ${G.bordG}`, borderRadius:10, padding:"10px 28px", color:G.gold, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+              Start Research →
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+
+  const LearnCard = ({ title, children }) => (
+    <div className="about-card" style={{ marginBottom:16 }}>
+      <div className="about-card-title">{title}</div>
+      <div className="about-card-body">{children}</div>
+    </div>
+  );
+
+  if (screen === "learn-algorithm") {
+    document.title = "How Our Algorithm Works — FundGuldasta";
+    return (
+      <LearnPage title="How Our Algorithm Works" subtitle="Five layers. No shortcuts. No conflicts of interest.">
+        <div style={{ marginBottom:32 }}>
+          <div style={{ fontSize:10, letterSpacing:".14em", textTransform:"uppercase", color:G.gold, fontWeight:700, marginBottom:20 }}>The Five-Layer Engine</div>
+          {[
+            ["Layer 1 — Eligibility Filter", "We start with all 14,000+ mutual fund schemes and immediately discard everything that does not meet our baseline: Direct Plan only (no regular plans that pay distributor commissions), AUM ≥ ₹500 Crore (liquidity protection), and expense ratio ≤ 1.5%. Schemes with fewer than 3 years of NAV history are also excluded as unproven. This alone removes roughly 85% of schemes."],
+            ["Layer 2 — Six-Dimension Scoring", "Each surviving fund is scored across six dimensions: Return Consistency (25%) — what percentage of rolling periods beat the target CAGR; Risk-Adjusted Quality (20%) — Sortino and Sharpe ratios that penalise downside volatility more than upside; Downside Behaviour (20%) — max drawdown, recovery speed, and capture ratios; Manager Stability (15%) — tenure, historical track record, and absence of recent manager changes; Portfolio Quality (10%) — concentration, style consistency; Forward Context (10%) — category tailwinds and benchmark relative performance."],
+            ["Layer 3 — Bouquet Construction", "Funds are assembled into a 4–6 fund bouquet using category diversity as the primary constraint. We do not allow two funds from the same SEBI category unless the category is large enough to warrant it (e.g., Flexi Cap + Large Cap). A correlation check is run as a secondary filter — Indian equity funds typically correlate at 0.85–0.98, so we focus on category diversity rather than raw correlation numbers. International and sectoral funds are added only when their category diversification benefit justifies inclusion."],
+            ["Layer 4 — Confidence Scoring", "Every bouquet gets an honest confidence score (0–100) based on five factors: Rolling Consistency (30%) — what fraction of 3-year rolling windows would have achieved the target; Downside Protection (20%) — behaviour during 2008, 2011, 2015, 2020 drawdowns; Manager Stability (20%) — no recent manager change flag; Category Tailwind (15%) — SEBI category performance context; Cost Efficiency (15%) — composite expense ratio vs category average. A score below 60 triggers a warning."],
+            ["Layer 5 — Pre-computation", "Results are pre-computed nightly for all supported horizons (5, 7, 10, 15 years) and stored in a database cache. The API never triggers live computation during user requests — this guarantees sub-100ms response times regardless of traffic. Cache freshness is monitored; if data is older than 48 hours, an alert fires automatically."],
+          ].map(([title, body], i) => (
+            <div key={i} style={{ display:"flex", gap:16, padding:"20px 24px", borderRadius:12, background:"rgba(255,255,255,0.025)", border:`1px solid rgba(255,255,255,0.05)`, marginBottom:12 }}>
+              <div style={{ fontFamily:"JetBrains Mono,monospace", fontSize:11, color:G.gold, fontWeight:700, flexShrink:0, marginTop:2, minWidth:28 }}>0{i+1}</div>
+              <div>
+                <div style={{ fontSize:14, color:G.white, fontWeight:600, marginBottom:8 }}>{title}</div>
+                <div style={{ fontSize:13, color:G.fog, lineHeight:1.8 }}>{body}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+        <LearnCard title="What we do not do">
+          We do not use star ratings (backward-looking and marketing-driven). We do not rank funds by recent 1-year returns. We do not consider regular plans. We do not accept any commission, trail fee, or referral fee from any AMC. The algorithm has no financial incentive to prefer one fund over another.
+        </LearnCard>
+        <LearnCard title="Data sources">
+          NAV data is ingested daily from <strong>AMFI (amfiindia.com)</strong> — the official regulator-mandated source. Benchmark data comes from NSE indices. Fund manager data is sourced from SEBI-mandated Scheme Information Documents. No third-party data vendor is used.
+        </LearnCard>
+      </LearnPage>
+    );
+  }
+
+  if (screen === "learn-rolling-returns") {
+    document.title = "Rolling Returns Explained — FundGuldasta";
+    return (
+      <LearnPage title="Rolling Returns Explained" subtitle="Why point-to-point returns can mislead you — and what to use instead.">
+        <LearnCard title="What is a point-to-point return?">
+          When a fund says "15% CAGR over 5 years," it means: if you had invested on a specific date exactly 5 years ago and redeemed today, your annualised return would be 15%. <strong>The problem:</strong> this single number depends entirely on which two dates you pick. A fund that crashed 40% two months ago can show a stellar 5-year return if the starting date happened to be another crash. Point-to-point returns are a snapshot, not a pattern.
+        </LearnCard>
+        <LearnCard title="What is a rolling return?">
+          A rolling return is calculated for <strong>every possible start date</strong> over a given period. For a 3-year rolling window with daily data over 7 years, we calculate roughly 1,000+ different 3-year CAGRs — starting January 1 Year 1, January 2 Year 1, January 3 Year 1… and so on. The result is a <em>distribution</em> of returns, not a single number. This tells you: in what fraction of 3-year periods did this fund beat 15%? What was the worst 3-year CAGR? What was the median?
+        </LearnCard>
+        <LearnCard title="Why does FundGuldasta use rolling returns?">
+          Rolling returns are resistant to cherry-picking. A fund cannot look artificially good or bad just because of market timing at the endpoints. For an Indian retail investor with a 5–10 year horizon who will invest via SIP (not lump sum on a single date), the rolling return distribution is a far more honest measure of what they are likely to experience. <strong>Our Return Consistency score</strong> specifically measures the percentage of 3-year rolling windows where a fund beat the target CAGR — a fund that beats 15% in 87% of all 3-year windows is genuinely more consistent than one that beat it in 45%.
+        </LearnCard>
+        <LearnCard title="The SIP angle">
+          With a monthly SIP, you are effectively investing at many different starting points simultaneously. Your actual return is the internal rate of return (XIRR) across all those entry points — which converges toward the rolling return distribution, not the point-to-point number. This is why our algorithm prioritises rolling consistency over headline 1-year or 3-year returns.
+        </LearnCard>
+        <LearnCard title="Realistic CAGR bands for Indian equity MF">
+          Historical rolling return analysis shows: over any 7-year window, Indian large cap equity funds have delivered 10–16% CAGR in most periods. Mid and small caps show higher variance — exceptional in bull runs, brutal in bear ones. Our advisory system flags targets above 20% over 7 years as aggressive and above 22% as unrealistic — not to discourage you, but to give you honest expectations.
+        </LearnCard>
+      </LearnPage>
+    );
+  }
+
+  if (screen === "learn-survivorship") {
+    document.title = "Survivorship Bias in Mutual Funds — FundGuldasta";
+    return (
+      <LearnPage title="Survivorship Bias" subtitle="Why most fund performance data is silently flattering — and how we deal with it.">
+        <LearnCard title="What is survivorship bias?">
+          Survivorship bias is the logical error of focusing only on entities that "survived" a selection process while overlooking those that did not. In mutual funds: funds that performed poorly are quietly merged into other funds or wound up. After 10 years, only the survivors remain in the data. If you calculate the average performance of funds that exist <em>today</em> with 10-year history, you are looking only at the funds that did well enough to survive — the bad ones are gone from the dataset.
+        </LearnCard>
+        <LearnCard title="How bad is this in Indian MF?">
+          AMFI data shows that hundreds of schemes have been merged or wound up over the past decade. Many of these were underperformers. A naive analysis of "average 10-year return of Indian equity funds" would exclude all of them and show an inflated result. Studies on global fund data consistently show survivorship bias inflates apparent average returns by 1–3% per year — a massive distortion over long horizons.
+        </LearnCard>
+        <LearnCard title="Why star ratings are especially vulnerable">
+          Most star rating systems rate funds that exist today on their historical performance. By construction, 5-star funds are mostly survivors. The 1-star and 2-star funds that later got merged or wound up never dragged down the averages. This is one reason why picking funds based on star ratings alone produces disappointing real-world results.
+        </LearnCard>
+        <LearnCard title="What FundGuldasta does about it">
+          We cannot fully eliminate survivorship bias — AMFI's live data only contains active schemes. However, we mitigate it in several ways: <strong>(1)</strong> We require a minimum 3-year NAV history (new launches with no track record are excluded). <strong>(2)</strong> We rely on rolling return distributions rather than absolute performance ranks — a distribution-based approach is less sensitive to which specific funds exist. <strong>(3)</strong> We disclose this limitation explicitly. <strong>(4)</strong> We use category-level benchmark comparisons, which include index-level data not affected by fund-level survivorship.
+        </LearnCard>
+        <LearnCard title="What this means for you">
+          When you see that "the average large cap fund returned 13% over 10 years," treat it with scepticism. The funds that underperformed or got wound up are not in that average. The honest benchmark is a low-cost index fund — which has no survivorship bias because an index includes all constituents, including underperformers. This is one reason why our bouquets always compare against Nifty 50 and Nifty 500, not the average fund.
+        </LearnCard>
+      </LearnPage>
+    );
+  }
+
+  if (screen === "learn-confidence") {
+    document.title = "Confidence Score Guide — FundGuldasta";
+    return (
+      <LearnPage title="Confidence Score Guide" subtitle="What our 0–100 confidence score means and how it is calculated.">
+        <div className="about-card" style={{ marginBottom:24 }}>
+          <div className="about-card-title">What the score means</div>
+          <div className="about-card-body">
+            The confidence score is our honest assessment of how likely a bouquet is to achieve its target CAGR over the stated horizon — given historical patterns, manager stability, and category conditions. A score of <strong style={{ color:G.white }}>80+</strong> means strong historical evidence. <strong style={{ color:G.white }}>65–79</strong> means reasonable confidence with some uncertainty. <strong style={{ color:"#E8A000" }}>Below 60</strong> triggers a visible warning — we still show the bouquet but flag that the target may be ambitious or conditions are unfavourable. The score is never hidden or smoothed.
+          </div>
+        </div>
+        <div style={{ fontSize:10, letterSpacing:".14em", textTransform:"uppercase", color:G.gold, fontWeight:700, marginBottom:16 }}>The Five Factors</div>
+        {[
+          ["Rolling Consistency — 30%", "What percentage of all 3-year rolling windows in the fund's history achieved the target CAGR? A fund that hits 15%+ in 85% of all 3-year windows scores higher than one that hits it in 50%. This is the single largest factor because it directly measures whether the target is historically realistic — not just theoretically possible."],
+          ["Downside Protection — 20%", "How did the constituent funds behave during the four major Indian market drawdowns: the 2008 global financial crisis, 2011 European debt contagion, 2015–16 China slowdown, and the 2020 COVID crash? Funds that recovered faster and drew down less score higher. A bouquet that crumbles 60% during a crash is unlikely to compound to its target even if the arithmetic says it should."],
+          ["Manager Stability — 20%", "Fund manager continuity matters significantly in active management. A fund with the same manager for 7+ years who built the performance history is more predictable than one that just changed managers 6 months ago. We flag recent manager changes (within 18 months) as risk factors. This factor uses available SID data — we disclose when data is incomplete."],
+          ["Category Tailwind — 15%", "Is the SEBI category the fund operates in currently in a favourable environment? Categories that have recently shown strong benchmark performance relative to their history get a positive tailwind. Categories that are extremely overheated (e.g., mid/small caps after a 3-year bull run) get a slight headwind flag. This is forward-looking context, not a prediction."],
+          ["Cost Efficiency — 15%", "The expense ratio is the one return you are guaranteed to give up every year. A bouquet with a weighted average expense ratio of 0.6% scores higher than one at 1.2%. Over a 7-year horizon, the difference of 0.6% per year compounds to roughly 4–5% of your corpus. We normalise this against category averages — a small cap fund at 1.5% may be fine; a large cap fund at 1.5% is overpriced."],
+        ].map(([title, body], i) => (
+          <div key={i} style={{ marginBottom:12, padding:"20px 24px", borderRadius:12, background:"rgba(255,255,255,0.025)", border:`1px solid rgba(255,255,255,0.05)` }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
+              <div style={{ fontSize:14, color:G.white, fontWeight:600 }}>{title.split("—")[0]}</div>
+              <div style={{ fontSize:11, color:G.gold, fontWeight:700, fontFamily:"JetBrains Mono,monospace", flexShrink:0, marginLeft:12 }}>{title.split("—")[1]?.trim()}</div>
+            </div>
+            <div style={{ fontSize:13, color:G.fog, lineHeight:1.8 }}>{body}</div>
+          </div>
+        ))}
+        <LearnCard title="What confidence is NOT">
+          The confidence score is not a guarantee or a prediction of the future. Markets are non-deterministic. A high confidence score means "based on historical patterns, this target has been achievable consistently" — not "you will definitely get this return." All investments involve risk. The score is one honest data point, not a promise.
+        </LearnCard>
+      </LearnPage>
+    );
+  }
+
+  if (screen === "learn-direct-plans") {
+    document.title = "Why Direct Plans Matter — FundGuldasta";
+    return (
+      <LearnPage title="Why Direct Plans Matter" subtitle="The single most important financial decision most Indian investors don't know they're making.">
+        <LearnCard title="What is the difference?">
+          Every mutual fund scheme in India exists in two versions: <strong>Regular Plan</strong> and <strong>Direct Plan</strong>. The underlying portfolio is identical — the same fund manager, same stocks, same strategy. The only difference is the expense ratio. Regular plans include a distributor commission (typically 0.5–1.5% per year) paid to whoever sold you the fund — your bank, broker, or app. Direct plans have no distributor commission. SEBI mandates that AMCs offer both.
+        </LearnCard>
+        <LearnCard title="How big is the difference?">
+          For a large cap fund: Regular plan expense ratio ≈ 1.5–2.0%. Direct plan expense ratio ≈ 0.5–1.0%. The gap is roughly 0.8–1.2% per year. That may sound small. Over 10 years on ₹10 lakh invested at 14% in a direct plan vs 13.2% in a regular plan: <strong>Direct plan corpus: ~₹37.1L. Regular plan corpus: ~₹34.6L. Difference: ~₹2.5 lakh — or 25% of your original investment, silently paid in commissions.</strong>
+        </LearnCard>
+        <LearnCard title="Why do most investors still use regular plans?">
+          <strong>(1)</strong> Most investment apps (especially bank apps and large brokers) default to regular plans — they earn trail commission on every rupee you invest. <strong>(2)</strong> Financial advisors paid by commission have an incentive to recommend regular plans. <strong>(3)</strong> The difference is invisible — both plans show returns on the same scale, so you never see the absolute amount you're paying. <strong>(4)</strong> The SEBI naming convention ("Regular" vs "Direct") makes regular plans sound more standard.
+        </LearnCard>
+        <LearnCard title="Where to invest in direct plans">
+          Direct plans are available through: <strong>MF Central</strong> (mfcentral.com — official AMFI/CAMS/KFintech portal), <strong>AMC websites directly</strong> (Mirae, PPFAS, HDFC AMC etc.), <strong>MF Utilities</strong> (mfuonline.com), and platforms that explicitly offer direct plans like Coin by Zerodha, Groww (select direct plan explicitly), Kuvera, and Paytm Money. FundGuldasta recommends only direct plans — all scheme codes in our algorithm are Direct Plan codes.
+        </LearnCard>
+        <LearnCard title="The SEBI regulation">
+          SEBI made direct plans mandatory for all mutual fund schemes from January 1, 2013 (SEBI Circular CIR/IMD/DF/21/2012). This was a landmark investor-protection regulation. Despite being a decade old, a significant portion of industry AUM still flows through regular plans. The expense ratio differential is fully disclosed in the Scheme Information Document — it is public information that most investors simply do not check.
+        </LearnCard>
+        <LearnCard title="FundGuldasta's position">
+          We only research and recommend direct plans. We do not earn commission from any AMC. We do not have a distribution license. We cannot and do not facilitate transactions — our role is research and education only. When you use our bouquets, please ensure you invest in the Direct Plan variant on a direct platform. The scheme codes we display are always Direct Plan codes.
+        </LearnCard>
+      </LearnPage>
+    );
+  }
+
   if (screen === "about") return (
     <>
       <style>{css}</style>
@@ -1250,6 +1428,17 @@ useEffect(() => {
             </div>
           </div>
 
+          <div style={{ marginTop:40, marginBottom:32 }}>
+            <div style={{ fontSize:10, letterSpacing:".14em", textTransform:"uppercase", color:G.gold, fontWeight:700, marginBottom:16 }}>Learn More</div>
+            <div style={{ display:"flex", flexWrap:"wrap", gap:10 }}>
+              {[["How Our Algorithm Works","learn-algorithm"],["Rolling Returns Explained","learn-rolling-returns"],["Survivorship Bias","learn-survivorship"],["Confidence Score Guide","learn-confidence"],["Why Direct Plans Matter","learn-direct-plans"]].map(([label, sid]) => (
+                <button key={sid} onClick={() => setScreen(sid)}
+                  style={{ background:"rgba(212,175,55,0.07)", border:"1px solid rgba(212,175,55,0.2)", borderRadius:8, padding:"8px 16px", color:G.mist, fontSize:12, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                  {label} →
+                </button>
+              ))}
+            </div>
+          </div>
           <div style={{ textAlign: "center", marginTop: 48, paddingBottom: 24 }}>
             <button onClick={() => setScreen("hero")} style={{ background: "linear-gradient(135deg,rgba(212,175,55,0.15),rgba(212,175,55,0.05))", border: "1px solid rgba(212,175,55,0.35)", borderRadius: 12, padding: "14px 40px", color: G.gold, fontFamily: "Outfit,sans-serif", fontSize: 14, fontWeight: 600, cursor: "pointer", letterSpacing: ".04em" }}>
               Start Researching →
@@ -1268,6 +1457,14 @@ useEffect(() => {
                 <button className="footer-link" onClick={() => setScreen("about")}>About</button>
                 <button className="footer-link" onClick={() => setScreen("custom_builder")}>Build Your Own</button>
                 <button className="footer-link" onClick={reset}>New Search</button>
+              </div>
+              <div className="footer-links" style={{ marginTop:8 }}>
+                <span style={{ fontSize:10, color:G.mist, marginRight:4, letterSpacing:".06em", textTransform:"uppercase" }}>Learn:</span>
+                <button className="footer-link" onClick={() => setScreen("learn-algorithm")}>How It Works</button>
+                <button className="footer-link" onClick={() => setScreen("learn-rolling-returns")}>Rolling Returns</button>
+                <button className="footer-link" onClick={() => setScreen("learn-survivorship")}>Survivorship Bias</button>
+                <button className="footer-link" onClick={() => setScreen("learn-confidence")}>Confidence Score</button>
+                <button className="footer-link" onClick={() => setScreen("learn-direct-plans")}>Direct Plans</button>
               </div>
             </div>
             <div className="footer-legal">
