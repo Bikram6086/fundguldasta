@@ -88,6 +88,12 @@ async function apiFundDetail(schemeCode) {
   return res.json();
 }
 
+async function apiFundEligibility(schemeCode) {
+  const res = await fetch(`${API_BASE}/api/funds/${schemeCode}/eligibility`);
+  if (!res.ok) throw new Error("Could not load fund eligibility data");
+  return res.json();
+}
+
 async function curateBouquets(params) {
   if (USE_LIVE_DATA) {
     return apiCall("POST", "/api/bouquets/curate", params);
@@ -381,6 +387,20 @@ export default function App() {
   const [fdCode, setFdCode] = useState(null);
   const [fdResult, setFdResult] = useState(null);
   const [fdLoading, setFdLoading] = useState(false);
+  // Priority 14 state
+  const [quizModal, setQuizModal] = useState(false);
+  const [quizStep, setQuizStep] = useState(0);
+  const [quizAnswers, setQuizAnswers] = useState([]);
+  const [quizResult, setQuizResult] = useState(null);
+  const [cmpModal, setCmpModal] = useState(false);
+  const [cmpA, setCmpA] = useState("steady");
+  const [cmpB, setCmpB] = useState("balanced");
+  const [wnModal, setWnModal] = useState(false);
+  const [wnSearch, setWnSearch] = useState('');
+  const [wnResults, setWnResults] = useState([]);
+  const [wnSelected, setWnSelected] = useState(null);
+  const [wnLoading, setWnLoading] = useState(false);
+  const [wnData, setWnData] = useState(null);
   const [calcTab, setCalcTab] = useState('sip');
   const [calcPreFill, setCalcPreFill] = useState(null);
   const [sipMode, setSipMode] = useState('to-corpus');
@@ -834,6 +854,64 @@ useEffect(() => {
       setFdResult(result);
     } catch (e) { alert(e.message); }
     finally { setFdLoading(false); }
+  };
+
+  // ── Priority 14 helpers ────────────────────────────────────────────────────
+  const QUIZ_QUESTIONS = [
+    { q: "What is your planned investment horizon?", opts: ["3 years or less","Around 5 years","Around 7 years","10 years or more"], scores:[1,2,3,4] },
+    { q: "If your portfolio dropped 30% in a market crash, you would…", opts: ["Sell everything immediately","Get worried but wait it out","Stay put — markets recover","Buy more at lower prices"], scores:[1,2,3,4] },
+    { q: "How stable is your primary income?", opts: ["Variable or freelance","Stable salaried job","Business owner / multiple income","Very stable + significant savings"], scores:[1,2,3,4] },
+    { q: "This investment represents what share of your total savings?", opts: ["More than 70%","40 to 70%","15 to 40%","Less than 15%"], scores:[1,2,3,4] },
+    { q: "Your primary financial goal is…", opts: ["Protect what I have","Grow steadily above FD","Beat inflation by a wide margin","Build maximum long-term wealth"], scores:[1,2,3,4] },
+  ];
+  const QUIZ_ARCHETYPES = {
+    steady:    { label:"Steady Compounder", cagr:14, yrs:7, color:"#4A8FE0", desc:"Low volatility, large-cap dominant. Suited for capital preservation with growth." },
+    balanced:  { label:"Balanced Growther",  cagr:15, yrs:7, color:"#27AE78", desc:"Balanced risk-reward. Mix of large and mid-cap. Resilient through cycles." },
+    aggressive:{ label:"Aggressive Achiever",cagr:17, yrs:7, color:"#F0A500", desc:"Mid and small-cap driven. Higher volatility, higher growth potential." },
+    conviction:{ label:"High Conviction",    cagr:19, yrs:7, color:"#E05555", desc:"Maximum growth orientation. Best for long horizons with high risk tolerance." },
+  };
+  const quizScore = () => quizAnswers.reduce((sum, a, i) => sum + QUIZ_QUESTIONS[i].scores[a], 0);
+  const quizRecommend = (score) =>
+    score <= 9 ? "steady" : score <= 12 ? "balanced" : score <= 16 ? "aggressive" : "conviction";
+
+  const handleQuizAnswer = (optIdx) => {
+    const newAnswers = [...quizAnswers, optIdx];
+    setQuizAnswers(newAnswers);
+    if (newAnswers.length === QUIZ_QUESTIONS.length) {
+      const score = newAnswers.reduce((sum, a, i) => sum + QUIZ_QUESTIONS[i].scores[a], 0);
+      setQuizResult(quizRecommend(score));
+      setQuizStep(QUIZ_QUESTIONS.length);  // show result
+    } else {
+      setQuizStep(quizStep + 1);
+    }
+  };
+  const handleQuizReset = () => { setQuizStep(0); setQuizAnswers([]); setQuizResult(null); };
+  const handleQuizLaunch = (archId) => {
+    const at = QUIZ_ARCHETYPES[archId];
+    setQuizModal(false);
+    setMode("return"); setCAGR(String(at.cagr)); setYrs(String(at.yrs));
+    setTimeout(() => handleFind(), 50);
+  };
+
+  const handleWnSearch = async (q) => {
+    setWnSearch(q);
+    if (q.length < 2) { setWnResults([]); return; }
+    try {
+      const res = await apiFundSearch(q);
+      setWnResults(res.slice(0, 8));
+    } catch { setWnResults([]); }
+  };
+  const handleWnSelect = async (fund) => {
+    setWnSelected(fund);
+    setWnSearch(fund.name || fund.scheme_name || '');
+    setWnResults([]);
+    setWnLoading(true);
+    setWnData(null);
+    try {
+      const data = await apiFundEligibility(fund.scheme_code);
+      setWnData(data);
+    } catch (e) { alert(e.message); }
+    finally { setWnLoading(false); }
   };
 
   const handleAuthSubmit = async () => {
@@ -1419,6 +1497,292 @@ useEffect(() => {
               <div style={{ fontSize:10, color:G.mist, marginTop:10, fontStyle:"italic" }}>
                 Rolling returns use actual NAV data. Alpha = fund return − Nifty 50 return. For research only.
               </div>
+
+              {/* Direct Plan Invest Section */}
+              <div style={{ marginTop:18, background:"rgba(39,174,120,0.05)", border:"1px solid rgba(39,174,120,0.15)", borderRadius:10, padding:"14px 16px" }}>
+                <div style={{ fontSize:11, color:"#27AE78", fontWeight:700, letterSpacing:".08em", textTransform:"uppercase", marginBottom:10 }}>Invest Direct (No Commission)</div>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12, flexWrap:"wrap" }}>
+                  <div style={{ fontSize:11, color:G.mist }}>AMFI Scheme Code:</div>
+                  <div style={{ fontFamily:"JetBrains Mono,monospace", fontSize:14, color:G.gold, background:"rgba(212,175,55,0.1)", borderRadius:6, padding:"3px 10px" }}>{fdResult?.scheme_code}</div>
+                  <button onClick={() => navigator.clipboard?.writeText(fdResult?.scheme_code || '').then(() => alert('Copied!'))}
+                    style={{ background:"none", border:"1px solid rgba(255,255,255,0.12)", borderRadius:6, padding:"3px 10px", color:G.mist, fontSize:11, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                    Copy Code
+                  </button>
+                </div>
+                <div style={{ fontSize:11, color:G.mist, marginBottom:8 }}>Search this fund by name on any direct-plan platform:</div>
+                <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
+                  {[["Kuvera","https://kuvera.in"],["Zerodha Coin","https://coin.zerodha.com/mf"],["Groww","https://groww.in/mutual-funds"],["Paytm Money","https://www.paytmmoney.com/mutual-funds"],["ET Money","https://www.etmoney.com/mutual-funds"]].map(([name, url]) => (
+                    <a key={name} href={url} target="_blank" rel="noopener noreferrer"
+                      style={{ display:"inline-block", padding:"5px 12px", background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:6, color:G.fog, fontSize:11, textDecoration:"none", fontFamily:"Outfit,sans-serif", cursor:"pointer" }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor="rgba(39,174,120,0.35)"; e.currentTarget.style.color="#27AE78"; }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor="rgba(255,255,255,0.1)"; e.currentTarget.style.color=G.fog; }}>
+                      {name} ↗
+                    </a>
+                  ))}
+                </div>
+                <div style={{ fontSize:10, color:G.mist, marginTop:10, fontStyle:"italic" }}>These are independent platforms — FundGuldasta has no commercial relationship with them. Always verify fund details before investing.</div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // ── Risk Profiler Quiz Modal (14a) ──────────────────────────────────────────
+  const QuizModal = () => {
+    const q = QUIZ_QUESTIONS[quizStep];
+    const atId = quizResult;
+    const at = atId ? QUIZ_ARCHETYPES[atId] : null;
+    return (
+      <div style={{ position:"fixed", inset:0, zIndex:2200, background:"rgba(0,0,0,0.8)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}
+        onClick={e => { if (e.target === e.currentTarget) setQuizModal(false); }}>
+        <div style={{ background:G.sur, border:`1px solid ${G.bordG}`, borderRadius:16, width:"100%", maxWidth:520, padding:"28px 28px 32px", fontFamily:"Outfit,sans-serif" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+            <div style={{ fontFamily:"Cormorant Garamond,serif", fontSize:20, color:G.gold, fontWeight:700 }}>Risk Profile Quiz</div>
+            <button onClick={() => setQuizModal(false)} style={{ background:"none", border:"none", color:G.slate, cursor:"pointer", fontSize:20 }}>&#x2715;</button>
+          </div>
+
+          {!at && q && (
+            <>
+              {/* Progress */}
+              <div style={{ display:"flex", gap:6, marginBottom:20 }}>
+                {QUIZ_QUESTIONS.map((_, i) => (
+                  <div key={i} style={{ flex:1, height:3, borderRadius:2, background: i < quizStep ? G.gold : i === quizStep ? "rgba(212,175,55,0.4)" : "rgba(255,255,255,0.08)" }} />
+                ))}
+              </div>
+              <div style={{ fontSize:11, color:G.mist, marginBottom:8, letterSpacing:".06em" }}>QUESTION {quizStep + 1} OF {QUIZ_QUESTIONS.length}</div>
+              <div style={{ fontSize:17, color:G.white, fontWeight:500, marginBottom:22, lineHeight:1.5 }}>{q.q}</div>
+              <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                {q.opts.map((opt, idx) => (
+                  <button key={idx} onClick={() => handleQuizAnswer(idx)}
+                    style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:10, padding:"12px 16px", color:G.fog, fontSize:13, textAlign:"left", cursor:"pointer", fontFamily:"Outfit,sans-serif", transition:"all .15s" }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor="rgba(212,175,55,0.4)"; e.currentTarget.style.color=G.white; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor="rgba(255,255,255,0.1)"; e.currentTarget.style.color=G.fog; }}>
+                    {opt}
+                  </button>
+                ))}
+              </div>
+              {quizStep > 0 && (
+                <button onClick={() => { setQuizStep(quizStep-1); setQuizAnswers(quizAnswers.slice(0,-1)); }}
+                  style={{ background:"none", border:"none", color:G.mist, cursor:"pointer", fontSize:12, marginTop:16, fontFamily:"Outfit,sans-serif" }}>
+                  ← Back
+                </button>
+              )}
+            </>
+          )}
+
+          {at && (
+            <div style={{ textAlign:"center" }}>
+              <div style={{ fontSize:13, color:G.mist, marginBottom:6 }}>Your risk profile matches</div>
+              <div style={{ fontFamily:"Cormorant Garamond,serif", fontSize:32, color:at.color, fontWeight:700, marginBottom:8 }}>{at.label}</div>
+              <div style={{ fontSize:13, color:G.fog, lineHeight:1.7, marginBottom:24, maxWidth:360, margin:"0 auto 24px" }}>{at.desc}</div>
+              <div style={{ display:"flex", gap:12, justifyContent:"center", flexWrap:"wrap" }}>
+                <button onClick={() => handleQuizLaunch(atId)}
+                  style={{ padding:"11px 28px", background:`rgba(${at.color === "#4A8FE0" ? "74,143,224" : at.color === "#27AE78" ? "39,174,120" : at.color === "#F0A500" ? "240,165,0" : "224,85,85"},0.15)`, border:`1px solid ${at.color}`, borderRadius:10, color:at.color, fontFamily:"Outfit,sans-serif", fontSize:13, fontWeight:600, cursor:"pointer" }}>
+                  See {at.label} Bouquet →
+                </button>
+                <button onClick={handleQuizReset}
+                  style={{ padding:"11px 20px", background:"none", border:`1px solid rgba(255,255,255,0.12)`, borderRadius:10, color:G.mist, fontFamily:"Outfit,sans-serif", fontSize:13, cursor:"pointer" }}>
+                  Retake Quiz
+                </button>
+              </div>
+              <div style={{ fontSize:10, color:G.mist, marginTop:20, fontStyle:"italic" }}>Risk profiling is a guide, not a prescription. You always decide what's right for you.</div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // ── Compare Archetypes Modal (14b) ────────────────────────────────────────
+  const CompareModal = () => {
+    const archetypeIds = ["steady","balanced","aggressive","conviction"];
+    const byId = archetypes.reduce((m, a) => { m[a.id] = a; return m; }, {});
+    const A = byId[cmpA]; const B = byId[cmpB];
+    if (!A || !B) return null;
+    const wExp = (at) => {
+      const funds = at.funds || [];
+      const total = funds.reduce((s, f) => s + (f.weight || 20), 0) || 100;
+      return funds.reduce((s, f) => s + (f.expense_ratio || 0) * (f.weight || 20) / total, 0);
+    };
+    const avgScore = (at) => {
+      const funds = at.funds || [];
+      const scores = funds.map(f => f.composite_score).filter(v => v != null);
+      return scores.length ? scores.reduce((a,b) => a+b, 0) / scores.length : null;
+    };
+    const metrics = [
+      ["CAGR Range", a => a.cagrRange, null],
+      ["Risk Level", a => a.risk, null],
+      ["Confidence Score", a => a.confidence?.overall_score?.toFixed(1) ?? "—", (va, vb) => parseFloat(va) > parseFloat(vb)],
+      ["Avg Fund Score", a => avgScore(a)?.toFixed(1) ?? "—", (va, vb) => parseFloat(va) > parseFloat(vb)],
+      ["Wtd Expense Ratio", a => wExp(a).toFixed(2) + "%", (va, vb) => parseFloat(va) < parseFloat(vb)],
+      ["Fund Count", a => (a.funds || []).length, null],
+      ["Crash 2020 Max DD", a => {
+        const s = a.stressTest || {};
+        const sc = s.scenarios || s;
+        const entry = Object.values(sc).find(v => typeof v === "object" && v?.max_drawdown != null);
+        return entry ? entry.max_drawdown?.toFixed(1) + "%" : "—";
+      }, (va, vb) => parseFloat(va) > parseFloat(vb)],
+    ];
+    const winnerCol = (va, vb, fn) => {
+      if (!fn || va === "—" || vb === "—") return [false, false];
+      try { return [fn(va, vb), fn(vb, va)]; } catch { return [false, false]; }
+    };
+    return (
+      <div style={{ position:"fixed", inset:0, zIndex:2300, background:"rgba(0,0,0,0.8)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}
+        onClick={e => { if (e.target === e.currentTarget) setCmpModal(false); }}>
+        <div style={{ background:G.sur, border:`1px solid ${G.bordG}`, borderRadius:16, width:"100%", maxWidth:660, maxHeight:"88vh", overflowY:"auto", padding:"24px 24px 28px", fontFamily:"Outfit,sans-serif" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+            <div style={{ fontFamily:"Cormorant Garamond,serif", fontSize:20, color:G.gold, fontWeight:700 }}>Compare Archetypes</div>
+            <button onClick={() => setCmpModal(false)} style={{ background:"none", border:"none", color:G.slate, cursor:"pointer", fontSize:20 }}>&#x2715;</button>
+          </div>
+          {/* Pickers */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr auto 1fr", gap:10, alignItems:"center", marginBottom:20 }}>
+            {[["cmpA", cmpA, setCmpA], ["cmpB", cmpB, setCmpB]].map(([id, val, setter]) => (
+              <select key={id} value={val} onChange={e => setter(e.target.value)}
+                style={{ background:G.elv, border:`1px solid rgba(255,255,255,0.1)`, borderRadius:8, padding:"8px 12px", color:G.white, fontFamily:"Outfit,sans-serif", fontSize:13, outline:"none" }}>
+                {archetypeIds.map(a => <option key={a} value={a}>{byId[a]?.label || a}</option>)}
+              </select>
+            ))}
+            <div style={{ textAlign:"center", color:G.mist, fontSize:16 }}>vs</div>
+          </div>
+          {/* Comparison table */}
+          <div style={{ overflowX:"auto" }}>
+            <table style={{ width:"100%", borderCollapse:"collapse" }}>
+              <thead>
+                <tr style={{ borderBottom:`1px solid ${G.bord}` }}>
+                  <th style={{ padding:"8px 12px", textAlign:"left", fontSize:10, color:G.mist, textTransform:"uppercase", letterSpacing:".08em" }}>Metric</th>
+                  {[A, B].map(at => (
+                    <th key={at.id} style={{ padding:"8px 12px", textAlign:"right", fontSize:11, color:at.color, fontWeight:700, letterSpacing:".04em" }}>{at.label}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {metrics.map(([label, extractor, betterFn]) => {
+                  const va = String(extractor(A)); const vb = String(extractor(B));
+                  const [aBetter, bBetter] = winnerCol(va, vb, betterFn);
+                  return (
+                    <tr key={label} style={{ borderBottom:`1px solid rgba(255,255,255,0.04)` }}>
+                      <td style={{ padding:"10px 12px", color:G.mist, fontSize:12 }}>{label}</td>
+                      <td style={{ padding:"10px 12px", textAlign:"right", fontFamily:"JetBrains Mono,monospace", fontSize:12, color: aBetter ? "#27AE78" : G.fog }}>{va}{aBetter ? " ✓" : ""}</td>
+                      <td style={{ padding:"10px 12px", textAlign:"right", fontFamily:"JetBrains Mono,monospace", fontSize:12, color: bBetter ? "#27AE78" : G.fog }}>{vb}{bBetter ? " ✓" : ""}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {/* Fund lists */}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginTop:20 }}>
+            {[A, B].map(at => (
+              <div key={at.id}>
+                <div style={{ fontSize:11, color:at.color, fontWeight:700, letterSpacing:".06em", textTransform:"uppercase", marginBottom:10 }}>{at.label}</div>
+                {(at.funds || []).map((f, i) => (
+                  <div key={i} style={{ fontSize:11, color:G.fog, marginBottom:6, display:"flex", justifyContent:"space-between" }}>
+                    <span style={{ flex:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", paddingRight:8 }}>{f.name}</span>
+                    <span style={{ color:G.mist, flexShrink:0 }}>{f.weight}%</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ── Why Not In Bouquet Modal (14c) ────────────────────────────────────────
+  const WhyNotModal = () => {
+    const wd = wnData;
+    const elig = wd?.eligibility;
+    const checks = elig ? [
+      ["Direct Plan", elig.passes_direct, elig.is_direct_plan ? "Yes" : "No — regular plan detected"],
+      [`AUM ≥ ₹500Cr`, elig.passes_aum, elig.aum_crores != null ? `₹${elig.aum_crores.toFixed(0)}Cr` : "Data missing"],
+      ["Expense Ratio ≤ 1.5%", elig.passes_expense, elig.expense_ratio != null ? `${elig.expense_ratio.toFixed(2)}%` : "Data missing"],
+      [`NAV History ≥ 2 years`, elig.passes_tier, `${elig.nav_years}yr (Tier ${elig.tier})`],
+    ] : [];
+    return (
+      <div style={{ position:"fixed", inset:0, zIndex:2400, background:"rgba(0,0,0,0.8)", display:"flex", alignItems:"center", justifyContent:"center", padding:16 }}
+        onClick={e => { if (e.target === e.currentTarget) { setWnModal(false); setWnSearch(''); setWnData(null); setWnSelected(null); setWnResults([]); } }}>
+        <div style={{ background:G.sur, border:`1px solid ${G.bordG}`, borderRadius:16, width:"100%", maxWidth:580, maxHeight:"90vh", overflowY:"auto", padding:"24px 24px 28px", fontFamily:"Outfit,sans-serif" }}>
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:18 }}>
+            <div style={{ fontFamily:"Cormorant Garamond,serif", fontSize:18, color:G.gold, fontWeight:700 }}>Fund Explorer</div>
+            <button onClick={() => { setWnModal(false); setWnSearch(''); setWnData(null); setWnSelected(null); setWnResults([]); }} style={{ background:"none", border:"none", color:G.slate, cursor:"pointer", fontSize:20 }}>&#x2715;</button>
+          </div>
+          <div style={{ fontSize:12, color:G.mist, marginBottom:14 }}>Search any fund to see its eligibility status and why it is or isn't in a bouquet.</div>
+          {/* Search input */}
+          <div style={{ position:"relative", marginBottom:4 }}>
+            <input value={wnSearch} onChange={e => handleWnSearch(e.target.value)} placeholder="Search fund name or AMC…"
+              style={{ width:"100%", background:G.elv, border:`1px solid rgba(255,255,255,0.1)`, borderRadius:8, padding:"10px 14px", color:G.white, fontFamily:"Outfit,sans-serif", fontSize:13, outline:"none", boxSizing:"border-box" }} />
+            {wnResults.length > 0 && (
+              <div style={{ position:"absolute", top:"100%", left:0, right:0, background:G.sur, border:`1px solid ${G.bord}`, borderRadius:8, zIndex:10, boxShadow:"0 8px 24px rgba(0,0,0,0.4)" }}>
+                {wnResults.map(r => (
+                  <div key={r.scheme_code} onClick={() => handleWnSelect(r)}
+                    style={{ padding:"10px 14px", cursor:"pointer", borderBottom:`1px solid rgba(255,255,255,0.04)` }}
+                    onMouseEnter={e => e.currentTarget.style.background="rgba(212,175,55,0.07)"}
+                    onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                    <div style={{ fontSize:13, color:G.white }}>{r.name || r.scheme_name}</div>
+                    <div style={{ fontSize:11, color:G.mist }}>{r.amc} · {r.category}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {wnLoading && <div style={{ padding:"30px 0", textAlign:"center", color:G.mist, fontSize:13 }}>Loading eligibility data…</div>}
+          {wd && !wnLoading && (
+            <>
+              <div style={{ marginTop:16, marginBottom:12 }}>
+                <div style={{ fontFamily:"Cormorant Garamond,serif", fontSize:16, color:G.white, fontWeight:600, lineHeight:1.3 }}>{wd.name}</div>
+                <div style={{ fontSize:11, color:G.mist, marginTop:3 }}>{wd.category} · Scheme code: {wd.scheme_code}</div>
+              </div>
+
+              {/* In bouquet badge */}
+              {wd.in_bouquets?.length > 0 ? (
+                <div style={{ background:"rgba(39,174,120,0.1)", border:"1px solid rgba(39,174,120,0.25)", borderRadius:10, padding:"12px 16px", marginBottom:16 }}>
+                  <div style={{ color:"#27AE78", fontWeight:600, fontSize:13, marginBottom:4 }}>✓ This fund is in a bouquet archetype</div>
+                  {wd.in_bouquets.map(b => (
+                    <div key={b.archetype_id} style={{ fontSize:12, color:G.fog }}>
+                      {b.archetype_id.charAt(0).toUpperCase() + b.archetype_id.slice(1)} — Weight: {b.weight}%
+                      {b.composite_score != null && ` · Score: ${b.composite_score.toFixed(1)}/100`}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div style={{ background:"rgba(240,165,0,0.08)", border:"1px solid rgba(240,165,0,0.2)", borderRadius:10, padding:"12px 16px", marginBottom:16 }}>
+                  <div style={{ color:"#F0A500", fontWeight:600, fontSize:13 }}>Not currently in any bouquet archetype</div>
+                </div>
+              )}
+
+              {/* Eligibility checks */}
+              <div style={{ marginBottom:16 }}>
+                <div style={{ fontSize:11, color:G.mist, letterSpacing:".08em", textTransform:"uppercase", marginBottom:10, fontWeight:600 }}>Eligibility Criteria</div>
+                {checks.map(([label, pass, detail]) => (
+                  <div key={label} style={{ display:"flex", alignItems:"flex-start", gap:10, marginBottom:8 }}>
+                    <span style={{ flexShrink:0, color: pass ? "#27AE78" : "#E05555", fontWeight:700, marginTop:1 }}>{pass ? "✓" : "✗"}</span>
+                    <div>
+                      <span style={{ fontSize:12, color: pass ? G.fog : "#E05555", fontWeight: pass ? 400 : 500 }}>{label}</span>
+                      <span style={{ fontSize:11, color:G.mist, marginLeft:8 }}>{detail}</span>
+                    </div>
+                  </div>
+                ))}
+                {elig?.overall_eligible && <div style={{ fontSize:11, color:"#27AE78", marginTop:6 }}>✓ Passes all eligibility filters</div>}
+              </div>
+
+              {/* Explanation */}
+              {wd.reasons_not_included?.length > 0 && !(wd.in_bouquets?.length > 0) && (
+                <div>
+                  <div style={{ fontSize:11, color:G.mist, letterSpacing:".08em", textTransform:"uppercase", marginBottom:10, fontWeight:600 }}>Why It's Not Included</div>
+                  {wd.reasons_not_included.map((reason, i) => (
+                    <div key={i} style={{ fontSize:12, color:G.fog, lineHeight:1.7, marginBottom:8, paddingLeft:12, borderLeft:"2px solid rgba(240,165,0,0.3)" }}>{reason}</div>
+                  ))}
+                </div>
+              )}
+              {wd.lowest_bouquet_score != null && !(wd.in_bouquets?.length > 0) && elig?.overall_eligible && (
+                <div style={{ fontSize:11, color:G.mist, marginTop:10, fontStyle:"italic" }}>
+                  Lowest composite score in current bouquets: {wd.lowest_bouquet_score}/100
+                </div>
+              )}
             </>
           )}
         </div>
@@ -1529,6 +1893,7 @@ useEffect(() => {
           <button className="byob-entry" style={{ marginTop: 8 }} onClick={() => setScreen("custom_builder")}>✎ Build Your Own Bouquet</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.08)" }} onClick={() => setScreen("portfolio")}>📊 Analyse My Portfolio</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.06)" }} onClick={() => { setCalcPreFill(null); setCalcTab('sip'); setScreen("calculators"); }}>📐 SIP & Tax Calculators</button>
+          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.04)" }} onClick={() => { handleQuizReset(); setQuizModal(true); }}>🎯 Find My Risk Profile</button>
           <p className="note">Research & education only · Not investment advice · Past performance does not guarantee future returns<br />All fund data sourced from AMFI · No commission earned on any recommendation · fundguldasta.com</p>
         </div>
       </div>
@@ -2525,6 +2890,9 @@ useEffect(() => {
       {savedPanel && <SavedPanel />}
       {btModal && <BacktestModal />}
       {fdModal && <FundDetailModal />}
+      {quizModal && <QuizModal />}
+      {cmpModal && archetypes.length >= 2 && <CompareModal />}
+      {wnModal && <WhyNotModal />}
       <style>{css}</style>
       <div onClick={() => healthOpen && setHealthOpen(false)}>
         <div className="rbar">
@@ -2535,6 +2903,8 @@ useEffect(() => {
             <button className="byob-entry" style={{ marginTop: 0, fontSize: 11, padding: "5px 14px" }} onClick={() => setScreen("custom_builder")}>✎ Build Your Own</button>
             <button className="byob-entry" style={{ marginTop: 0, fontSize: 11, padding: "5px 14px", background:"rgba(212,175,55,0.08)" }} onClick={() => setScreen("portfolio")}>📊 My Portfolio</button>
             <button className="byob-entry" style={{ marginTop: 0, fontSize: 11, padding: "5px 14px", background:"rgba(212,175,55,0.06)" }} onClick={() => { setCalcPreFill(selectedArch ? { cagr: (selectedArch.metrics?.bouquet_cagr||selectedArch.cagrRange||14), label: selectedArch.label } : null); setCalcTab('sip'); setScreen("calculators"); }}>📐 Calculators</button>
+            <button className="byob-entry" style={{ marginTop: 0, fontSize: 11, padding: "5px 14px", background:"rgba(212,175,55,0.04)" }} onClick={() => { setCmpA("steady"); setCmpB("balanced"); setCmpModal(true); }}>⊟ Compare</button>
+            <button className="byob-entry" style={{ marginTop: 0, fontSize: 11, padding: "5px 14px", background:"rgba(212,175,55,0.03)" }} onClick={() => { setWnSearch(''); setWnData(null); setWnSelected(null); setWnResults([]); setWnModal(true); }}>🔍 Fund Explorer</button>
             <div className="pill">{goalPill}</div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>

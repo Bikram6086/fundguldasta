@@ -2034,3 +2034,130 @@ async def fund_detail(scheme_code: str):
         "rolling_returns": rolling,
         "nifty_rolling": nifty_rolling,
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PRIORITY 14c — FUND ELIGIBILITY / "WHY NOT IN BOUQUET?" ENDPOINT
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/funds/{scheme_code}/eligibility")
+async def fund_eligibility(scheme_code: str):
+    """Explain why a fund is or isn't in any bouquet archetype."""
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # ── Fund metadata ──────────────────────────────────────────────────────
+        cur.execute("""
+            SELECT scheme_name, sebi_category, fund_type, aum_crores, expense_ratio
+            FROM fund_metadata WHERE scheme_code = %s
+        """, (scheme_code,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(404, "Fund not found in our database")
+        name, category, fund_type, aum, expense_ratio = row
+        aum = float(aum) if aum else None
+        expense_ratio = float(expense_ratio) if expense_ratio else None
+
+        # ── NAV history → tier ─────────────────────────────────────────────────
+        cur.execute("""
+            SELECT MIN(nav_date), MAX(nav_date), COUNT(*) FROM nav_data WHERE scheme_code = %s
+        """, (scheme_code,))
+        nav_row = cur.fetchone()
+        nav_start, nav_end, nav_count = nav_row if nav_row else (None, None, 0)
+        nav_years = 0
+        if nav_start and nav_end:
+            nav_years = (nav_end - nav_start).days / 365.25
+        tier = 1 if nav_years >= 5 else (2 if nav_years >= 2 else 3)
+
+        # ── Is it in any bouquet? ──────────────────────────────────────────────
+        cur.execute("""
+            SELECT archetype_id, funds_json FROM bouquet_cache
+            WHERE is_active = TRUE ORDER BY computation_date DESC
+        """)
+        cache_rows = cur.fetchall()
+
+        in_bouquets = []
+        bouquet_scores = {}  # archetype_id -> composite_score of this fund
+        all_bouquet_fund_scores = []
+
+        for arch_id, fj in cache_rows:
+            if arch_id in [b["archetype_id"] for b in in_bouquets]:
+                continue  # already checked this archetype
+            funds_list = json.loads(fj) if isinstance(fj, str) else fj
+            for f in funds_list:
+                sc = str(f.get("scheme_code", ""))
+                cs = f.get("composite_score")
+                if cs is not None:
+                    all_bouquet_fund_scores.append(float(cs))
+                if sc == str(scheme_code):
+                    in_bouquets.append({
+                        "archetype_id": arch_id,
+                        "weight": f.get("weight") or f.get("weight_pct"),
+                        "composite_score": float(cs) if cs is not None else None,
+                    })
+                    if cs is not None:
+                        bouquet_scores[arch_id] = float(cs)
+
+    finally:
+        cur.close(); conn.close()
+
+    # ── Eligibility checks ────────────────────────────────────────────────────
+    is_direct = "direct" in name.lower() if name else False
+    passes_direct = is_direct
+    passes_aum = (aum is not None and aum >= 500)
+    passes_expense = (expense_ratio is not None and expense_ratio <= 1.5)
+    passes_tier = tier <= 2  # tier 3 not eligible
+    overall_eligible = passes_direct and passes_aum and passes_expense and passes_tier
+
+    # ── Build failure reasons ──────────────────────────────────────────────────
+    reasons_not_included = []
+    if in_bouquets:
+        reasons_not_included = []  # it IS in a bouquet — no exclusion reasons
+    else:
+        if not passes_direct:
+            reasons_not_included.append("Not a direct plan — only direct plans are considered (SEBI requires AMCs to offer both regular and direct variants; direct plans have no distributor commission)")
+        if not passes_aum:
+            reasons_not_included.append(
+                f"AUM ₹{aum:.0f}Cr is below our ₹500Cr minimum — funds below this threshold have higher liquidity risk and are more susceptible to manager turnover impact"
+                if aum else "AUM data not available — we require verifiable AUM ≥ ₹500Cr"
+            )
+        if not passes_expense:
+            reasons_not_included.append(
+                f"Expense ratio {expense_ratio:.2f}% exceeds our 1.5% ceiling — high TER is a structural drag on long-term compounding that no performance can reliably overcome"
+                if expense_ratio else "Expense ratio data not available"
+            )
+        if not passes_tier:
+            reasons_not_included.append(
+                f"NAV history only {nav_years:.1f} years — we require ≥ 2 years to evaluate rolling returns, drawdown behaviour, and manager consistency through at least one market cycle"
+            )
+        if overall_eligible and not in_bouquets:
+            min_bouquet_score = min(all_bouquet_fund_scores) if all_bouquet_fund_scores else None
+            reasons_not_included.append(
+                f"Fund passes all eligibility filters but was not selected. Our algorithm selects the highest-scoring fund per SEBI category within each archetype. "
+                f"The lowest composite score among current bouquet funds is {min_bouquet_score:.1f}/100. "
+                f"This fund's score may be below that threshold, or another fund in the same category scored higher."
+                if min_bouquet_score else
+                "Fund passes all eligibility filters. Selection is based on composite score ranking within each SEBI category."
+            )
+
+    return {
+        "scheme_code": scheme_code,
+        "name": name,
+        "category": category,
+        "fund_type": fund_type,
+        "in_bouquets": in_bouquets,
+        "eligibility": {
+            "is_direct_plan": is_direct,
+            "passes_direct": passes_direct,
+            "aum_crores": aum,
+            "passes_aum": passes_aum,
+            "expense_ratio": expense_ratio,
+            "passes_expense": passes_expense,
+            "nav_years": round(nav_years, 1),
+            "tier": tier,
+            "passes_tier": passes_tier,
+            "overall_eligible": overall_eligible,
+        },
+        "reasons_not_included": reasons_not_included,
+        "lowest_bouquet_score": round(min(all_bouquet_fund_scores), 1) if all_bouquet_fund_scores else None,
+    }
