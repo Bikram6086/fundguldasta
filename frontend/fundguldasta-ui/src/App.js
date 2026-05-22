@@ -59,6 +59,14 @@ async function apiAnalysePortfolio(funds, horizonYears = 7) {
   return res.json();
 }
 
+async function apiImportCas(file) {
+  const form = new FormData();
+  form.append("file", file);
+  const res = await fetch(`${API_BASE}/api/portfolio/import-cas`, { method: "POST", body: form });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "CAS import failed"); }
+  return res.json();
+}
+
 async function apiListSaved(token) {
   const res = await fetch(`${API_BASE}/api/user/saved-bouquets`, {
     headers: { "Authorization": `Bearer ${token}` },
@@ -439,6 +447,10 @@ export default function App() {
   const [pfAnalysis, setPfAnalysis] = useState(null);
   const [pfAnalysing, setPfAnalysing] = useState(false);
   const [pfError, setPfError] = useState(null);
+  const [casLoading, setCasLoading] = useState(false);
+  const [casResult, setCasResult] = useState(null);
+  const [casSelected, setCasSelected] = useState(new Set());
+  const [casError, setCasError] = useState(null);
 
   const tr = (en, hi) => lang === 'hi' ? hi : en;
 
@@ -999,6 +1011,45 @@ useEffect(() => {
     setAuthLoading(false);
   };
 
+  const handleCasUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setCasLoading(true); setCasError(null); setCasResult(null); setCasSelected(new Set());
+    try {
+      const result = await apiImportCas(file);
+      setCasResult(result);
+      // Pre-select all holdings with confidence ≥ 70
+      const preselected = new Set(
+        result.holdings.map((_, i) => i).filter(i => (result.holdings[i].confidence || 0) >= 70)
+      );
+      setCasSelected(preselected);
+    } catch(e) { setCasError(e.message); }
+    finally { setCasLoading(false); e.target.value = ""; }
+  };
+
+  const handleCasImport = () => {
+    const toImport = casResult.holdings.filter((_, i) => casSelected.has(i));
+    const newFunds = toImport
+      .filter(h => h.scheme_code)
+      .map(h => ({
+        scheme_code: h.scheme_code,
+        name: h.matched_name || h.fund_name_raw,
+        scheme_name: h.matched_name || h.fund_name_raw,
+        allocation_pct: h.allocation_pct,
+        category: "",
+      }));
+    // Merge with existing pfFunds (don't duplicate by scheme_code)
+    setPfFunds(prev => {
+      const existing = new Set(prev.map(f => String(f.scheme_code)));
+      const merged = [...prev];
+      for (const f of newFunds) {
+        if (!existing.has(String(f.scheme_code))) merged.push(f);
+      }
+      return merged;
+    });
+    setCasResult(null); setCasSelected(new Set());
+  };
+
   const handlePfAddFund = (fund) => {
     if (pfFunds.find(f => f.scheme_code === fund.scheme_code)) return;
     const remaining = Math.max(0, 100 - pfFunds.reduce((s, f) => s + f.allocation_pct, 0));
@@ -1152,6 +1203,78 @@ useEffect(() => {
               <span style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:26, fontWeight:700 }}>My Portfolio Analyser</span>
             </div>
 
+            {/* CAS Import */}
+            <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20, marginBottom:20 }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:10 }}>
+                <div>
+                  <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:3 }}>📤 Import from CAS PDF</div>
+                  <div style={{ color:G.slate, fontSize:11, lineHeight:1.6 }}>Upload a CAMS or KFintech Consolidated Account Statement PDF to auto-populate your portfolio.</div>
+                </div>
+                <label style={{ background:"rgba(212,175,55,0.1)", border:`1px solid rgba(212,175,55,0.35)`, borderRadius:8, padding:"7px 18px", color:G.gold, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif", flexShrink:0, display:"inline-block" }}>
+                  {casLoading ? "Parsing..." : "Choose CAS PDF"}
+                  <input type="file" accept=".pdf" style={{ display:"none" }} onChange={handleCasUpload} disabled={casLoading} />
+                </label>
+              </div>
+              {casError && <div style={{ background:"rgba(255,107,107,0.08)", border:"1px solid rgba(255,107,107,0.25)", borderRadius:8, padding:"10px 14px", color:"#FF6B6B", fontSize:12, marginTop:12 }}>{casError}</div>}
+              {casResult && (
+                <div style={{ marginTop:16 }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+                    <div style={{ color:G.gold, fontSize:12, fontWeight:600 }}>
+                      Found {casResult.fund_count} fund{casResult.fund_count !== 1 ? "s" : ""} · Total value ₹{casResult.total_value.toLocaleString("en-IN", { maximumFractionDigits:0 })}
+                      <span style={{ color:G.slate, fontWeight:400, marginLeft:8 }}>({casResult.format.toUpperCase()} format)</span>
+                    </div>
+                    <div style={{ display:"flex", gap:8 }}>
+                      <button onClick={() => setCasSelected(new Set(casResult.holdings.map((_,i)=>i)))} style={{ background:"none", border:`1px solid ${G.bord}`, borderRadius:6, padding:"3px 10px", color:G.slate, fontSize:11, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>All</button>
+                      <button onClick={() => setCasSelected(new Set())} style={{ background:"none", border:`1px solid ${G.bord}`, borderRadius:6, padding:"3px 10px", color:G.slate, fontSize:11, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>None</button>
+                    </div>
+                  </div>
+                  {casResult.parse_errors.length > 0 && (
+                    <div style={{ background:"rgba(232,160,0,0.08)", border:"1px solid rgba(232,160,0,0.2)", borderRadius:6, padding:"8px 12px", color:G.am, fontSize:11, marginBottom:10 }}>
+                      ⚠ {casResult.parse_errors[0]}
+                    </div>
+                  )}
+                  <div style={{ border:`1px solid ${G.bord}`, borderRadius:8, overflow:"hidden", marginBottom:12 }}>
+                    {casResult.holdings.map((h, i) => (
+                      <div key={i} onClick={() => setCasSelected(prev => { const s = new Set(prev); s.has(i) ? s.delete(i) : s.add(i); return s; })}
+                        style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderBottom: i < casResult.holdings.length-1 ? `1px solid ${G.bord}` : "none",
+                          background: casSelected.has(i) ? "rgba(212,175,55,0.05)" : "transparent", cursor:"pointer" }}>
+                        <div style={{ width:16, height:16, borderRadius:4, border:`1.5px solid ${casSelected.has(i) ? G.gold : G.bord}`, background: casSelected.has(i) ? "rgba(212,175,55,0.2)" : "transparent", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, color:G.gold }}>
+                          {casSelected.has(i) ? "✓" : ""}
+                        </div>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ color:G.white, fontSize:12, fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                            {h.matched_name || h.fund_name_raw}
+                          </div>
+                          {h.matched_name && h.matched_name !== h.fund_name_raw && (
+                            <div style={{ color:G.mist, fontSize:10, marginTop:1 }}>CAS: {h.fund_name_raw.slice(0,55)}</div>
+                          )}
+                        </div>
+                        <div style={{ textAlign:"right", flexShrink:0 }}>
+                          <div style={{ color:G.gold, fontSize:12, fontWeight:700, fontFamily:"JetBrains Mono,monospace" }}>{h.allocation_pct}%</div>
+                          <div style={{ color:G.slate, fontSize:10 }}>₹{h.value.toLocaleString("en-IN", { maximumFractionDigits:0 })} · {h.units.toLocaleString("en-IN", { maximumFractionDigits:3 })} units</div>
+                          <div style={{ fontSize:9, color: h.confidence >= 85 ? "#27AE78" : h.confidence >= 70 ? G.am : "#E05555", marginTop:1, letterSpacing:".04em" }}>
+                            {h.confidence >= 85 ? "✓ Matched" : h.confidence >= 70 ? "~ Likely match" : "? Low confidence"} ({h.confidence}%)
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display:"flex", gap:10 }}>
+                    <button onClick={handleCasImport} disabled={casSelected.size === 0}
+                      style={{ flex:1, padding:"10px 0", background:casSelected.size > 0 ? "rgba(212,175,55,0.15)" : G.elv,
+                        border:`1px solid ${casSelected.size > 0 ? "rgba(212,175,55,0.4)" : G.bord}`, borderRadius:8,
+                        color: casSelected.size > 0 ? G.gold : G.slate, fontSize:13, fontWeight:600, cursor: casSelected.size > 0 ? "pointer" : "not-allowed", fontFamily:"Outfit,sans-serif" }}>
+                      Import {casSelected.size} Fund{casSelected.size !== 1 ? "s" : ""} →
+                    </button>
+                    <button onClick={() => { setCasResult(null); setCasSelected(new Set()); }}
+                      style={{ padding:"10px 18px", background:"none", border:`1px solid ${G.bord}`, borderRadius:8, color:G.slate, fontSize:13, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* Fund Search */}
             <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20, marginBottom:20 }}>
               <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:12 }}>Add Funds to Your Portfolio</div>
@@ -1276,17 +1399,59 @@ useEffect(() => {
                   ))}
                 </div>
 
+                {/* Gap Analysis */}
+                {pfAnalysis.gap_analysis && (
+                  <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20, marginBottom:16 }}>
+                    <div style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:18, fontWeight:700, marginBottom:4 }}>Gap Analysis</div>
+                    <p style={{ color:G.slate, fontSize:12, marginBottom:16, marginTop:0 }}>
+                      Comparing your portfolio vs the closest matching bouquet — <strong style={{ color:G.fog }}>{ARCHETYPE_LABELS[pfAnalysis.gap_analysis.archetype_id] || pfAnalysis.gap_analysis.archetype_id}</strong> ({pfAnalysis.gap_analysis.overlap_pct}% allocation overlap).
+                    </p>
+                    {pfAnalysis.gap_analysis.missing_funds.length > 0 && (
+                      <div style={{ marginBottom:14 }}>
+                        <div style={{ fontSize:10, letterSpacing:".1em", textTransform:"uppercase", color:"#E05555", fontWeight:700, marginBottom:8 }}>
+                          Funds in Bouquet You Don't Hold ({pfAnalysis.gap_analysis.missing_funds.length})
+                        </div>
+                        {pfAnalysis.gap_analysis.missing_funds.map(f => (
+                          <div key={f.scheme_code} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:"rgba(224,85,85,0.05)", border:"1px solid rgba(224,85,85,0.15)", borderRadius:8, marginBottom:6 }}>
+                            <div>
+                              <div style={{ color:G.fog, fontSize:12 }}>{f.scheme_name || `Fund ${f.scheme_code}`}</div>
+                              <div style={{ color:G.mist, fontSize:10 }}>Bouquet weight: {f.suggested_weight ? f.suggested_weight.toFixed(0) : "—"}%</div>
+                            </div>
+                            <div style={{ color:"#E05555", fontSize:11, fontWeight:600, letterSpacing:".04em" }}>Missing</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {pfAnalysis.gap_analysis.extra_funds.length > 0 && (
+                      <div>
+                        <div style={{ fontSize:10, letterSpacing:".1em", textTransform:"uppercase", color:G.am, fontWeight:700, marginBottom:8 }}>
+                          Your Funds Not in This Bouquet ({pfAnalysis.gap_analysis.extra_funds.length})
+                        </div>
+                        {pfAnalysis.gap_analysis.extra_funds.map(f => (
+                          <div key={f.scheme_code} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 12px", background:"rgba(232,160,0,0.04)", border:"1px solid rgba(232,160,0,0.15)", borderRadius:8, marginBottom:6 }}>
+                            <div style={{ color:G.fog, fontSize:12 }}>{f.scheme_name || `Fund ${f.scheme_code}`}</div>
+                            <div style={{ color:G.am, fontSize:11, fontWeight:600 }}>{f.allocation_pct}%</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {pfAnalysis.gap_analysis.missing_funds.length === 0 && pfAnalysis.gap_analysis.extra_funds.length === 0 && (
+                      <div style={{ color:"#27AE78", fontSize:13, fontWeight:600 }}>✓ Your portfolio perfectly matches this bouquet's fund selection.</div>
+                    )}
+                  </div>
+                )}
+
                 {pfAnalysis.missing_data_codes?.length > 0 && (
                   <div style={{ color:G.slate, fontSize:11, marginTop:8 }}>Note: No computed data for scheme codes {pfAnalysis.missing_data_codes.join(", ")} — those funds were not scored.</div>
                 )}
               </div>
             )}
 
-            {pfFunds.length === 0 && !pfAnalysis && (
+            {pfFunds.length === 0 && !pfAnalysis && !casResult && (
               <div style={{ textAlign:"center", padding:"60px 20px", color:G.slate, fontSize:13 }}>
                 <div style={{ fontSize:32, marginBottom:12 }}>📊</div>
-                <div>Search for funds above to build your portfolio.</div>
-                <div style={{ marginTop:8, fontSize:12 }}>Then click "Analyse Portfolio" to see how it compares to our bouquets.</div>
+                <div>Upload a CAS PDF above to auto-import your holdings, or search funds manually.</div>
+                <div style={{ marginTop:8, fontSize:12 }}>Then click "Analyse Portfolio" to compare against our bouquet archetypes.</div>
               </div>
             )}
           </div>

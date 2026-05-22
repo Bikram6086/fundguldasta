@@ -14,7 +14,7 @@ import json
 import os
 import threading
 from datetime import datetime, date
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, List
@@ -1739,10 +1739,50 @@ def analyse_portfolio(request: PortfolioRequest):
 
     archetype_matches.sort(key=lambda x: -x["similarity_score"])
 
+    # ── Gap analysis vs best matching archetype ────────────────────────────────
+    gap_analysis = None
+    if archetype_matches and archetypes:
+        best_id = archetype_matches[0]["archetype_id"]
+        best_at = next((a for a in archetypes if a["id"] == best_id), None)
+        if best_at:
+            at_fund_map = {
+                str(f["scheme_code"] if isinstance(f, dict) else f):
+                {
+                    "scheme_code": str(f["scheme_code"] if isinstance(f, dict) else f),
+                    "scheme_name": f.get("fund_name", f.get("scheme_name", f"Fund {f['scheme_code']}")) if isinstance(f, dict) else "",
+                    "suggested_weight": float(f.get("weight") or f.get("weight_pct") or 20) if isinstance(f, dict) else 20.0,
+                    "composite_score": float(f.get("composite_score") or 0) if isinstance(f, dict) else 0.0,
+                }
+                for f in best_at["funds"]
+            }
+            # Enrich names from metadata already loaded
+            for sc, fd in at_fund_map.items():
+                if sc in meta:
+                    fd["scheme_name"] = meta[sc].get("scheme_name", fd["scheme_name"])
+
+            common = user_codes_str & set(at_fund_map.keys())
+            missing_codes = set(at_fund_map.keys()) - user_codes_str
+            extra_codes = user_codes_str - set(at_fund_map.keys())
+
+            gap_analysis = {
+                "archetype_id": best_id,
+                "missing_funds": [at_fund_map[sc] for sc in missing_codes],
+                "extra_funds": [
+                    {
+                        "scheme_code": sc,
+                        "scheme_name": meta.get(sc, {}).get("scheme_name", f"Fund {sc}"),
+                        "allocation_pct": round(alloc_map_str.get(sc, 0), 1),
+                    }
+                    for sc in extra_codes
+                ],
+                "overlap_pct": round(archetype_matches[0]["weighted_overlap_pct"], 1),
+            }
+
     return {
         "portfolio_metrics": portfolio_metrics,
         "fund_details": fund_details,
         "archetype_matches": archetype_matches,
+        "gap_analysis": gap_analysis,
         "horizon_years": request.horizon_years,
         "missing_data_codes": [c for c in codes if c not in fund_scores_cache],
     }
@@ -2323,3 +2363,26 @@ async def trigger_monthly_digests(x_admin_key: Optional[str] = None):
         raise HTTPException(403, "Forbidden")
     threading.Thread(target=run_monthly_digests, daemon=True).start()
     return {"ok": True, "message": "Monthly digest dispatch started"}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PRIORITY 16 — CAS IMPORT
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.post("/api/portfolio/import-cas")
+async def import_cas(file: UploadFile = File(...)):
+    """
+    Accept a CAMS or KFintech CAS PDF, parse it, and return matched fund holdings
+    with allocation percentages ready to populate the portfolio analyser.
+    """
+    if not (file.filename or "").lower().endswith(".pdf"):
+        raise HTTPException(400, "Only PDF files are accepted. Export a CAS PDF from CAMS Online or KFintech.")
+    pdf_bytes = await file.read()
+    if len(pdf_bytes) > 15 * 1024 * 1024:
+        raise HTTPException(400, "File too large (max 15 MB).")
+    if len(pdf_bytes) < 1024:
+        raise HTTPException(400, "File appears empty or corrupted.")
+
+    from engine.cas_parser import parse_cas_pdf
+    result = parse_cas_pdf(pdf_bytes)
+    return result
