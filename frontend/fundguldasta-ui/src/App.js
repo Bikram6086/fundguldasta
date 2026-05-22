@@ -356,6 +356,18 @@ export default function App() {
   const [savedList, setSavedList] = useState([]);
   const [savedPanel, setSavedPanel] = useState(false);
   const [savedMsg, setSavedMsg] = useState({});
+  const [calcTab, setCalcTab] = useState('sip');
+  const [calcPreFill, setCalcPreFill] = useState(null);
+  const [sipMode, setSipMode] = useState('to-corpus');
+  const [sipCalcSip, setSipCalcSip] = useState('');
+  const [sipCalcCorpus, setSipCalcCorpus] = useState('');
+  const [sipCalcYears, setSipCalcYears] = useState('');
+  const [sipCalcCagr, setSipCalcCagr] = useState('');
+  const [taxCalcInvested, setTaxCalcInvested] = useState('');
+  const [taxCalcCurrent, setTaxCalcCurrent] = useState('');
+  const [taxCalcMonths, setTaxCalcMonths] = useState('');
+  const [taxCalcType, setTaxCalcType] = useState('equity');
+  const [taxCalcSlab, setTaxCalcSlab] = useState('30');
   const [pfFunds, setPfFunds] = useState([]);
   const [pfSearch, setPfSearch] = useState('');
   const [pfResults, setPfResults] = useState([]);
@@ -697,10 +709,10 @@ useEffect(() => {
   const computeLTCG = (purchase, current, months, fundType) => {
     const gain = current - purchase;
     if (gain <= 0) return { gain, taxType: 'No gain — no tax', tax: 0, netGain: gain };
-    if (fundType === 'debt') return { gain, taxType: 'Income slab rate (debt/FOF)', tax: null, netGain: null };
-    if (months <= 12) return { gain, taxType: 'STCG @ 20%', tax: gain * 0.20, netGain: gain * 0.80 };
+    if (fundType === 'debt') return { gain, taxType: 'Income slab rate (debt/FOF/International)', tax: null, netGain: null };
+    if (months <= 12) return { gain, taxType: 'STCG @ 20% (Budget 2024)', tax: gain * 0.20, netGain: gain * 0.80 };
     const taxable = Math.max(0, gain - 125000);
-    return { gain, taxType: 'LTCG @ 10% (₹1.25L exempt)', tax: taxable * 0.10, netGain: gain - taxable * 0.10 };
+    return { gain, taxType: 'LTCG @ 12.5% above ₹1.25L (Budget 2024)', tax: taxable * 0.125, netGain: gain - taxable * 0.125 };
   };
 
   const a = selectedArch;
@@ -1173,11 +1185,371 @@ useEffect(() => {
           <button className="btn-p" disabled={!isValid} onClick={handleFind}>Curate My Bouquets →</button>
           <button className="byob-entry" style={{ marginTop: 8 }} onClick={() => setScreen("custom_builder")}>✎ Build Your Own Bouquet</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.08)" }} onClick={() => setScreen("portfolio")}>📊 Analyse My Portfolio</button>
+          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.06)" }} onClick={() => { setCalcPreFill(null); setCalcTab('sip'); setScreen("calculators"); }}>📐 SIP & Tax Calculators</button>
           <p className="note">Research & education only · Not investment advice · Past performance does not guarantee future returns<br />All fund data sourced from AMFI · No commission earned on any recommendation · fundguldasta.com</p>
         </div>
       </div>
     </>
   );
+
+
+  // ── CALCULATORS SCREEN (Priority 12) ────────────────────────────────────────
+  if (screen === "calculators") {
+    document.title = "Calculators — FundGuldasta";
+
+    const fmtINR = (n) => isNaN(n) ? '—' : '₹' + Math.round(n).toLocaleString('en-IN');
+    const fmtCr = (n) => {
+      if (isNaN(n) || n === 0) return '—';
+      if (n >= 10000000) return '₹' + (n/10000000).toFixed(2) + ' Cr';
+      if (n >= 100000) return '₹' + (n/100000).toFixed(2) + ' L';
+      return fmtINR(n);
+    };
+
+    // ── SIP maths ──
+    const sipYrsN = parseFloat(sipCalcYears) || 0;
+    const sipCagrN = parseFloat(sipCalcCagr) || 0;
+    const r = sipCagrN / 100 / 12;
+    const n = sipYrsN * 12;
+    let sipResult = null;
+    if (sipMode === 'to-corpus' && sipCalcSip && sipYrsN && sipCagrN) {
+      const P = parseFloat(sipCalcSip);
+      const corpus = r === 0 ? P * n : P * ((Math.pow(1+r,n)-1)/r) * (1+r);
+      const invested = P * n;
+      sipResult = { corpus, invested, gain: corpus-invested, mult: corpus/invested };
+    } else if (sipMode === 'to-sip' && sipCalcCorpus && sipYrsN && sipCagrN) {
+      const FV = parseFloat(sipCalcCorpus);
+      const sip = r === 0 ? FV/n : (FV * r) / ((Math.pow(1+r,n)-1) * (1+r));
+      const invested = sip * n;
+      sipResult = { corpus: FV, invested, gain: FV-invested, sip, mult: FV/invested };
+    }
+
+    // ── Tax maths ──
+    let taxResult = null;
+    const taxInv = parseFloat(taxCalcInvested);
+    const taxCur = parseFloat(taxCalcCurrent);
+    const taxMo = parseInt(taxCalcMonths);
+    if (taxInv > 0 && taxCur > 0 && taxMo > 0) {
+      taxResult = computeLTCG(taxInv, taxCur, taxMo, taxCalcType);
+      if (taxResult.tax === null) {
+        const slab = parseFloat(taxCalcSlab)/100;
+        taxResult.tax = taxResult.gain * slab;
+        taxResult.netGain = taxResult.gain * (1 - slab);
+      }
+      taxResult.postTaxCorpus = taxCur - Math.max(0, taxResult.tax || 0);
+      const yrsHeld = taxMo / 12;
+      taxResult.postTaxCagr = yrsHeld > 0 ? ((Math.pow(taxResult.postTaxCorpus / taxInv, 1/yrsHeld) - 1) * 100) : 0;
+    }
+
+    // ── Goal templates ──
+    const goals = [
+      { icon:"🎓", label:"Child's Education", desc:"Build a corpus for higher education fees", years:15, cagr:14, corpus:5000000, archetype:"Balanced Growther", color:"#4A9EFF" },
+      { icon:"🏠", label:"House Down Payment", desc:"Save for a home down payment", years:7, cagr:13, corpus:3000000, archetype:"Steady Compounder", color:"#27AE78" },
+      { icon:"🌅", label:"Retirement Corpus", desc:"Long-horizon wealth compounding", years:25, cagr:15, corpus:50000000, archetype:"Aggressive Achiever", color:G.gold },
+    ];
+
+    const TabBtn = ({ id, label }) => (
+      <button onClick={() => setCalcTab(id)} style={{
+        flex:1, padding:"10px 0", background: calcTab===id ? "rgba(212,175,55,0.15)" : "transparent",
+        border:"none", borderBottom: calcTab===id ? `2px solid ${G.gold}` : "2px solid transparent",
+        color: calcTab===id ? G.gold : G.slate, fontSize:13, fontWeight:600, cursor:"pointer",
+        fontFamily:"Outfit,sans-serif", transition:"all .2s"
+      }}>{label}</button>
+    );
+
+    const InputRow = ({ label, value, setter, placeholder, type="number", suffix="" }) => (
+      <div>
+        <div style={{ fontSize:11, color:G.slate, marginBottom:5 }}>{label}</div>
+        <div style={{ display:"flex", alignItems:"center", background:G.elv, border:`1px solid ${G.bord}`, borderRadius:8, overflow:"hidden" }}>
+          <input type={type} value={value} onChange={e => setter(e.target.value)} placeholder={placeholder}
+            style={{ flex:1, background:"transparent", border:"none", padding:"10px 12px", color:G.white, fontSize:14, fontFamily:"JetBrains Mono,monospace", outline:"none" }} />
+          {suffix && <span style={{ paddingRight:12, color:G.mist, fontSize:12 }}>{suffix}</span>}
+        </div>
+      </div>
+    );
+
+    const ResultRow = ({ label, value, color=G.white, big=false, border=true }) => (
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding: big?"12px 0":"8px 0", borderBottom: border ? `1px solid ${G.bord}` : "none" }}>
+        <span style={{ fontSize: big?13:12, color:G.slate }}>{label}</span>
+        <span style={{ fontSize: big?18:14, color, fontFamily:"JetBrains Mono,monospace", fontWeight: big?700:500 }}>{value}</span>
+      </div>
+    );
+
+    return (
+      <>
+        <style>{css}</style>
+        <div style={{ minHeight:"100vh", background:G.bg, fontFamily:"Outfit,sans-serif" }}>
+          {/* Header */}
+          <div style={{ padding:"20px 24px 0", maxWidth:820, margin:"0 auto" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:28 }}>
+              <button onClick={() => setScreen("hero")} style={{ background:"none", border:`1px solid ${G.bord}`, borderRadius:8, padding:"5px 14px", color:G.slate, fontSize:12, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>← Back</button>
+              <span style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:26, fontWeight:700 }}>Investment Calculators</span>
+              {calcPreFill && <span style={{ fontSize:11, color:G.mist, background:G.elv, padding:"3px 10px", borderRadius:6 }}>Pre-filled: {calcPreFill.label} · {calcPreFill.cagr}% CAGR</span>}
+            </div>
+
+            {/* Tabs */}
+            <div style={{ display:"flex", background:G.sur, border:`1px solid ${G.bord}`, borderRadius:10, overflow:"hidden", marginBottom:24 }}>
+              <TabBtn id="sip" label="📈 SIP Calculator" />
+              <TabBtn id="goals" label="🎯 Goal Planner" />
+              <TabBtn id="tax" label="🧾 Tax Calculator" />
+            </div>
+          </div>
+
+          <div style={{ padding:"0 24px 80px", maxWidth:820, margin:"0 auto" }}>
+
+            {/* ── SIP CALCULATOR TAB ── */}
+            {calcTab === 'sip' && (
+              <div>
+                {/* Mode toggle */}
+                <div style={{ display:"flex", gap:10, marginBottom:20 }}>
+                  {[['to-corpus','SIP → Final Corpus'],['to-sip','Target Corpus → SIP Needed']].map(([m,l]) => (
+                    <button key={m} onClick={() => setSipMode(m)} style={{
+                      padding:"8px 18px", borderRadius:8, border:`1px solid ${sipMode===m ? G.bordG : G.bord}`,
+                      background: sipMode===m ? "rgba(212,175,55,0.12)" : G.sur,
+                      color: sipMode===m ? G.gold : G.slate, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif"
+                    }}>{l}</button>
+                  ))}
+                </div>
+
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:24 }}>
+                  {/* Inputs */}
+                  <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:24, display:"flex", flexDirection:"column", gap:16 }}>
+                    <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:4 }}>Inputs</div>
+                    {sipMode === 'to-corpus'
+                      ? <InputRow label="Monthly SIP (₹)" value={sipCalcSip} setter={setSipCalcSip} placeholder="10000" suffix="₹/mo" />
+                      : <InputRow label="Target Corpus (₹)" value={sipCalcCorpus} setter={setSipCalcCorpus} placeholder="10000000" suffix="₹" />
+                    }
+                    <InputRow label="Investment Horizon (years)" value={sipCalcYears} setter={setSipCalcYears} placeholder="7" suffix="yrs" />
+                    <InputRow label="Expected CAGR (%)" value={sipCalcCagr} setter={setSipCalcCagr} placeholder={calcPreFill ? String(calcPreFill.cagr) : "14"} suffix="%" />
+                    {/* Quick CAGR presets */}
+                    <div>
+                      <div style={{ fontSize:10, color:G.mist, marginBottom:6 }}>Quick CAGR presets:</div>
+                      <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                        {[12,14,15,16,18].map(c => (
+                          <button key={c} onClick={() => setSipCalcCagr(String(c))} style={{
+                            padding:"3px 10px", borderRadius:6, fontSize:11, cursor:"pointer", fontFamily:"Outfit,sans-serif",
+                            border:`1px solid ${parseFloat(sipCalcCagr)===c ? G.bordG : G.bord}`,
+                            background: parseFloat(sipCalcCagr)===c ? "rgba(212,175,55,0.12)" : "transparent",
+                            color: parseFloat(sipCalcCagr)===c ? G.gold : G.mist
+                          }}>{c}%</button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Results */}
+                  <div style={{ background:G.sur, border:`1px solid ${sipResult ? G.bordG : G.bord}`, borderRadius:12, padding:24 }}>
+                    <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:16 }}>Results</div>
+                    {!sipResult ? (
+                      <div style={{ color:G.mist, fontSize:12, marginTop:24, textAlign:"center" }}>Fill in the inputs to see your projection</div>
+                    ) : (
+                      <>
+                        {sipMode === 'to-sip' && <ResultRow label="Required monthly SIP" value={fmtINR(sipResult.sip)} color={G.gold} big={true} />}
+                        <ResultRow label="Final corpus" value={fmtCr(sipResult.corpus)} color="#27AE78" big={sipMode==='to-corpus'} />
+                        <ResultRow label="Total invested" value={fmtCr(sipResult.invested)} color={G.fog} />
+                        <ResultRow label="Wealth gain" value={fmtCr(sipResult.gain)} color="#27AE78" />
+                        <ResultRow label="Wealth multiplier" value={sipResult.mult.toFixed(2)+'x'} color={G.gold} border={false} />
+                        {/* Visual bar */}
+                        <div style={{ marginTop:16 }}>
+                          <div style={{ display:"flex", height:12, borderRadius:6, overflow:"hidden", marginBottom:6 }}>
+                            <div style={{ width: (sipResult.invested/sipResult.corpus*100)+'%', background:`rgba(255,255,255,0.15)`, transition:"width .5s" }} />
+                            <div style={{ flex:1, background:"rgba(39,174,120,0.5)" }} />
+                          </div>
+                          <div style={{ display:"flex", gap:16, fontSize:10, color:G.mist }}>
+                            <span>■ Invested: {(sipResult.invested/sipResult.corpus*100).toFixed(0)}%</span>
+                            <span style={{ color:"rgba(39,174,120,0.8)" }}>■ Returns: {(sipResult.gain/sipResult.corpus*100).toFixed(0)}%</span>
+                          </div>
+                        </div>
+                        <div style={{ marginTop:14, fontSize:10, color:G.mist, lineHeight:1.6 }}>
+                          Projection based on constant CAGR — actual returns will vary. Adjust CAGR down 1–2% for conservative planning. Does not account for LTCG tax on redemption.
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Comparison table at different CAGRs */}
+                {sipYrsN > 0 && (sipMode==='to-corpus' ? !!sipCalcSip : !!sipCalcCorpus) && (
+                  <div style={{ marginTop:20, background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20 }}>
+                    <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:14 }}>CAGR Sensitivity — how much does it matter?</div>
+                    <div style={{ overflowX:"auto" }}>
+                      <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                        <thead>
+                          <tr>{["CAGR","Final Corpus","Total Invested","Wealth Gain","Multiplier"].map(h=>(
+                            <th key={h} style={{ padding:"8px 12px", textAlign:"right", color:G.mist, fontWeight:600, borderBottom:`1px solid ${G.bord}`, whiteSpace:"nowrap" }}>{h}</th>
+                          ))}</tr>
+                        </thead>
+                        <tbody>
+                          {[10,12,14,15,16,18].map(c => {
+                            const rr = c/100/12;
+                            const nn = sipYrsN*12;
+                            let corp, inv, sipp;
+                            if (sipMode==='to-corpus') {
+                              const P = parseFloat(sipCalcSip);
+                              corp = rr===0 ? P*nn : P*((Math.pow(1+rr,nn)-1)/rr)*(1+rr);
+                              inv = P*nn; sipp = P;
+                            } else {
+                              const FV = parseFloat(sipCalcCorpus);
+                              sipp = rr===0 ? FV/nn : (FV*rr)/((Math.pow(1+rr,nn)-1)*(1+rr));
+                              inv = sipp*nn; corp = FV;
+                            }
+                            const highlight = Math.abs(c - (parseFloat(sipCalcCagr)||0)) < 0.5;
+                            return (
+                              <tr key={c} style={{ background: highlight ? "rgba(212,175,55,0.06)" : "transparent" }}>
+                                <td style={{ padding:"8px 12px", textAlign:"right", color: highlight ? G.gold : G.mist, fontWeight: highlight?700:400, fontFamily:"JetBrains Mono,monospace" }}>{c}%</td>
+                                <td style={{ padding:"8px 12px", textAlign:"right", color:"#27AE78", fontFamily:"JetBrains Mono,monospace" }}>{fmtCr(corp)}</td>
+                                <td style={{ padding:"8px 12px", textAlign:"right", color:G.fog, fontFamily:"JetBrains Mono,monospace" }}>{fmtCr(inv)}</td>
+                                <td style={{ padding:"8px 12px", textAlign:"right", color:"rgba(39,174,120,0.7)", fontFamily:"JetBrains Mono,monospace" }}>{fmtCr(corp-inv)}</td>
+                                <td style={{ padding:"8px 12px", textAlign:"right", color:G.gold, fontFamily:"JetBrains Mono,monospace" }}>{(corp/inv).toFixed(2)}x</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── GOAL PLANNER TAB ── */}
+            {calcTab === 'goals' && (
+              <div>
+                <p style={{ color:G.slate, fontSize:13, marginBottom:20, marginTop:0 }}>Pick a goal to pre-fill the SIP calculator. Each goal maps to the most suitable FundGuldasta archetype.</p>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))", gap:16, marginBottom:28 }}>
+                  {goals.map(g => (
+                    <div key={g.label} style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:14, padding:24, cursor:"pointer", transition:"all .2s" }}
+                      onClick={() => {
+                        setSipCalcYears(String(g.years));
+                        setSipCalcCagr(String(g.cagr));
+                        setSipCalcCorpus(String(g.corpus));
+                        setSipMode('to-sip');
+                        setCalcTab('sip');
+                      }}
+                      onMouseEnter={e => e.currentTarget.style.border=`1px solid ${g.color}`}
+                      onMouseLeave={e => e.currentTarget.style.border=`1px solid ${G.bord}`}>
+                      <div style={{ fontSize:32, marginBottom:12 }}>{g.icon}</div>
+                      <div style={{ color:G.white, fontSize:15, fontWeight:700, marginBottom:6 }}>{g.label}</div>
+                      <div style={{ color:G.slate, fontSize:12, lineHeight:1.6, marginBottom:14 }}>{g.desc}</div>
+                      <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:16 }}>
+                        {[[`${g.years}-year horizon`, g.color],[`${g.cagr}% target CAGR`, g.color],[`Target: ${fmtCr(g.corpus)}`, G.white]].map(([t,c])=>(
+                          <div key={t} style={{ fontSize:12, color:c, fontFamily:"JetBrains Mono,monospace" }}>{t}</div>
+                        ))}
+                      </div>
+                      <div style={{ borderTop:`1px solid ${G.bord}`, paddingTop:12, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                        <div style={{ fontSize:11, color:G.mist }}>Suggested archetype</div>
+                        <div style={{ fontSize:11, color:g.color, fontWeight:600 }}>{g.archetype}</div>
+                      </div>
+                      <div style={{ marginTop:10, padding:"7px 14px", background:`rgba(${g.color==='#4A9EFF'?'74,158,255':g.color==='#27AE78'?'39,174,120':'212,175,55'},0.1)`, borderRadius:7, color:g.color, fontSize:12, fontWeight:600, textAlign:"center" }}>
+                        Use this goal →
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20 }}>
+                  <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:10 }}>Custom Goal</div>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:14 }}>
+                    <InputRow label="Target Corpus (₹)" value={sipCalcCorpus} setter={setSipCalcCorpus} placeholder="5000000" />
+                    <InputRow label="Horizon (years)" value={sipCalcYears} setter={setSipCalcYears} placeholder="10" />
+                    <InputRow label="Expected CAGR (%)" value={sipCalcCagr} setter={setSipCalcCagr} placeholder="14" />
+                  </div>
+                  <button onClick={() => { setSipMode('to-sip'); setCalcTab('sip'); }}
+                    style={{ padding:"8px 22px", background:"rgba(212,175,55,0.12)", border:`1px solid ${G.bordG}`, borderRadius:8, color:G.gold, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                    Calculate SIP Required →
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ── TAX CALCULATOR TAB ── */}
+            {calcTab === 'tax' && (
+              <div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:24 }}>
+                  <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+                    <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:24, display:"flex", flexDirection:"column", gap:14 }}>
+                      <div style={{ color:G.white, fontSize:13, fontWeight:600 }}>Investment Details</div>
+                      <InputRow label="Amount Invested (₹)" value={taxCalcInvested} setter={setTaxCalcInvested} placeholder="500000" />
+                      <InputRow label="Current Value (₹)" value={taxCalcCurrent} setter={setTaxCalcCurrent} placeholder="850000" />
+                      <InputRow label="Holding Period (months)" value={taxCalcMonths} setter={setTaxCalcMonths} placeholder="24" />
+                      <div>
+                        <div style={{ fontSize:11, color:G.slate, marginBottom:6 }}>Fund Type</div>
+                        <div style={{ display:"flex", gap:8 }}>
+                          {[['equity','Equity / Hybrid (≥65%)'],['debt','Debt / FOF / International']].map(([v,l]) => (
+                            <button key={v} onClick={() => setTaxCalcType(v)} style={{
+                              flex:1, padding:"8px 10px", borderRadius:8, fontSize:11, cursor:"pointer", fontFamily:"Outfit,sans-serif", textAlign:"center",
+                              border:`1px solid ${taxCalcType===v ? G.bordG : G.bord}`,
+                              background: taxCalcType===v ? "rgba(212,175,55,0.1)" : G.elv,
+                              color: taxCalcType===v ? G.gold : G.slate, fontWeight: taxCalcType===v ? 600 : 400
+                            }}>{l}</button>
+                          ))}
+                        </div>
+                      </div>
+                      {taxCalcType === 'debt' && (
+                        <div>
+                          <div style={{ fontSize:11, color:G.slate, marginBottom:6 }}>Your Income Tax Slab</div>
+                          <div style={{ display:"flex", gap:8 }}>
+                            {[['0','Nil (below ₹3L)'],['5','5%'],['10','10%'],['15','15%'],['20','20%'],['30','30%']].map(([v,l]) => (
+                              <button key={v} onClick={() => setTaxCalcSlab(v)} style={{
+                                padding:"5px 8px", borderRadius:6, fontSize:10, cursor:"pointer", fontFamily:"Outfit,sans-serif",
+                                border:`1px solid ${taxCalcSlab===v ? G.bordG : G.bord}`,
+                                background: taxCalcSlab===v ? "rgba(212,175,55,0.1)" : "transparent",
+                                color: taxCalcSlab===v ? G.gold : G.mist
+                              }}>{l}</button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ background:G.sur, border:`1px solid ${taxResult ? G.bordG : G.bord}`, borderRadius:12, padding:24 }}>
+                    <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:16 }}>Tax Estimate</div>
+                    {!taxResult ? (
+                      <div style={{ color:G.mist, fontSize:12, marginTop:24, textAlign:"center" }}>Fill in investment details to calculate</div>
+                    ) : (
+                      <>
+                        <ResultRow label="Amount invested" value={fmtINR(taxCalcInvested)} color={G.fog} />
+                        <ResultRow label="Current value" value={fmtINR(taxCalcCurrent)} color="#27AE78" />
+                        <ResultRow label="Gross gain" value={fmtINR(taxResult.gain)} color={taxResult.gain>=0?"#27AE78":"#E05555"} />
+                        <ResultRow label="Tax type" value={taxResult.taxType} color={G.mist} />
+                        {taxCalcType==='equity' && parseInt(taxCalcMonths)>12 && taxResult.gain > 0 && (
+                          <ResultRow label="Exempt (₹1.25L/yr)" value={fmtINR(Math.min(taxResult.gain, 125000))} color={G.mist} />
+                        )}
+                        <ResultRow label="Estimated tax" value={taxResult.tax > 0 ? fmtINR(taxResult.tax) : '₹0'} color="#E8A000" big />
+                        <ResultRow label="Post-tax corpus" value={fmtINR(taxResult.postTaxCorpus)} color="#27AE78" big />
+                        <ResultRow label="Post-tax CAGR" value={taxResult.postTaxCagr > 0 ? taxResult.postTaxCagr.toFixed(2)+'%' : '—'} color={G.gold} border={false} />
+                        <div style={{ marginTop:16, padding:"10px 14px", background:"rgba(255,255,255,0.03)", borderRadius:8, fontSize:10, color:G.mist, lineHeight:1.7 }}>
+                          <strong style={{ color:G.slate }}>Budget 2024 rates:</strong> Equity LTCG 12.5% (above ₹1.25L/yr exemption), STCG 20%. Debt/FOF/International funds taxed at income slab rate regardless of holding. Always consult a CA for your exact liability.
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Equity vs Debt comparison */}
+                <div style={{ marginTop:20, background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20 }}>
+                  <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:8 }}>Why fund type matters for tax</div>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                    {[
+                      { type:"Equity Fund (≥65% equity)", stcg:"20% (held ≤12 months)", ltcg:"12.5% above ₹1.25L/yr (held >12 months)", note:"Nifty Index funds, large cap, mid cap, flexi cap, ELSS", color:"#27AE78" },
+                      { type:"Debt / FOF / International", stcg:"Slab rate (any holding)", ltcg:"Slab rate (any holding)", note:"Motilal Nasdaq 100 FOF, any debt fund, fund of funds", color:"#E8A000" },
+                    ].map(t => (
+                      <div key={t.type} style={{ padding:"14px 16px", background:G.elv, borderRadius:10, border:`1px solid ${G.bord}` }}>
+                        <div style={{ color:t.color, fontSize:12, fontWeight:700, marginBottom:10 }}>{t.type}</div>
+                        <div style={{ fontSize:11, color:G.slate, marginBottom:4 }}>Short-term: <span style={{ color:G.white }}>{t.stcg}</span></div>
+                        <div style={{ fontSize:11, color:G.slate, marginBottom:8 }}>Long-term: <span style={{ color:G.white }}>{t.ltcg}</span></div>
+                        <div style={{ fontSize:10, color:G.mist, fontStyle:"italic" }}>{t.note}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </>
+    );
+  }
+
 
   // ── SEO CONTENT SCREENS (Priority 11) ──────────────────────────────────────
 
@@ -1460,6 +1832,7 @@ useEffect(() => {
               </div>
               <div className="footer-links" style={{ marginTop:8 }}>
                 <span style={{ fontSize:10, color:G.mist, marginRight:4, letterSpacing:".06em", textTransform:"uppercase" }}>Learn:</span>
+                <button className="footer-link" onClick={() => { setCalcPreFill(null); setCalcTab('sip'); setScreen("calculators"); }}>📐 Calculators</button>
                 <button className="footer-link" onClick={() => setScreen("learn-algorithm")}>How It Works</button>
                 <button className="footer-link" onClick={() => setScreen("learn-rolling-returns")}>Rolling Returns</button>
                 <button className="footer-link" onClick={() => setScreen("learn-survivorship")}>Survivorship Bias</button>
@@ -1816,6 +2189,7 @@ useEffect(() => {
             <button className="bbtn" onClick={reset}>← New Search</button>
             <button className="byob-entry" style={{ marginTop: 0, fontSize: 11, padding: "5px 14px" }} onClick={() => setScreen("custom_builder")}>✎ Build Your Own</button>
             <button className="byob-entry" style={{ marginTop: 0, fontSize: 11, padding: "5px 14px", background:"rgba(212,175,55,0.08)" }} onClick={() => setScreen("portfolio")}>📊 My Portfolio</button>
+            <button className="byob-entry" style={{ marginTop: 0, fontSize: 11, padding: "5px 14px", background:"rgba(212,175,55,0.06)" }} onClick={() => { setCalcPreFill(selectedArch ? { cagr: (selectedArch.metrics?.bouquet_cagr||selectedArch.cagrRange||14), label: selectedArch.label } : null); setCalcTab('sip'); setScreen("calculators"); }}>📐 Calculators</button>
             <div className="pill">{goalPill}</div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
