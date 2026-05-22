@@ -1,21 +1,24 @@
 import os
+import bcrypt
 import jwt
 from datetime import datetime, timedelta
-from passlib.context import CryptContext
 
-_SECRET = os.getenv("JWT_SECRET_KEY", "")
+_SECRET = os.getenv("JWT_SECRET_KEY", "fundguldasta-dev-secret-change-in-prod")
 _ALGO = "HS256"
 _EXPIRE_DAYS = 30
 
-_pwd = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 
 def hash_password(password: str) -> str:
-    return _pwd.hash(password)
+    """Hash a password using bcrypt. Returns a UTF-8 string for storage."""
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return _pwd.verify(plain, hashed)
+    """Verify a plaintext password against a stored bcrypt hash."""
+    try:
+        return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
+    except Exception:
+        return False
 
 
 def create_token(user_id: int, email: str) -> str:

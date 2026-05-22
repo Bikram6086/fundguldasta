@@ -2231,40 +2231,31 @@ def _require_user(authorization: Optional[str] = None):
 
 
 @app.get("/api/user/preferences")
-async def get_preferences(authorization: Optional[str] = None):
-    from fastapi import Header
-    # Accept token via query param OR Authorization header
-    if not authorization:
-        raise HTTPException(401, "Not authenticated")
-    token = authorization.replace("Bearer ", "").strip()
+async def get_preferences(authorization: Optional[str] = _Header(default=None)):
+    payload = _get_user_from_token(authorization)
+    user_id = int(payload["sub"])
     conn = get_db()
     cur = conn.cursor()
     try:
         cur.execute(
-            "SELECT manager_alert, monthly_digest FROM users WHERE password_hash = %s",
-            (token,)
+            "SELECT manager_alert, monthly_digest FROM users WHERE id = %s",
+            (user_id,)
         )
         row = cur.fetchone()
     finally:
         cur.close(); conn.close()
     if not row:
-        raise HTTPException(401, "Invalid token")
+        raise HTTPException(404, "User not found")
     return {"manager_alert": bool(row[0]), "monthly_digest": bool(row[1])}
 
 
 @app.patch("/api/user/preferences")
-async def update_preferences(body: PreferencesUpdate, authorization: Optional[str] = None):
-    if not authorization:
-        raise HTTPException(401, "Not authenticated")
-    token = authorization.replace("Bearer ", "").strip()
+async def update_preferences(body: PreferencesUpdate, authorization: Optional[str] = _Header(default=None)):
+    payload = _get_user_from_token(authorization)
+    user_id = int(payload["sub"])
     conn = get_db()
     cur = conn.cursor()
     try:
-        cur.execute("SELECT id FROM users WHERE password_hash = %s", (token,))
-        row = cur.fetchone()
-        if not row:
-            raise HTTPException(401, "Invalid token")
-        user_id = row[0]
         if body.manager_alert is not None:
             cur.execute("UPDATE users SET manager_alert = %s WHERE id = %s", (body.manager_alert, user_id))
         if body.monthly_digest is not None:
