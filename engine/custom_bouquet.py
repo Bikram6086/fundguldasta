@@ -111,7 +111,7 @@ def _find_best_alternative(category: str, excluded_codes: list, horizon_years: i
         GROUP BY fm.scheme_code, fm.scheme_name, fm.amc_name, fm.sebi_category
         HAVING COUNT(nd.nav_date) >= 750
         ORDER BY COUNT(nd.nav_date) DESC
-        LIMIT 8
+        LIMIT 4
     """
     cur.execute(query, params)
     candidates = cur.fetchall()
@@ -139,6 +139,53 @@ def _find_best_alternative(category: str, excluded_codes: list, horizon_years: i
         except Exception:
             continue
     return best
+
+
+def _find_alternatives_fast(category, excluded_codes, n=2, prefer_tier1=True, max_er=None):
+    """Fast alternative lookup by NAV history length — no scoring needed.
+    Tier 1 (1750+ NAVs) means 7+ verified years, a reliable quality proxy."""
+    conn = _get_db()
+    cur = conn.cursor()
+    params = [str(c) for c in excluded_codes] if excluded_codes else []
+    cat_clause = 'AND fm.sebi_category = %s' if category else ''
+    if category:
+        params.append(category)
+    er_clause = f'AND fm.expense_ratio <= {max_er}' if max_er else ''
+    excl_clause = (
+        f"AND fm.scheme_code::text NOT IN ({','.join(['%s']*len(excluded_codes))})"
+        if excluded_codes else ''
+    )
+    min_nav = 1750 if prefer_tier1 else 750
+    cur.execute(f"""
+        SELECT fm.scheme_code::text, fm.scheme_name, fm.amc_name,
+               fm.sebi_category, fm.expense_ratio, COUNT(nd.nav_date) as nav_count
+        FROM fund_metadata fm
+        LEFT JOIN nav_data nd ON fm.scheme_code = nd.scheme_code
+        WHERE fm.plan_type = 'Direct' AND fm.is_active = TRUE
+        AND fm.scheme_name ILIKE '%%growth%%'
+        AND fm.scheme_name NOT ILIKE '%%idcw%%'
+        AND fm.scheme_name NOT ILIKE '%%dividend%%'
+        {excl_clause}
+        {cat_clause}
+        {er_clause}
+        GROUP BY fm.scheme_code, fm.scheme_name, fm.amc_name,
+                 fm.sebi_category, fm.expense_ratio
+        HAVING COUNT(nd.nav_date) >= {min_nav}
+        ORDER BY COUNT(nd.nav_date) DESC
+        LIMIT {n}
+    """, params)
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [{
+        'scheme_code': str(r[0]),
+        'name': r[1],
+        'amc': r[2],
+        'category': r[3],
+        'expense_ratio': float(r[4]) if r[4] else None,
+        'nav_count': int(r[5]),
+        'tier': _get_tier(int(r[5])),
+    } for r in rows]
 
 
 def analyse_custom_bouquet(
@@ -269,34 +316,77 @@ def analyse_custom_bouquet(
         for amc, wt in amc_weights.items() if wt > 35
     ]
 
-    # Tier warnings
+    # Tier warnings with specific alternatives
     tier_warnings = []
     for f in fund_analyses:
-        if f['tier'] == 3:
-            tier_warnings.append(
-                f"{f['name'][:40]}: Tier 3 — only {f['nav_count']} NAV records (~{f['nav_count']//250} years). Scores extrapolated; treat with caution."
-            )
-        elif f['tier'] == 2:
-            tier_warnings.append(
-                f"{f['name'][:40]}: Tier 2 — {f['nav_count']//250} years of history. Solid but may not cover a full market cycle."
-            )
+        if f['tier'] in (2, 3):
+            alts = _find_alternatives_fast(f['category'], scheme_codes, n=2, prefer_tier1=True)
+            if not alts:
+                alts = _find_alternatives_fast(f['category'], scheme_codes, n=2, prefer_tier1=False)
+            alts_note = (
+                f"Same SEBI category ({f['category'] or 'Equity'}) with longer verified history — "
+                "giving the engine more data and you more confidence."
+            ) if alts else None
+            years = max(f['nav_count'] // 250, 1)
+            if f['tier'] == 3:
+                tier_warnings.append({
+                    'type': 'tier',
+                    'message': (
+                        f"{f['name'][:45]}: Tier 3 fund — only ~{years} year(s) of NAV data. "
+                        "Scores are extrapolated from limited history. Treat projections with caution."
+                    ),
+                    'severity': 'high',
+                    'fund_code': f['scheme_code'],
+                    'fund_name': f['name'],
+                    'alternatives': alts,
+                    'alternatives_note': alts_note,
+                })
+            else:
+                tier_warnings.append({
+                    'type': 'tier',
+                    'message': (
+                        f"{f['name'][:45]}: Tier 2 fund — ~{f['nav_count']//250} years of history. "
+                        "Solid, but may not have survived a full market cycle (typically 7+ years)."
+                    ),
+                    'severity': 'moderate',
+                    'fund_code': f['scheme_code'],
+                    'fund_name': f['name'],
+                    'alternatives': alts,
+                    'alternatives_note': alts_note,
+                })
 
-    # Expense ratio warnings
+    # Expense ratio warnings with same-category alternatives
     er_warnings = []
     for f in fund_analyses:
         if f['expense_ratio'] and f['expense_ratio'] > 1.0:
-            er_warnings.append(
-                f"{f['name'][:40]}: Expense ratio {f['expense_ratio']:.2f}% — above the 1% benchmark for direct plans. Higher costs compound against you over time."
-            )
+            # ER data is sparse in DB — find tier 1 alternatives and let user compare ER on AMFIIndia
+            alts = _find_alternatives_fast(f['category'], scheme_codes, n=2, prefer_tier1=True)
+            if not alts:
+                alts = _find_alternatives_fast(f['category'], scheme_codes, n=2, prefer_tier1=False)
+            alts_note = (
+                f"These funds share the same category. "
+                f"Each 0.5% reduction in annual ER over 20 years saves 8-12%% of final corpus at 14%% CAGR. "
+                "Check current expense ratio on AMFIIndia.com before deciding."
+            ) if alts else None
+            er_warnings.append({
+                'type': 'expense_ratio',
+                'message': (
+                    f"{f['name'][:45]}: Expense ratio {f['expense_ratio']:.2f}% — "
+                    "above the 1% benchmark for direct plans. Costs compound against returns silently."
+                ),
+                'severity': 'moderate',
+                'fund_code': f['scheme_code'],
+                'fund_name': f['name'],
+                'alternatives': alts,
+                'alternatives_note': alts_note,
+            })
 
-    # Improvement suggestions — for each fund scoring below median, find a better alternative
-    print("Computing improvement suggestions...")
+    # Improvement suggestion: only the single worst fund to keep response fast
+    print("Computing improvement suggestion...")
     suggestions = []
-    for fund in fund_analyses:
-        if fund['composite_score'] is None:
-            continue
-        if fund['composite_score'] >= median_score:
-            continue
+    below_median = [f for f in fund_analyses if f["composite_score"] is not None and f["composite_score"] < median_score]
+    worst_candidates = sorted(below_median, key=lambda f: f["composite_score"])[:3]
+    for fund in worst_candidates:
         # Find best alternative in the same category
         alt = _find_best_alternative(
             category=fund['category'],
@@ -353,6 +443,24 @@ def analyse_custom_bouquet(
         quality_label = 'Insufficient Data'
         quality_color = '#666'
 
+    # Derive pros from analysis data
+    byob_pros = []
+    tier1_count = sum(1 for f in fund_analyses if f.get('tier') == 1)
+    if tier1_count >= 3:
+        byob_pros.append(f"{tier1_count} of {len(fund_analyses)} funds have 7+ years of verified history — your selection is well-grounded")
+    elif tier1_count >= 1:
+        byob_pros.append(f"{tier1_count} Tier 1 fund(s) in your bouquet — backed by the longest track records available")
+    if weighted_composite is not None and weighted_composite >= 60:
+        byob_pros.append(f"Composite score {weighted_composite}/100 — your fund selection clears the platform quality bar on all 6 dimensions")
+    elif weighted_composite is not None and weighted_composite >= 50:
+        byob_pros.append(f"Composite score {weighted_composite}/100 — a solid starting point with clear room to strengthen specific dimensions")
+    if avg_correlation is not None and avg_correlation < 0.90:
+        byob_pros.append(f"Average correlation {avg_correlation:.2f} — your funds don't move in lockstep. Some genuine diversification is present")
+    if projected_cagr is not None and projected_cagr >= 13:
+        byob_pros.append(f"Projected {horizon_years}-yr CAGR of {projected_cagr}% based on historical rolling returns — a meaningful long-run expectation")
+    byob_pros.append("All direct plans — zero distributor commission. Every rupee of return works fully for you")
+    byob_pros = byob_pros[:4]
+
     return {
         'funds': fund_analyses,
         'projected_cagr': projected_cagr,
@@ -365,15 +473,63 @@ def analyse_custom_bouquet(
         'suggestions': suggestions,
         'warnings': {
             'correlation': [
-                f"High correlation: {p['fund_a'][:35]} ↔ {p['fund_b'][:35]} ({p['correlation']}) — these funds move together. True diversification requires lower correlation."
+                {
+                    'type': 'correlation',
+                    'message': (
+                        f"High correlation: {p['fund_a'][:38]} ↔ {p['fund_b'][:38]} "
+                        f"({p['correlation']}) — these funds move in lockstep. "
+                        f"{'Severe overlap — consider replacing one.' if p['severity'] == 'high' else 'Moderate overlap — monitor closely.'}"
+                    ),
+                    'severity': p['severity'],
+                    'fund_code': None,
+                    'fund_name': None,
+                    'alternatives': [],
+                    'alternatives_note': (
+                        "Indian equity funds structurally correlate at 0.85-0.98 — this is market structure, not a flaw. "
+                        "True diversification comes from category diversity: adding International (e.g. Motilal Nasdaq 100 FOF), "
+                        "Thematic (e.g. Tata Digital), or Balanced Advantage funds. "
+                        "Within Indian equity, choosing funds from different categories (Large Cap + Midcap + Flexi Cap) "
+                        "reduces correlation meaningfully more than choosing different AMCs within the same category."
+                    ),
+                }
                 for p in high_corr_pairs
             ],
-            'concentration': concentration_warnings,
-            'amc': amc_warnings,
+            'concentration': [
+                {
+                    'type': 'concentration',
+                    'message': w,
+                    'severity': 'moderate',
+                    'fund_code': None,
+                    'fund_name': None,
+                    'alternatives': [],
+                    'alternatives_note': (
+                        "Consider distributing across at least 3 different SEBI categories. "
+                        "Midcap, Flexi Cap, and International categories complement Large Cap allocations well "
+                        "and reduce single-category dependence."
+                    ),
+                }
+                for w in concentration_warnings
+            ],
+            'amc': [
+                {
+                    'type': 'amc',
+                    'message': w,
+                    'severity': 'moderate',
+                    'fund_code': None,
+                    'fund_name': None,
+                    'alternatives': [],
+                    'alternatives_note': (
+                        "Single-AMC concentration means one CIO decision, one compliance issue, or one regulatory action "
+                        "affects your entire bouquet. Distributing across 3-4 AMCs is a simple structural protection."
+                    ),
+                }
+                for w in amc_warnings
+            ],
             'tier': tier_warnings,
             'expense_ratio': er_warnings,
         },
         'realism_advisory': advisory,
         'horizon_years': horizon_years,
         'target_cagr': target_cagr,
+        'pros': byob_pros,
     }

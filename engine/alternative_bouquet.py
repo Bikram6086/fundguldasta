@@ -234,6 +234,34 @@ def _pick_slots(arch_id: str, scored: list, used_codes: set, used_amcs: set):
     return selected, local_used_codes, local_used_amcs
 
 
+def _alt_compute_pros(funds, metrics_dict, confidence, avg_corr, stress_test):
+    pros = []
+    tier1 = sum(1 for f in funds if f.get('tier') == 1)
+    if tier1 >= 3:
+        pros.append(f"{tier1} of {len(funds)} funds have 7+ years of verified history — scores are statistically grounded")
+    elif tier1 >= 1:
+        pros.append(f"{tier1} Tier 1 fund(s) — backed by the longest available track records in this alternative selection")
+    for period in ['7 Yr', '10 Yr', '5 Yr']:
+        m = metrics_dict.get(period, {})
+        bouquet_cagr = m.get('bouquet')
+        nifty = m.get('nifty50')
+        if bouquet_cagr and nifty:
+            delta = round(bouquet_cagr - nifty, 1)
+            if delta > 1:
+                pros.append(f"Historical {period} CAGR of {bouquet_cagr}% — {delta}% ahead of Nifty 50. Alternative selection still demonstrates alpha")
+            break
+    if avg_corr < 0.90:
+        pros.append(f"Average correlation {avg_corr:.2f} — funds selected from different AMCs and categories for genuine diversification")
+    factors = confidence.get('factors', {}) if isinstance(confidence, dict) else {}
+    factor_scores = [(k, v.get('score', 0)) for k, v in factors.items() if isinstance(v, dict)]
+    if factor_scores:
+        best_k, best_v = max(factor_scores, key=lambda x: x[1])
+        if best_v >= 50:
+            pros.append(f"{best_k.replace('_', ' ').title()} score {best_v:.0f}/100 — alternative funds also pass the platform quality threshold")
+    pros.append("All direct plans — zero commission. Full returns compound for the investor")
+    return pros[:4]
+
+
 def build_alternative_round(
     horizon_years: int,
     target_cagr: float,
@@ -330,6 +358,7 @@ def build_alternative_round(
                     'Direct plans only — no commission',
                     'Category diversity enforced by slot-based selection',
                 ] + warnings,
+                'pros': _alt_compute_pros(fund_details, metrics, confidence, avg_corr, stress),
                 'devils': [
                     f'Round {round_number} bouquets are dynamically generated — not manually verified like Round 1',
                     'Tier 2/3 funds have shorter history; confidence intervals are wider',

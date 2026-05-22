@@ -300,6 +300,7 @@ def run_precomputation(horizon_years=7, target_cagr=DEFAULT_TARGET_CAGR):
     print(f"Completed: {datetime.now()}")
     print(f"{'='*60}")
 
+    log_precompute_run('success', len(results))
     return results
 
 def log_precompute_run(status, count, error=None):

@@ -131,11 +131,14 @@ VERIFIED_FUNDS = {
 
 ARCHETYPE_FUNDS = {
     'steady': [
-        ('118825', 25),   # Mirae Asset Large Cap
-        ('122639', 25),   # Parag Parikh Flexi Cap
-        ('120152', 20),   # Kotak Large Cap
-        ('149134', 15),   # SBI Balanced Advantage
-        ('118955', 15),   # HDFC Flexi Cap
+        # FIX: removed duplicate Large Cap (Kotak) and duplicate Flexi Cap (HDFC).
+        # Added Motilal Nasdaq 100 FOF (genuine diversifier, corr 0.33 vs Indian equity)
+        # and Axis Midcap (growth layer). Now 5 distinct SEBI categories.
+        ('118825', 25),   # Mirae Asset Large Cap      — Large Cap anchor
+        ('122639', 25),   # Parag Parikh Flexi Cap     — Flexi Cap (global mandate)
+        ('145552', 20),   # Motilal Oswal Nasdaq 100   — International (true diversifier)
+        ('149134', 15),   # SBI Balanced Advantage     — Hybrid (downside buffer)
+        ('120505', 15),   # Axis Midcap                — Mid Cap (growth layer)
     ],
     'balanced': [
         ('118825', 20),   # Mirae Asset Large Cap
@@ -145,11 +148,15 @@ ARCHETYPE_FUNDS = {
         ('145552', 15),   # Motilal Oswal Nasdaq 100
     ],
     'aggressive': [
-        ('118989', 25),   # HDFC Mid Cap
-        ('118778', 20),   # Nippon India Small Cap
-        ('119071', 20),   # DSP Midcap
-        ('120505', 20),   # Axis Midcap
-        ('120828', 15),   # Quant Small Cap
+        # FIX: removed one of three Midcap funds (DSP Midcap — lowest marginal conviction).
+        # Added Parag Parikh Flexi Cap: provides global flexibility, manager discretion,
+        # and a partial large-cap buffer — structurally different from pure mid/small.
+        # Result: Mid Cap 45% + Small Cap 35% + Flexi Cap 20% — 3 distinct categories.
+        ('118989', 25),   # HDFC Mid Cap               — Mid Cap (primary growth driver)
+        ('118778', 25),   # Nippon India Small Cap     — Small Cap (high-return kicker)
+        ('120505', 20),   # Axis Midcap                — Mid Cap (category complement)
+        ('122639', 20),   # Parag Parikh Flexi Cap     — Flexi Cap (structural diversifier)
+        ('120828', 10),   # Quant Small Cap            — Small Cap (satellite, quant approach)
     ],
     'conviction': [
         ('118778', 30),   # Nippon India Small Cap

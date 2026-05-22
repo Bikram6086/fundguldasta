@@ -1,0 +1,70 @@
+{
+  "nav": {
+    "title": "FundGuldasta",
+    "tagline": "Mutual Fund Research. Unfiltered.",
+    "refresh": "Refresh Data",
+    "language": "Language"
+  },
+  "hero": {
+    "headline": "The Algorithm Knows Which Funds Deserve Your Money.",
+    "subhead": "India's First Honest-by-Design Mutual Fund Research Platform",
+    "cta_return": "Target Return",
+    "cta_horizon": "Investment Horizon",
+    "cta_build": "Build My Bouquet",
+    "cta_byob": "Build Your Own Bouquet",
+    "cta_advise": "✦ Guldasta Advisor"
+  },
+  "bouquet": {
+    "composition": "Bouquet Composition",
+    "direct_plans": "5 Funds · Direct Plans · No Commission",
+    "customize": "Customize this bouquet",
+    "close_customize": "▲ Close Customization",
+    "metrics": "Performance Metrics",
+    "confidence": "Confidence Score",
+    "stress_test": "Stress Test",
+    "portfolio_analysis": "Portfolio Analysis",
+    "strengths_risks": "Strengths & Risks",
+    "rebalancing": "Rebalancing Guidelines",
+    "methodology": "Selection Methodology",
+    "comparator": "How Does This Compare?"
+  },
+  "fund_card": {
+    "exit_load": "Exit load: 1% if redeemed within 12 months",
+    "managed_by": "Mgr:",
+    "ter": "TER:",
+    "aum": "AUM:"
+  },
+  "direct_vs_regular": {
+    "title": "Direct vs Regular Plan — What You Save",
+    "subtitle": "Your Advantage",
+    "extra_wealth": "Extra wealth from direct plans over",
+    "years": "years",
+    "disclaimer": "Regular plan TER estimated at Direct TER + 0.9–1.1% (typical distributor trail commission). FundGuldasta only recommends direct plans."
+  },
+  "advisor": {
+    "title": "Guldasta Advisor",
+    "subtitle": "Powered by Claude AI · MF Research & Education only · Not investment advice",
+    "scope": "Guldasta Advisor is scoped to Indian MF research & education only.",
+    "thinking": "Guldasta Advisor is thinking",
+    "ask": "Ask Advisor →",
+    "placeholder": "Ask about any fund, metric, SEBI category, tax rule, or rebalancing concept..."
+  },
+  "tools": {
+    "rebal": "Rebalancing Drift",
+    "ltcg": "LTCG Calculator",
+    "goal": "Goal Advisor",
+    "sip": "SIP Planner"
+  },
+  "byob": {
+    "title": "Build Your Own Bouquet",
+    "subtitle": "Select your own funds, set weights, and get the same research-grade analysis.",
+    "analyse": "Analyse My Bouquet",
+    "analysing": "Analysing..."
+  },
+  "common": {
+    "back": "← Back",
+    "loading": "Loading...",
+    "error": "Something went wrong",
+    "not_advice": "Not investment advice · Education only · Direct plans only"
+  }
+}

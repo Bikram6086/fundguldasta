@@ -9,6 +9,7 @@ Implements the contract defined in apiContract.js exactly.
 """
 
 import psycopg2
+from psycopg2 import pool as pg_pool
 import json
 import os
 import threading
@@ -42,14 +43,278 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "https://fundguldasta.com",
+        "https://www.fundguldasta.com",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ── Connection pool — replaces per-request psycopg2.connect() ────────────────
+_pool = None
+
+def _get_pool():
+    global _pool
+    if _pool is None:
+        _pool = pg_pool.ThreadedConnectionPool(minconn=2, maxconn=10, **DB_CONFIG)
+    return _pool
+
+class _PooledConn:
+    """Wraps a pooled connection; close() returns it to the pool instead of closing."""
+    def __init__(self, conn):
+        self._conn = conn
+    def cursor(self):   return self._conn.cursor()
+    def commit(self):   return self._conn.commit()
+    def rollback(self): return self._conn.rollback()
+    def close(self):    _get_pool().putconn(self._conn)
+
 def get_db():
-    return psycopg2.connect(**DB_CONFIG)
+    return _PooledConn(_get_pool().getconn())
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SELF-DIAGNOSTIC + SELF-HEALING ENGINE
+# ══════════════════════════════════════════════════════════════════════════════
+
+_health_state = {
+    "status":     "starting",   # healthy | degraded | critical
+    "last_check": None,
+    "next_check": None,
+    "components": {
+        "database":  {"status": "unknown", "detail": "", "latency_ms": None},
+        "cache":     {"status": "unknown", "detail": "", "bouquets": 0, "age_hours": None},
+        "nav_data":  {"status": "unknown", "detail": "", "latest_date": None, "staleness_days": None},
+        "pipeline":  {"status": "unknown", "detail": "", "last_run": None, "last_status": None},
+    },
+    "remediation_log": [],   # last 20 auto-fix actions
+}
+
+_HEALTH_CHECK_INTERVAL_HOURS = 6
+_diag_lock = threading.Lock()
+
+
+def _log_remediation(msg: str):
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    with _diag_lock:
+        _health_state["remediation_log"].append(f"[{ts}] {msg}")
+        if len(_health_state["remediation_log"]) > 20:
+            _health_state["remediation_log"] = _health_state["remediation_log"][-20:]
+    print(f"[HEALTH] {msg}")
+
+
+def _check_database(state: dict):
+    import time
+    try:
+        t0 = time.monotonic()
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        cur.close()
+        conn.close()
+        ms = round((time.monotonic() - t0) * 1000, 1)
+        state["database"] = {"status": "healthy", "detail": f"Responding in {ms}ms", "latency_ms": ms}
+    except Exception as e:
+        state["database"] = {"status": "critical", "detail": str(e)[:120], "latency_ms": None}
+
+
+def _check_cache(state: dict):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*), MAX(computation_date) FROM bouquet_cache WHERE is_active = TRUE")
+        count, latest = cur.fetchone()
+        cur.close()
+        conn.close()
+        if count == 0:
+            state["cache"] = {"status": "critical", "detail": "Cache is empty — run precompute.py", "bouquets": 0, "age_hours": None}
+            return
+        age_hours = None
+        if latest:
+            from datetime import date as _date
+            if hasattr(latest, "hour"):
+                # It's a datetime object
+                age_hours = round((datetime.now() - latest).total_seconds() / 3600, 1)
+            else:
+                # It's a date object — compute age in hours from days
+                age_hours = round((_date.today() - latest).days * 24.0, 1)
+        if age_hours is not None and age_hours > 30:
+            status = "degraded"
+            detail = f"{count} bouquets cached but stale ({age_hours:.0f}h old) — auto-refresh queued"
+        else:
+            status = "healthy"
+            detail = f"{count} bouquets cached, {age_hours:.0f}h old" if age_hours is not None else f"{count} bouquets cached"
+        state["cache"] = {"status": status, "detail": detail, "bouquets": count, "age_hours": age_hours}
+    except Exception as e:
+        state["cache"] = {"status": "critical", "detail": str(e)[:120], "bouquets": 0, "age_hours": None}
+
+
+def _check_nav_data(state: dict):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("SELECT MAX(nav_date) FROM nav_data")
+        latest = cur.fetchone()[0]
+        cur.close()
+        conn.close()
+        if not latest:
+            state["nav_data"] = {"status": "critical", "detail": "No NAV records found", "latest_date": None, "staleness_days": None}
+            return
+        from datetime import date
+        staleness = (date.today() - latest).days
+        if staleness == 0:
+            status, detail = "healthy", "NAV data is current (today)"
+        elif staleness == 1:
+            status, detail = "healthy", "NAV data from yesterday (normal — AMFI publishes end-of-day)"
+        elif staleness <= 3:
+            status, detail = "degraded", f"NAV data is {staleness} days old — refresh queued"
+        else:
+            status, detail = "critical", f"NAV data is {staleness} days old — pipeline may have failed"
+        state["nav_data"] = {"status": status, "detail": detail,
+                              "latest_date": str(latest), "staleness_days": staleness}
+    except Exception as e:
+        state["nav_data"] = {"status": "critical", "detail": str(e)[:120],
+                              "latest_date": None, "staleness_days": None}
+
+
+def _check_pipeline(state: dict):
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT pipeline_name, status, run_date, records_processed
+            FROM pipeline_log
+            ORDER BY created_at DESC LIMIT 1
+        """)
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if not row:
+            state["pipeline"] = {"status": "unknown", "detail": "No pipeline runs logged yet",
+                                  "last_run": None, "last_status": None}
+            return
+        name, status, run_date, records = row
+        p_status = "healthy" if status == "success" else "degraded"
+        state["pipeline"] = {
+            "status":      p_status,
+            "detail":      f"{name} — {status} on {run_date} ({records} records)",
+            "last_run":    str(run_date),
+            "last_status": status,
+        }
+    except Exception as e:
+        state["pipeline"] = {"status": "degraded", "detail": str(e)[:120],
+                              "last_run": None, "last_status": None}
+
+
+def _auto_heal(component_state: dict):
+    """Trigger remediation for fixable failures."""
+    cache = component_state.get("cache", {})
+    nav   = component_state.get("nav_data", {})
+
+    # Heal stale cache — run precompute in background thread
+    if cache.get("status") == "degraded":
+        _log_remediation("Cache stale — auto-triggering precompute for horizons [5,7,10]")
+        def _bg_precompute():
+            try:
+                for h, c in [(7, 16), (5, 14), (10, 16)]:
+                    run_precomputation(horizon_years=h, target_cagr=c)
+                _log_remediation("Auto-precompute complete")
+            except Exception as e:
+                _log_remediation(f"Auto-precompute failed: {e}")
+        threading.Thread(target=_bg_precompute, daemon=True).start()
+
+    # Heal stale NAV data — re-run ingestion via subprocess
+    if nav.get("staleness_days") and nav["staleness_days"] >= 2:
+        _log_remediation(f"NAV data {nav['staleness_days']} days old — auto-triggering ingestion")
+        def _bg_nav():
+            import subprocess, os, sys
+            try:
+                venv_python = os.path.join(os.path.expanduser("~/fundguldasta"), "venv", "bin", "python3")
+                script = os.path.join(os.path.expanduser("~/fundguldasta"), "data", "nav_ingestion.py")
+                result = subprocess.run(
+                    [venv_python, script], capture_output=True, text=True,
+                    timeout=180, cwd=os.path.expanduser("~/fundguldasta"),
+                )
+                status = "ok" if result.returncode == 0 else f"exit {result.returncode}"
+                _log_remediation(f"Auto NAV ingestion {status}")
+            except Exception as e:
+                _log_remediation(f"Auto NAV ingestion failed: {e}")
+        threading.Thread(target=_bg_nav, daemon=True).start()
+
+
+def _run_diagnostics():
+    """Run all health checks, update _health_state, trigger auto-heal if needed."""
+    components = {}
+    _check_database(components)
+    _check_cache(components)
+    _check_nav_data(components)
+    _check_pipeline(components)
+
+    # Derive overall status
+    statuses = [c["status"] for c in components.values()]
+    if "critical" in statuses:
+        overall = "critical"
+    elif "degraded" in statuses:
+        overall = "degraded"
+    elif all(s == "healthy" for s in statuses):
+        overall = "healthy"
+    else:
+        overall = "unknown"
+
+    with _diag_lock:
+        _health_state["components"] = components
+        _health_state["status"]     = overall
+        _health_state["last_check"] = datetime.now().isoformat()
+        _health_state["next_check"] = (
+            datetime.now() + __import__("datetime").timedelta(hours=_HEALTH_CHECK_INTERVAL_HOURS)
+        ).isoformat()
+
+    print(f"[HEALTH] Diagnostic complete — overall: {overall.upper()}")
+    for name, comp in components.items():
+        print(f"[HEALTH]   {name}: {comp['status']} — {comp['detail']}")
+
+    # Auto-heal fixable failures
+    _auto_heal(components)
+    return overall
+
+
+def _health_loop():
+    """Background thread: initial check after 45s, then every 6 hours."""
+    import time
+    time.sleep(45)   # let DB pool and startup hooks settle
+    while True:
+        try:
+            _run_diagnostics()
+        except Exception as e:
+            print(f"[HEALTH] Diagnostic loop error: {e}")
+        time.sleep(_HEALTH_CHECK_INTERVAL_HOURS * 3600)
+
+
+# Start health loop as daemon thread at import time
+_health_thread = threading.Thread(target=_health_loop, daemon=True, name="health-loop")
+_health_thread.start()
+
+# ══════════════════════════════════════════════════════════════════════════════
+_fund_universe_count = None
+
+def _get_fund_universe_count():
+    """Returns count of direct-plan equity funds in fund_metadata. Cached after first call."""
+    global _fund_universe_count
+    if _fund_universe_count is None:
+        try:
+            conn = get_db()
+            cur = conn.cursor()
+            cur.execute("SELECT COUNT(*) FROM fund_metadata")
+            _fund_universe_count = cur.fetchone()[0]
+            cur.close()
+            conn.close()
+        except Exception:
+            _fund_universe_count = 0
+    return _fund_universe_count
 
 def get_latest_cache(archetype_id, horizon_years):
     conn = get_db()
@@ -70,6 +335,38 @@ def get_latest_cache(archetype_id, horizon_years):
     cursor.close()
     conn.close()
     return row
+
+
+def _enrich_funds_with_meta(funds):
+    """Add expense_ratio, aum_crores, manager names from DB to cached fund list."""
+    if not funds:
+        return funds
+    conn = get_db()
+    cur = conn.cursor()
+    codes = [str(f.get('scheme_code', '')) for f in funds]
+    placeholders = ','.join(['%s'] * len(codes))
+    cur.execute(
+        f'SELECT scheme_code, expense_ratio, aum_crores FROM fund_metadata WHERE scheme_code IN ({placeholders})',
+        codes
+    )
+    meta_map = {str(r[0]): {'expense_ratio': float(r[1]) if r[1] else None, 'aum_crores': float(r[2]) if r[2] else None} for r in cur.fetchall()}
+    cur.execute(
+        f'SELECT scheme_code, string_agg(manager_name, \', \' ORDER BY appointment_date) FROM fund_managers WHERE scheme_code IN ({placeholders}) AND is_current = true GROUP BY scheme_code',
+        codes
+    )
+    mgr_map = {str(r[0]): r[1] for r in cur.fetchall()}
+    cur.close(); conn.close()
+    result = []
+    for f in funds:
+        code = str(f.get('scheme_code', ''))
+        enriched = dict(f)
+        if code in meta_map:
+            enriched['expense_ratio'] = meta_map[code]['expense_ratio']
+            enriched['aum_crores'] = meta_map[code]['aum_crores']
+        if code in mgr_map:
+            enriched['managers'] = mgr_map[code]
+        result.append(enriched)
+    return result
 
 
 def get_nearest_horizon(requested_horizon):
@@ -113,8 +410,66 @@ class CurateRequest(BaseModel):
 class CustomizeRequest(BaseModel):
     archetype_id: str
     replacement_fund_code: str
+    replaced_fund_code: Optional[str] = None
     horizon_years: int = 7
     target_cagr: float = 16.0
+
+
+# ── PROS DERIVATION ──────────────────────────────────────────
+
+def _compute_pros(funds, metrics_dict, confidence, overlap, stress_test):
+    """Derive 4-5 human-readable strength points from cached bouquet data."""
+    pros = []
+
+    # Tier quality
+    tier1 = sum(1 for f in funds if f.get('tier') == 1)
+    if tier1 >= 4:
+        pros.append(f"{tier1} of {len(funds)} funds have 7+ years of verified history — deep, reliable scoring foundation")
+    elif tier1 >= 2:
+        pros.append(f"{tier1} of {len(funds)} funds are Tier 1 — enough history for statistically meaningful composite scores")
+
+    # CAGR vs Nifty
+    for period in ['7 Yr', '10 Yr', '5 Yr']:
+        m = metrics_dict.get(period, {})
+        bouquet_cagr = m.get('bouquet')
+        nifty = m.get('nifty50')
+        if bouquet_cagr and nifty:
+            delta = round(bouquet_cagr - nifty, 1)
+            if delta > 1:
+                pros.append(f"Historical {period} CAGR of {bouquet_cagr}% — {delta}% ahead of Nifty 50 ({nifty}%). Demonstrated alpha over the index")
+            break
+
+    # Correlation / diversification
+    avg_corr = overlap.get('avgCorrelation', 1.0) if isinstance(overlap, dict) else 1.0
+    if avg_corr < 0.90:
+        pros.append(f"Average fund correlation {avg_corr:.2f} — lower than most Indian equity portfolios. Genuine style diversification across categories")
+
+    # Strongest confidence dimension
+    factors = confidence.get('factors', {}) if isinstance(confidence, dict) else {}
+    factor_scores = [(k, v.get('score', 0)) for k, v in factors.items() if isinstance(v, dict)]
+    if factor_scores:
+        best_k, best_v = max(factor_scores, key=lambda x: x[1])
+        labels = {
+            'rolling_consistency': f"Rolling consistency score {best_v:.0f}/100 — bouquet has regularly beaten benchmark across multiple time windows",
+            'category_tailwind': f"Category tailwind score {best_v:.0f}/100 — SEBI categories represented are in a favourable long-run cycle",
+            'cost_efficiency': f"Cost efficiency score {best_v:.0f}/100 — weighted expense ratio is highly competitive for direct plans",
+            'downside_protection': f"Downside protection score {best_v:.0f}/100 — bouquet cushions losses better than average in volatile markets",
+            'manager_stability': f"Manager stability score {best_v:.0f}/100 — fund management continuity adds predictability to scoring",
+        }
+        label = labels.get(best_k, f"{best_k.replace('_', ' ').title()} scores {best_v:.0f}/100")
+        if best_v >= 50:
+            pros.append(label)
+
+    # Post-crisis resilience
+    periods = stress_test.get('periods', []) if isinstance(stress_test, dict) else []
+    best_recovery = max((p.get('postRecoveryCAGR', 0) for p in periods), default=0)
+    if best_recovery > 14:
+        pros.append(f"Post-crisis recovery up to {best_recovery}% CAGR — historical evidence of resilience after sharp market drawdowns")
+
+    # Direct plans (always true)
+    pros.append("All direct plans — zero distributor commission. Every rupee of return compounds fully for the investor")
+
+    return pros[:5]
 
 
 # ── ENDPOINTS ────────────────────────────────────────────────
@@ -125,21 +480,37 @@ class CustomizeRequest(BaseModel):
 
 @app.get("/health")
 def health_check():
-    """Health check endpoint — verifies API and database are up."""
-    try:
-        conn = get_db()
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM bouquet_cache WHERE is_active = TRUE")
-        count = cursor.fetchone()[0]
-        cursor.close()
-        conn.close()
+    """Fast health check — returns live platform health state."""
+    state = _health_state
+    status_code_map = {"healthy": 200, "degraded": 200, "critical": 503, "starting": 200, "unknown": 200}
+    cache = state["components"].get("cache", {})
+    return {
+        "status":          state["status"],
+        "cached_bouquets": cache.get("bouquets", 0),
+        "last_check":      state["last_check"],
+        "timestamp":       datetime.now().isoformat(),
+    }
+
+
+@app.get("/api/health/full")
+def health_full():
+    """Deep diagnostic — all component statuses, remediation log, next check time."""
+    with _diag_lock:
         return {
-            "status": "healthy",
-            "cached_bouquets": count,
-            "timestamp": datetime.now().isoformat(),
+            "status":          _health_state["status"],
+            "last_check":      _health_state["last_check"],
+            "next_check":      _health_state["next_check"],
+            "components":      _health_state["components"],
+            "remediation_log": _health_state["remediation_log"][-10:],
+            "check_interval_hours": _HEALTH_CHECK_INTERVAL_HOURS,
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/health/run-now")
+def trigger_diagnostic():
+    """Force an immediate diagnostic run (bypasses 6-hour schedule)."""
+    threading.Thread(target=_run_diagnostics, daemon=True).start()
+    return {"status": "triggered", "message": "Diagnostic running — check /api/health/full in 10s"}
 
 ARCHETYPE_CAGR_RANGES = {
     'steady':     (14, 16),
@@ -221,7 +592,7 @@ def curate_bouquets(request: CurateRequest):
         if not row:
             continue
 
-        funds = json.loads(row[0])
+        funds = _enrich_funds_with_meta(json.loads(row[0]))
         metrics = json.loads(row[1])
         confidence = json.loads(row[2])
         stress = json.loads(row[3])
@@ -243,6 +614,7 @@ def curate_bouquets(request: CurateRequest):
         meta = ARCHETYPE_META[arch_id]
 
         rel_dist, rel_label = _archetype_relevance(arch_id, implied_cagr or 16.0)
+        pros = _compute_pros(funds, metrics, confidence, overlap, stress)
         archetypes.append({
             'id':                   arch_id,
             'icon':                 ICONS[arch_id],
@@ -257,6 +629,7 @@ def curate_bouquets(request: CurateRequest):
             'stressTest':           stress,
             'overlap':              overlap,
             'methodology':          methodology,
+            'pros':                 pros,
             'devils':               devils,
             'comparator':           comparator,
             'realisticAssessment':  advisory,
@@ -279,7 +652,7 @@ def curate_bouquets(request: CurateRequest):
         'impliedCAGR':              implied_cagr,
         'archetypes':               archetypes,
         'computedAt':               datetime.now().isoformat(),
-        'fundUniverse':             331,
+        'fundUniverse':             _get_fund_universe_count(),
         'combinationsEvaluated':    48420,
         'horizonUsed':              closest_horizon,
         'horizonApproximate':       horizon_approximate,
@@ -341,69 +714,128 @@ def get_overlap(archetype_id: str, horizonYears: int = Query(default=7)):
 
 @app.get("/api/bouquets/{archetype_id}/freshness")
 def get_freshness(archetype_id: str):
-    """Returns data currency status for all pipeline sources."""
+    """Returns data currency status with cadence context for each source."""
     conn = get_db()
     cursor = conn.cursor()
-
     cursor.execute("""
-        SELECT pipeline_name, MAX(run_date) as last_run, status
+        SELECT pipeline_name, MAX(run_date) as last_run
         FROM pipeline_log
-        GROUP BY pipeline_name, status
-        ORDER BY pipeline_name
+        WHERE status = 'success'
+        GROUP BY pipeline_name
     """)
-    pipeline_rows = cursor.fetchall()
+    pipeline_map = {row[0]: row[1] for row in cursor.fetchall()}
+
+    cursor.execute("SELECT MAX(nav_date) FROM nav_data")
+    max_nav_date = (cursor.fetchone() or [None])[0]
     cursor.close()
     conn.close()
 
-    pipeline_map = {row[0]: row[1] for row in pipeline_rows if row[2] == 'success'}
+    today = date.today()
 
-    def days_ago(d):
+    def age_days(d):
+        return (today - d).days if d else 999
+
+    def age_label(d):
         if not d:
-            return "Unknown"
-        delta = (date.today() - d).days
-        if delta == 0:
-            return "Today"
-        elif delta == 1:
-            return "Yesterday"
-        else:
-            return f"{delta} days ago"
+            return "Never run"
+        delta = age_days(d)
+        if delta == 0: return "Today"
+        if delta == 1: return "Yesterday"
+        return f"{delta} days ago"
+
+    def stale_status(d, cadence_days):
+        """Return severity: ok / warn / stale based on cadence."""
+        if not d:
+            return 'stale'
+        delta = age_days(d)
+        if delta <= cadence_days:
+            return 'ok'
+        if delta <= cadence_days * 2:
+            return 'warn'
+        return 'stale'
+
+    nav_date  = max_nav_date
+    nav_pipe  = pipeline_map.get('nav_ingestion')
+    bench_date = pipeline_map.get('benchmark_ingestion')
+    mgr_date  = pipeline_map.get('manager_change_detection')
+    cat_date  = pipeline_map.get('manager_ingestion')
+    cache_date = pipeline_map.get('precompute')
+
+    # Nav and benchmark: daily cadence (weekdays). Allow 3 days for weekends.
+    nav_status   = stale_status(nav_date,   3)
+    bench_status = stale_status(bench_date, 3)
+    # Manager and category: weekly cadence (SID documents update infrequently).
+    mgr_status  = stale_status(mgr_date,  7)
+    cat_status  = stale_status(cat_date,  7)
+    # Bouquet cache: daily cadence (rebuilt after each NAV update).
+    cache_status = stale_status(cache_date, 3)
+
+    overall = 'good'
+    if any(s == 'stale' for s in [nav_status, bench_status, cache_status]):
+        overall = 'degraded'
+    elif any(s == 'warn' for s in [nav_status, bench_status, mgr_status, cat_status, cache_status]):
+        overall = 'warn'
 
     sources = [
         {
             'name': 'NAV & Return Data',
             'source': 'AMFI daily NAV file',
-            'lastUpdated': days_ago(pipeline_map.get('nav_ingestion')),
-            'isStale': False,
-        },
-        {
-            'name': 'Fund Manager Details',
-            'source': 'AMFI + AMC websites',
-            'lastUpdated': days_ago(pipeline_map.get('manager_change_detection')),
-            'isStale': False,
-        },
-        {
-            'name': 'Category & Metadata',
-            'source': 'AMFI scheme documents',
-            'lastUpdated': days_ago(pipeline_map.get('manager_ingestion')),
-            'isStale': False,
-        },
-        {
-            'name': 'Bouquet Cache',
-            'source': 'FundGuldasta computation engine',
-            'lastUpdated': days_ago(pipeline_map.get('precompute')),
-            'isStale': False,
+            'lastUpdated': age_label(nav_date),
+            'cadence': 'Updated daily (weekdays)',
+            'reason': None if nav_status == 'ok' else
+                      'AMFI publishes NAVs by 11 PM IST each business day. Weekend and holiday NAVs are not published — this is expected.' if age_days(nav_date or today) <= 4
+                      else 'NAV ingestion has not run in several days. Click Refresh Data to fetch the latest from AMFI.',
+            'status': nav_status,
         },
         {
             'name': 'Benchmark Index Data',
-            'source': 'NSE via Yahoo Finance',
-            'lastUpdated': days_ago(pipeline_map.get('benchmark_ingestion')),
-            'isStale': False,
+            'source': 'NSE / Yahoo Finance',
+            'lastUpdated': age_label(bench_date),
+            'cadence': 'Updated daily (weekdays)',
+            'reason': None if bench_status == 'ok' else
+                      'Benchmark data (Nifty 50, Nifty 500) follows market trading days. No data on weekends and exchange holidays.'
+                      if age_days(bench_date or today) <= 4
+                      else 'Benchmark ingestion has not run recently. Click Refresh Data to update.',
+            'status': bench_status,
+        },
+        {
+            'name': 'Bouquet Cache',
+            'source': 'FundGuldasta scoring engine',
+            'lastUpdated': age_label(cache_date),
+            'cadence': 'Rebuilt daily after NAV update',
+            'reason': None if cache_status == 'ok' else
+                      'Cache is rebuilt automatically each evening after NAV ingestion completes. If NAV is current, cache will refresh tonight.'
+                      if age_days(cache_date or today) <= 4
+                      else 'Bouquet cache is overdue for a rebuild. Click Refresh Data to trigger immediately.',
+            'status': cache_status,
+        },
+        {
+            'name': 'Fund Manager Details',
+            'source': 'AMFI + AMC scheme documents',
+            'lastUpdated': age_label(mgr_date),
+            'cadence': 'Refreshed weekly',
+            'reason': None if mgr_status == 'ok' else
+                      'Fund manager data is sourced from AMC Scheme Information Documents (SID), which are updated infrequently — typically only when a manager changes. Weekly refresh is sufficient for this data.'
+                      if mgr_status == 'warn'
+                      else 'Manager data refresh is overdue. This will be corrected in the next scheduled weekly run.',
+            'status': mgr_status,
+        },
+        {
+            'name': 'Category & Scheme Metadata',
+            'source': 'AMFI scheme master file',
+            'lastUpdated': age_label(cat_date),
+            'cadence': 'Refreshed weekly',
+            'reason': None if cat_status == 'ok' else
+                      'SEBI fund categories and scheme metadata change rarely — typically only when SEBI issues reclassification circulars or when AMCs merge/rename schemes. Weekly refresh is more than adequate for this data type.'
+                      if cat_status == 'warn'
+                      else 'Scheme metadata refresh is overdue. Will be corrected in the next weekly run.',
+            'status': cat_status,
         },
     ]
 
     return {
         'sources': sources,
-        'overallHealth': 'good',
+        'overallHealth': overall,
         'nextHoldingsUpdate': '7 days',
     }
 
@@ -466,6 +898,93 @@ def get_platform_stats():
     }
 
 
+
+# ── NAV REFRESH TRIGGER ───────────────────────────────────
+
+_last_trigger_time = None
+_COOLDOWN_MINUTES = 60
+
+
+@app.post("/api/pipeline/trigger-nav")
+def trigger_nav_refresh():
+    """
+    Manually trigger NAV ingestion + precompute refresh.
+    Enforces a 60-minute cooldown to prevent repeated runs.
+    Runs synchronously — completes in ~15-30 seconds.
+    """
+    global _last_trigger_time
+    from datetime import datetime, timedelta
+    import subprocess, sys, os
+
+    now = datetime.utcnow()
+    if _last_trigger_time and (now - _last_trigger_time) < timedelta(minutes=_COOLDOWN_MINUTES):
+        wait_mins = _COOLDOWN_MINUTES - int((now - _last_trigger_time).total_seconds() / 60)
+        return {
+            'status': 'cooldown',
+            'message': f'Already refreshed recently. Next refresh available in ~{wait_mins} min.',
+            'last_triggered': _last_trigger_time.isoformat(),
+        }
+
+    _last_trigger_time = now
+    results = {}
+
+    # Step 1 — NAV ingestion
+    try:
+        venv_python = os.path.join(os.path.expanduser('~/fundguldasta'), 'venv', 'bin', 'python3')
+        script = os.path.join(os.path.expanduser('~/fundguldasta'), 'data', 'nav_ingestion.py')
+        result = subprocess.run(
+            [venv_python, script],
+            capture_output=True, text=True, timeout=120,
+            cwd=os.path.expanduser('~/fundguldasta'),
+        )
+        last_line = [l for l in result.stdout.strip().splitlines() if l.strip()]
+        results['nav_ingestion'] = last_line[-1] if last_line else 'completed'
+        results['nav_status'] = 'ok' if result.returncode == 0 else 'error'
+    except Exception as e:
+        results['nav_ingestion'] = str(e)
+        results['nav_status'] = 'error'
+
+    # Step 2 — Precompute common horizons
+    try:
+        from engine.precompute import run_precomputation
+        cached = 0
+        for h, c in [(7, 16), (5, 14), (10, 16)]:
+            try:
+                run_precomputation(horizon_years=h, target_cagr=c)
+                cached += 1
+            except Exception:
+                pass
+        results['precompute'] = f'{cached}/3 horizons refreshed'
+        results['precompute_status'] = 'ok' if cached > 0 else 'error'
+    except Exception as e:
+        results['precompute'] = str(e)
+        results['precompute_status'] = 'error'
+
+    # Step 3 — Return updated freshness
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT MAX(nav_date) FROM nav_data")
+    max_nav = cursor.fetchone()[0]
+    cursor.close()
+    conn.close()
+
+    from datetime import date as date_cls
+    delta = (date_cls.today() - max_nav).days if max_nav else None
+    if delta == 0:
+        nav_label = 'Today'
+    elif delta == 1:
+        nav_label = 'Yesterday'
+    else:
+        nav_label = f'{delta} days ago' if delta else 'Unknown'
+
+    return {
+        'status': 'ok',
+        'triggered_at': now.isoformat(),
+        'results': results,
+        'nav_data_through': nav_label,
+        'nav_date': str(max_nav) if max_nav else None,
+    }
+
 # ── FUND CUSTOMIZATION ENDPOINTS ─────────────────────────────
 
 @app.get("/api/funds/search")
@@ -511,8 +1030,28 @@ def customize_bouquet(request: CustomizeRequest):
     Returns comparison of original vs replacement fund plus estimated impact.
     """
     try:
-        # Find which fund to replace
-        slot = find_replacement_slot(request.archetype_id, request.replacement_fund_code)
+        # Use user-specified fund to replace, or determine algorithmically
+        if request.replaced_fund_code:
+            from engine.fund_replacement import ARCHETYPE_FUNDS, VERIFIED_FUNDS
+            arch_funds = dict(ARCHETYPE_FUNDS.get(request.archetype_id, []))
+            replaced_weight = arch_funds.get(request.replaced_fund_code, 0)
+            fund_info = VERIFIED_FUNDS.get(request.replaced_fund_code, {})
+            if not fund_info:
+                conn_tmp = get_db()
+                cur_tmp = conn_tmp.cursor()
+                cur_tmp.execute("SELECT scheme_name, sebi_category FROM fund_metadata WHERE scheme_code=%s", (request.replaced_fund_code,))
+                row_tmp = cur_tmp.fetchone()
+                cur_tmp.close(); conn_tmp.close()
+                fund_info = {'name': row_tmp[0], 'category': row_tmp[1]} if row_tmp else {}
+            slot = {
+                'replaced_code': request.replaced_fund_code,
+                'replaced_name': fund_info.get('name', request.replaced_fund_code),
+                'replaced_weight': replaced_weight,
+                'replaced_category': fund_info.get('category', 'Unknown'),
+                'reason': 'User-selected replacement',
+            }
+        else:
+            slot = find_replacement_slot(request.archetype_id, request.replacement_fund_code)
 
         # Score both funds
         original_score = score_single_fund(
@@ -654,6 +1193,12 @@ class CustomBouquetRequest(BaseModel):
     targetCAGR: Optional[float] = None   # if None, we use projected CAGR from analysis
 
 
+class AIExplainRequest(BaseModel):
+    question: str
+    context_type: str = "bouquet"   # bouquet | metric | fund | general
+    context_data: dict = {}
+
+
 @app.post("/api/bouquets/analyse-custom")
 def analyse_custom_bouquet_endpoint(request: CustomBouquetRequest):
     """
@@ -684,3 +1229,121 @@ def analyse_custom_bouquet_endpoint(request: CustomBouquetRequest):
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── AI EXPLAIN ENDPOINT ─────────────────────────────────────────────────────
+
+AI_SYSTEM_PROMPT = """You are the FundGuldasta AI — an Indian mutual fund research and education assistant.
+FundGuldasta is a research-only platform. You help users understand bouquet data, fund metrics, and investment concepts.
+
+STRICT RULES:
+- Education only. Never say "buy this", "invest in X", "you should invest", or imply any buy/sell action.
+- Always say "based on historical data" when referencing past returns. Never imply future guarantees.
+- Use the numbers from the context precisely — do not invent figures.
+- Keep responses concise: 3-5 short paragraphs. Plain language. No unnecessary jargon.
+- Accurate Indian MF tax rules: LTCG 10% above Rs 1.25L/year for equity held over 1 year; STCG 20% if under 1 year; Nasdaq 100 FOF taxed as debt — income slab rate regardless of holding.
+- End every response with exactly this line: "— Research & education only. Not investment advice."
+- If asked outside Indian MF education scope, politely redirect.
+
+Key facts:
+- SEBI categories: Large Cap (top 100 mcap), Midcap (101-250), Small Cap (251+), Flexi Cap (any), Balanced Advantage (dynamic equity/debt)
+- Indian equity fund correlation: 0.85-0.98 is structural — market is tightly coupled
+- True diversifiers: International funds (Nasdaq 100 corr ~0.35 vs Indian equity), Balanced Advantage (dynamic allocation)
+- Direct plans: no distributor commission — standard for long-term investors
+- Tier 1: 7+ years NAV history. Tier 2: 5-7 years. Tier 3: under 5 years
+- Sortino ratio: risk-adjusted return using only downside volatility (more relevant than Sharpe for equity investors)
+- Composite score /100 dimensions: Return Consistency 25%, Risk-Adjusted Quality 20%, Downside Behaviour 20%, Manager Stability 15%, Portfolio Quality 10%, Forward Context 10%
+- Rebalancing: annual calendar + 5-point threshold trigger; SIP redirection preferred (no tax event)"""
+
+
+
+@app.post("/api/ai/explain")
+def ai_explain(request: AIExplainRequest):
+    """Stream educational AI explanation about bouquet data, metrics, or funds."""
+    import anthropic as ant
+    from fastapi.responses import StreamingResponse
+    import json as _json
+
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key or api_key == "your_api_key_here":
+        raise HTTPException(status_code=503, detail="AI feature not configured — add ANTHROPIC_API_KEY to config/.env")
+
+    client = ant.Anthropic(api_key=api_key)
+
+    ctx = request.context_data
+    ctx_summary = ""
+    NL = "\n"
+
+    if request.context_type == "bouquet" and ctx:
+        name = ctx.get("name", "this bouquet")
+        funds = ctx.get("funds", [])
+        fund_list = "; ".join(
+            f"{f.get('name','?')} ({f.get('weight','?')}%, score {f.get('composite_score','?')})"
+            for f in funds[:6]
+        )
+        cagr = ctx.get("cagrRange", ctx.get("projected_cagr", "N/A"))
+        conf = ctx.get("confidence", {})
+        conf_score = conf.get("overall_score", "N/A") if isinstance(conf, dict) else "N/A"
+        stress = ctx.get("stressTest", {})
+        crisis_cagr = stress.get("crisis_recovery_cagr", "N/A") if isinstance(stress, dict) else "N/A"
+        overlap = ctx.get("overlap", {})
+        avg_corr = overlap.get("avg_correlation", "N/A") if isinstance(overlap, dict) else "N/A"
+        metrics = ctx.get("metrics", {})
+        ctx_summary = (
+            "Archetype: " + str(name) + NL +
+            "Funds: " + str(fund_list) + NL +
+            "Historical CAGR range: " + str(cagr) + NL +
+            "Confidence score: " + str(conf_score) + "/100" + NL +
+            "Post-crisis recovery CAGR: " + str(crisis_cagr) + "%" + NL +
+            "Average inter-fund correlation: " + str(avg_corr) + NL
+        )
+        if metrics:
+            ctx_summary += (
+                "Bouquet CAGR (" + str(ctx.get("horizonYears", 7)) + "yr): " +
+                str(metrics.get("bouquet_cagr", "N/A")) + "%  " +
+                "Post-tax: " + str(metrics.get("post_tax_cagr", "N/A")) + "%  " +
+                "Real CAGR: " + str(metrics.get("real_cagr", "N/A")) + "%  " +
+                "vs Nifty 50: " + str(metrics.get("nifty_cagr", "N/A")) + "%" + NL
+            )
+        devils = ctx.get("devils", [])
+        if devils:
+            ctx_summary += "Known risks: " + "; ".join(devils[:3]) + NL
+
+    elif request.context_type == "metric" and ctx:
+        ctx_summary = (
+            "Metric: " + str(ctx.get("metric_name", "?")) + NL +
+            "Value: " + str(ctx.get("value", "?")) + NL +
+            "Context (fund/bouquet): " + str(ctx.get("entity_name", "?")) + NL +
+            "Category: " + str(ctx.get("category", "N/A")) + NL +
+            "Category benchmark: " + str(ctx.get("benchmark", "N/A")) + NL
+        )
+
+    elif request.context_type == "fund" and ctx:
+        dims = ctx.get("dimension_scores", {})
+        dim_text = "; ".join(str(k) + ": " + str(v) for k, v in dims.items())
+        ctx_summary = (
+            "Fund: " + str(ctx.get("name", "?")) + " — " + str(ctx.get("amc", "?")) + NL +
+            "Category: " + str(ctx.get("category", "?")) + ", Tier: " + str(ctx.get("tier", "?")) + NL +
+            "Composite score: " + str(ctx.get("composite_score", "?")) + "/100" + NL +
+            "Dimension scores: " + dim_text + NL +
+            "Rolling CAGR (" + str(ctx.get("horizon_years", 7)) + "yr): " + str(ctx.get("rolling_cagr", "N/A")) + "%" + NL +
+            "Expense ratio: " + str(ctx.get("expense_ratio", "N/A")) + "%" + NL
+        )
+
+    user_msg = ctx_summary + NL + "Question: " + request.question if ctx_summary else request.question
+
+    def generate():
+        try:
+            with client.messages.stream(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=600,
+                system=AI_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_msg}],
+            ) as stream:
+                for text in stream.text_stream:
+                    yield "data: " + _json.dumps({"text": text}) + "\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as exc:
+            yield "data: " + _json.dumps({"error": str(exc)}) + "\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")

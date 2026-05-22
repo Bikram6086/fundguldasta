@@ -1,0 +1,70 @@
+{
+  "nav": {
+    "title": "Fund Guldasta",
+    "tagline": "Mutual Fund Research. Bilkul seedha.",
+    "refresh": "Data taaza karo",
+    "language": "Bhasha"
+  },
+  "hero": {
+    "headline": "Algorithm jaanta hai — kaunse funds aapke paise ke layak hain.",
+    "subhead": "Bharat ka pehla Honest-by-Design Mutual Fund Research Platform",
+    "cta_return": "Target Return",
+    "cta_horizon": "Nivesh Avadhi",
+    "cta_build": "Mera Bouquet Banao",
+    "cta_byob": "Apna Bouquet Khud Banao",
+    "cta_advise": "✦ Guldasta Salahkar"
+  },
+  "bouquet": {
+    "composition": "Bouquet ki Banchat",
+    "direct_plans": "5 Funds · Direct Plans · Koi Commission Nahi",
+    "customize": "Iss bouquet ko customize karo",
+    "close_customize": "▲ Customization band karo",
+    "metrics": "Performance Numbers",
+    "confidence": "Bharosa Score",
+    "stress_test": "Stress Test",
+    "portfolio_analysis": "Portfolio Vishleshan",
+    "strengths_risks": "Khubiyaan aur Jokhim",
+    "rebalancing": "Rebalancing Guidelines",
+    "methodology": "Chunav ka Tarika",
+    "comparator": "Tulna kaise karta hai?"
+  },
+  "fund_card": {
+    "exit_load": "Exit load: 12 mahine ke andar nikalne par 1%",
+    "managed_by": "Manager:",
+    "ter": "TER:",
+    "aum": "AUM:"
+  },
+  "direct_vs_regular": {
+    "title": "Direct vs Regular Plan — Aap Kitna Bachate Ho",
+    "subtitle": "Aapka Faayda",
+    "extra_wealth": "Direct plan se zyada daulat",
+    "years": "saalon mein",
+    "disclaimer": "Regular plan mein distributor commission lagta hai 0.9–1.1%. FundGuldasta sirf direct plans recommend karta hai."
+  },
+  "advisor": {
+    "title": "Guldasta Salahkar",
+    "subtitle": "Claude AI se chalaya · Sirf MF Research aur Shiksha · Nivesh Salah Nahi",
+    "scope": "Guldasta Salahkar sirf Indian MF research aur education ke liye hai.",
+    "thinking": "Guldasta Salahkar soch raha hai",
+    "ask": "Salahkar se Pucho →",
+    "placeholder": "Kisi bhi fund, metric, SEBI category, tax rule, ya rebalancing ke baare mein pucho..."
+  },
+  "tools": {
+    "rebal": "Rebalancing Check",
+    "ltcg": "LTCG Calculator",
+    "goal": "Goal Salahkar",
+    "sip": "SIP Planner"
+  },
+  "byob": {
+    "title": "Apna Bouquet Khud Banao",
+    "subtitle": "Apne funds chuno, weight set karo, aur research-grade analysis pao.",
+    "analyse": "Mera Bouquet Analyse Karo",
+    "analysing": "Analyse ho raha hai..."
+  },
+  "common": {
+    "back": "← Wapas",
+    "loading": "Load ho raha hai...",
+    "error": "Kuch galat hua",
+    "not_advice": "Nivesh salah nahi · Sirf shiksha · Direct plans"
+  }
+}

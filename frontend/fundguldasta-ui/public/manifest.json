@@ -1,0 +1,36 @@
+{
+  "name": "FundGuldasta — Mutual Fund Research",
+  "short_name": "FundGuldasta",
+  "description": "India's Honest-by-Design Mutual Fund Research Platform. Algorithm-curated direct plan bouquets.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B0A10",
+  "theme_color": "#D4AF37",
+  "orientation": "portrait",
+  "categories": [
+    "finance",
+    "education"
+  ],
+  "lang": "en-IN",
+  "icons": [
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    },
+    {
+      "src": "/logo192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "prefer_related_applications": false
+}
