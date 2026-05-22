@@ -683,7 +683,7 @@ export default function App() {
         </div>
         <div className="tagline">Mutual Fund Research. Unfiltered.</div>
         <div className="gold-rule" />
-        <div className="sec-tag">India's First Honest-by-Design Mutual Fund Research Platform</div>
+        <div className="sec-tag">Honest-by-Design Mutual Fund Research</div>
         <h1 className="h1">Curated fund bouquets.<br /><em>Honest by design.</em></h1>
         <p className="sub">Two inputs. Four bouquet archetypes. Ten layers of transparent research. No commission. No false assurance.</p>
         {apiError && <div className="warn-box" style={{ maxWidth: 600, marginBottom: 20 }}>⚠️ {apiError}</div>}
@@ -782,7 +782,7 @@ export default function App() {
               <div className="about-builder-role">Builder & Researcher · 66 years of real-world experience</div>
               <div className="about-builder-body">
                 <p>FundGuldasta was built by <strong>Bikram</strong> — with 66 years of lived experience navigating markets, economic cycles, policy shifts, and the quiet erosion of savings that happens when people are given complexity instead of clarity.</p>
-                <p style={{ marginTop: 12 }}>The platform was not built to compete with fund houses, distributors, or fintechs. It was built because <strong>honest, accessible, language-agnostic mutual fund research</strong> did not exist for the ordinary Indian investor — and it should.</p>
+                <p style={{ marginTop: 12 }}>The platform was not built to compete with fund houses, distributors, or fintechs. It was built because <strong>honest, accessible, commission-free mutual fund research</strong> remained out of reach for the ordinary Indian investor — buried in jargon, sold as advice, or locked behind institutional access.</p>
                 <p style={{ marginTop: 12 }}>Every algorithm threshold, every data source, every word of explanatory copy has been calibrated against the question: <strong>"Would this genuinely help someone making their first SIP decision?"</strong></p>
               </div>
             </div>
