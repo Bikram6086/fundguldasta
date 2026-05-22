@@ -94,6 +94,22 @@ async function apiFundEligibility(schemeCode) {
   return res.json();
 }
 
+async function apiGetPreferences(token) {
+  const res = await fetch(`${API_BASE}/api/user/preferences`, {
+    headers: { "Authorization": `Bearer ${token}` },
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+async function apiUpdatePreferences(token, prefs) {
+  const res = await fetch(`${API_BASE}/api/user/preferences`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+    body: JSON.stringify(prefs),
+  });
+  return res.ok;
+}
+
 async function curateBouquets(params) {
   if (USE_LIVE_DATA) {
     return apiCall("POST", "/api/bouquets/curate", params);
@@ -401,6 +417,9 @@ export default function App() {
   const [wnSelected, setWnSelected] = useState(null);
   const [wnLoading, setWnLoading] = useState(false);
   const [wnData, setWnData] = useState(null);
+  const [lang, setLang] = useState('en');
+  const [userPrefs, setUserPrefs] = useState({ manager_alert: false, monthly_digest: false });
+  const [prefsSaving, setPrefsSaving] = useState(false);
   const [calcTab, setCalcTab] = useState('sip');
   const [calcPreFill, setCalcPreFill] = useState(null);
   const [sipMode, setSipMode] = useState('to-corpus');
@@ -420,6 +439,41 @@ export default function App() {
   const [pfAnalysis, setPfAnalysis] = useState(null);
   const [pfAnalysing, setPfAnalysing] = useState(false);
   const [pfError, setPfError] = useState(null);
+
+  const tr = (en, hi) => lang === 'hi' ? hi : en;
+
+  const HI_HERO = {
+    tagline: "म्यूचुअल फंड रिसर्च। बेबाक।",
+    secTag: "ईमानदारी से डिज़ाइन किया गया म्यूचुअल फंड रिसर्च",
+    headline: "चुने हुए फंड बुके।",
+    headlineEm: "ईमानदारी से।",
+    sub: "दो इनपुट। चार बुके आर्केटाइप। पारदर्शी रिसर्च की दस परतें। कोई कमीशन नहीं। कोई झूठा आश्वासन नहीं।",
+    tabReturn: "रिटर्न लक्ष्य",
+    tabCorpus: "कोष लक्ष्य",
+    tabSip: "SIP क्षमता",
+    labelCAGR: "लक्षित CAGR और निवेश अवधि",
+    labelCorpus: "लक्षित कोष और अवधि",
+    labelSIP: "मासिक SIP और अवधि",
+    labelLumpsum: "शुरुआती एकमुश्त राशि (₹ लाख)",
+    btnCurate: "मेरे बुके तैयार करें →",
+    btnBYOB: "✎ अपना बुके बनाएं",
+    btnPortfolio: "📊 पोर्टफोलियो विश्लेषण",
+    btnCalc: "📐 SIP और टैक्स कैलकुलेटर",
+    btnRisk: "🎯 मेरी जोखिम प्रोफाइल",
+    note: "केवल शोध और शिक्षा · निवेश सलाह नहीं · पिछला प्रदर्शन भविष्य की गारंटी नहीं · सभी डेटा AMFI से · कोई कमीशन नहीं · fundguldasta.com",
+    signIn: "साइन इन",
+    signOut: "साइन आउट",
+    saved: "सहेजे",
+    newSearch: "← नई खोज",
+    about: "परिचय",
+    buildOwn: "✎ खुद बनाएं",
+    myPortfolio: "📊 मेरा पोर्टफोलियो",
+    calculators: "📐 कैलकुलेटर",
+    compare: "⊟ तुलना",
+    fundExplorer: "🔍 फंड एक्सप्लोरर",
+    riskProfile: "🎯 जोखिम प्रोफाइल",
+    savedBouquets: "सहेजे हुए बुके",
+  };
 
   const impliedCAGR = (() => {
     if (mode === "return") return parseFloat(cagr) || null;
@@ -687,6 +741,7 @@ useEffect(() => {
     authMe(token).then(u => {
       setUser(u);
       apiListSaved(token).then(setSavedList).catch(() => {});
+      apiGetPreferences(token).then(p => p && setUserPrefs(p)).catch(() => {});
     }).catch(() => {
       localStorage.removeItem("fg_token");
     });
@@ -914,6 +969,16 @@ useEffect(() => {
     finally { setWnLoading(false); }
   };
 
+  const handleTogglePref = async (key) => {
+    const token = localStorage.getItem("fg_token");
+    if (!token) return;
+    const newVal = !userPrefs[key];
+    setUserPrefs(p => ({ ...p, [key]: newVal }));
+    setPrefsSaving(true);
+    await apiUpdatePreferences(token, { [key]: newVal });
+    setPrefsSaving(false);
+  };
+
   const handleAuthSubmit = async () => {
     setAuthError("");
     setAuthLoading(true);
@@ -1026,11 +1091,31 @@ useEffect(() => {
       <div style={{ background:G.sur, borderLeft:`1px solid ${G.bordG}`, width:360, maxWidth:"90vw",
         height:"100%", overflowY:"auto", padding:24, fontFamily:"Outfit,sans-serif", display:"flex", flexDirection:"column", gap:16 }}>
         <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-          <span style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:20, fontWeight:700 }}>Saved Bouquets</span>
+          <span style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:20, fontWeight:700 }}>{lang === 'hi' ? HI_HERO.savedBouquets : "Saved Bouquets"}</span>
           <button onClick={() => setSavedPanel(false)} style={{ background:"none", border:"none", color:G.slate, cursor:"pointer", fontSize:18 }}>&#x2715;</button>
         </div>
         {savedList.length === 0 && (
           <p style={{ color:G.slate, fontSize:13 }}>No saved bouquets yet. Click the bookmark icon on any archetype to save it.</p>
+        )}
+        {/* Alert preference toggles */}
+        {savedList.length > 0 && (
+          <div style={{ background:"rgba(255,255,255,0.03)", border:`1px solid rgba(255,255,255,0.07)`, borderRadius:10, padding:"12px 14px" }}>
+            <div style={{ fontSize:10, color:G.mist, letterSpacing:".08em", textTransform:"uppercase", marginBottom:10, fontWeight:600 }}>Alert Preferences {prefsSaving && <span style={{ color:G.gold }}>· saving…</span>}</div>
+            {[
+              ["manager_alert", "🔔 Manager change alerts", "Email me when a fund manager changes in my saved bouquets"],
+              ["monthly_digest", "📬 Monthly digest", "Receive a monthly summary of my saved bouquets"],
+            ].map(([key, label, desc]) => (
+              <div key={key} style={{ display:"flex", alignItems:"flex-start", gap:10, marginBottom:10, cursor:"pointer" }} onClick={() => handleTogglePref(key)}>
+                <div style={{ width:28, height:16, borderRadius:8, background: userPrefs[key] ? "rgba(212,175,55,0.6)" : "rgba(255,255,255,0.12)", position:"relative", flexShrink:0, marginTop:2, transition:"background .2s" }}>
+                  <div style={{ width:12, height:12, borderRadius:6, background:"#fff", position:"absolute", top:2, left: userPrefs[key] ? 14 : 2, transition:"left .2s" }} />
+                </div>
+                <div>
+                  <div style={{ fontSize:12, color: userPrefs[key] ? G.fog : G.mist, fontWeight: userPrefs[key] ? 500 : 400 }}>{label}</div>
+                  <div style={{ fontSize:10, color:G.slate, marginTop:2 }}>{desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
         {savedList.map(b => (
           <div key={b.id} style={{ background:G.elv, border:`1px solid ${G.bord}`, borderRadius:10, padding:"12px 16px", display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
@@ -1809,11 +1894,15 @@ useEffect(() => {
             <div style={{ fontSize: 13, color: "rgba(212,175,55,0.5)", fontFamily: "Outfit,sans-serif", marginTop: 4, letterSpacing: "0.06em", textTransform: "uppercase" }}>Direct Plans · Research &amp; Education</div>
           </div>
         </div>
-        <div className="tagline">Mutual Fund Research. Unfiltered.</div>
+        <div className="tagline">{lang === 'hi' ? HI_HERO.tagline : "Mutual Fund Research. Unfiltered."}</div>
         <div className="gold-rule" />
-        <div className="sec-tag">Honest-by-Design Mutual Fund Research</div>
-        <h1 className="h1">Curated fund bouquets.<br /><em>Honest by design.</em></h1>
-        <p className="sub">Two inputs. Four bouquet archetypes. Ten layers of transparent research. No commission. No false assurance.</p>
+        <div className="sec-tag">{lang === 'hi' ? HI_HERO.secTag : "Honest-by-Design Mutual Fund Research"}</div>
+        <h1 className="h1">{lang === 'hi' ? HI_HERO.headline : "Curated fund bouquets."}<br /><em>{lang === 'hi' ? HI_HERO.headlineEm : "Honest by design."}</em></h1>
+        <p className="sub">{lang === 'hi' ? HI_HERO.sub : "Two inputs. Four bouquet archetypes. Ten layers of transparent research. No commission. No false assurance."}</p>
+        <button onClick={() => setLang(lang === 'en' ? 'hi' : 'en')}
+          style={{ display:'inline-block', background:'rgba(255,255,255,0.05)', border:'1px solid rgba(255,255,255,0.12)', borderRadius:8, padding:'5px 14px', color:G.mist, fontFamily:'Outfit,sans-serif', fontSize:12, cursor:'pointer', letterSpacing:'.04em', marginBottom:8 }}>
+          {lang === 'en' ? 'हिंदी में पढ़ें' : 'Read in English'}
+        </button>
         {pwaPrompt && (
           <button
             onClick={() => { pwaPrompt.prompt(); pwaPrompt.userChoice.then(() => setPwaPrompt(null)); }}
@@ -1826,7 +1915,7 @@ useEffect(() => {
         {apiError && <div className="warn-box" style={{ maxWidth: 600, marginBottom: 20 }}>⚠️ {apiError}</div>}
         <div className="icard">
           <div className="tabs">
-            {[["return", "Return target"], ["corpus", "Corpus target"], ["sip", "SIP capacity"]].map(([id, lbl]) => (
+            {[["return", tr("Return target","रिटर्न लक्ष्य")], ["corpus", tr("Corpus target","कोष लक्ष्य")], ["sip", tr("SIP capacity","SIP क्षमता")]].map(([id, lbl]) => (
               <button key={id} className={`tab${mode === id ? " on" : ""}`} onClick={() => { setMode(id); setInputWarn(""); }}>{lbl}</button>
             ))}
           </div>
@@ -1889,12 +1978,12 @@ useEffect(() => {
             </>
           )}
           {inputWarn && <div className="warn-box">⚠️ {inputWarn}</div>}
-          <button className="btn-p" disabled={!isValid} onClick={handleFind}>Curate My Bouquets →</button>
-          <button className="byob-entry" style={{ marginTop: 8 }} onClick={() => setScreen("custom_builder")}>✎ Build Your Own Bouquet</button>
-          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.08)" }} onClick={() => setScreen("portfolio")}>📊 Analyse My Portfolio</button>
-          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.06)" }} onClick={() => { setCalcPreFill(null); setCalcTab('sip'); setScreen("calculators"); }}>📐 SIP & Tax Calculators</button>
-          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.04)" }} onClick={() => { handleQuizReset(); setQuizModal(true); }}>🎯 Find My Risk Profile</button>
-          <p className="note">Research & education only · Not investment advice · Past performance does not guarantee future returns<br />All fund data sourced from AMFI · No commission earned on any recommendation · fundguldasta.com</p>
+          <button className="btn-p" disabled={!isValid} onClick={handleFind}>{tr("Curate My Bouquets →","मेरे बुके तैयार करें →")}</button>
+          <button className="byob-entry" style={{ marginTop: 8 }} onClick={() => setScreen("custom_builder")}>{tr("✎ Build Your Own Bouquet", HI_HERO.btnBYOB)}</button>
+          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.08)" }} onClick={() => setScreen("portfolio")}>{tr("📊 Analyse My Portfolio", HI_HERO.btnPortfolio)}</button>
+          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.06)" }} onClick={() => { setCalcPreFill(null); setCalcTab('sip'); setScreen("calculators"); }}>{tr("📐 SIP & Tax Calculators", HI_HERO.btnCalc)}</button>
+          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.04)" }} onClick={() => { handleQuizReset(); setQuizModal(true); }}>{tr("🎯 Find My Risk Profile", HI_HERO.btnRisk)}</button>
+          <p className="note">{lang === 'hi' ? HI_HERO.note : "Research & education only · Not investment advice · Past performance does not guarantee future returns\nAll fund data sourced from AMFI · No commission earned on any recommendation · fundguldasta.com"}</p>
         </div>
       </div>
     </>
@@ -2908,7 +2997,11 @@ useEffect(() => {
             <div className="pill">{goalPill}</div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ fontSize: 11, color: G.mist }}>fundguldasta.com · Research & Education · Not Investment Advice</div>
+            <div style={{ fontSize: 11, color: G.mist }}>{tr("fundguldasta.com · Research & Education · Not Investment Advice","fundguldasta.com · केवल शोध और शिक्षा · निवेश सलाह नहीं")}</div>
+            <button onClick={() => setLang(lang === 'en' ? 'hi' : 'en')}
+              style={{ background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.1)", borderRadius:6, padding:"3px 10px", color:G.mist, fontSize:11, cursor:"pointer", fontFamily:"Outfit,sans-serif", letterSpacing:".04em", flexShrink:0 }}>
+              {lang === 'en' ? 'हिंदी' : 'EN'}
+            </button>
             {pwaPrompt && (
               <button
                 onClick={() => { pwaPrompt.prompt(); pwaPrompt.userChoice.then(() => setPwaPrompt(null)); }}
@@ -2930,7 +3023,7 @@ useEffect(() => {
                 <button onClick={handleSignOut}
                   style={{ background:"none", border:`1px solid ${G.bord}`, borderRadius:6, padding:"4px 10px",
                     color:G.slate, fontSize:11, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
-                  Sign Out
+                  {tr("Sign Out","साइन आउट")}
                 </button>
               </div>
             ) : (
@@ -2938,7 +3031,7 @@ useEffect(() => {
                 style={{ background:"rgba(212,175,55,0.1)", border:`1px solid rgba(212,175,55,0.35)`, borderRadius:8,
                   padding:"5px 16px", color:G.gold, fontSize:11, fontWeight:600, cursor:"pointer",
                   fontFamily:"Outfit,sans-serif", letterSpacing:".04em" }}>
-                Sign In
+                {tr("Sign In","साइन इन")}
               </button>
             )}
             <HealthIndicator />
@@ -3197,7 +3290,7 @@ useEffect(() => {
                     className={"ai-toggle-btn" + (aiPanelOpen ? " active" : "")}
                     onClick={() => { setAiPanelOpen(o => !o); setAiResponse(""); setAiError(null); setAiQuestion(""); }}
                   >
-                    <span style={{ fontSize: 14 }}>✶</span> {t("advisor.title")}
+                    <span style={{ fontSize: 14 }}>✶</span> {tr("advisor.title", "advisor.title")}
                   </button>
                   <button className="bo" title="Coming soon — save bouquets to your profile" disabled style={{ opacity: 0.45, cursor: "not-allowed" }}>💾 Save Research</button>
                   <button className="bg2" title="Coming soon — direct link to Kuvera for execution" disabled style={{ opacity: 0.45, cursor: "not-allowed" }}>Invest via Kuvera →</button>

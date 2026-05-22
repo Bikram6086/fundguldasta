@@ -2161,3 +2161,165 @@ async def fund_eligibility(scheme_code: str):
         "reasons_not_included": reasons_not_included,
         "lowest_bouquet_score": round(min(all_bouquet_fund_scores), 1) if all_bouquet_fund_scores else None,
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PRIORITY 15 — USER PREFERENCES (MANAGER ALERTS + MONTHLY DIGEST)
+# ══════════════════════════════════════════════════════════════════════════════
+
+class PreferencesUpdate(BaseModel):
+    manager_alert: Optional[bool] = None
+    monthly_digest: Optional[bool] = None
+
+
+def _require_user(authorization: Optional[str] = None):
+    """Extract user_id from Bearer token; raise 401 if invalid."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Not authenticated")
+    token = authorization[7:]
+    import hashlib, base64
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT id, email, display_name FROM users WHERE password_hash = %s", (token,))
+        row = cur.fetchone()
+    finally:
+        cur.close(); conn.close()
+    if not row:
+        raise HTTPException(401, "Invalid token")
+    return {"id": row[0], "email": row[1], "display_name": row[2]}
+
+
+@app.get("/api/user/preferences")
+async def get_preferences(authorization: Optional[str] = None):
+    from fastapi import Header
+    # Accept token via query param OR Authorization header
+    if not authorization:
+        raise HTTPException(401, "Not authenticated")
+    token = authorization.replace("Bearer ", "").strip()
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT manager_alert, monthly_digest FROM users WHERE password_hash = %s",
+            (token,)
+        )
+        row = cur.fetchone()
+    finally:
+        cur.close(); conn.close()
+    if not row:
+        raise HTTPException(401, "Invalid token")
+    return {"manager_alert": bool(row[0]), "monthly_digest": bool(row[1])}
+
+
+@app.patch("/api/user/preferences")
+async def update_preferences(body: PreferencesUpdate, authorization: Optional[str] = None):
+    if not authorization:
+        raise HTTPException(401, "Not authenticated")
+    token = authorization.replace("Bearer ", "").strip()
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT id FROM users WHERE password_hash = %s", (token,))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(401, "Invalid token")
+        user_id = row[0]
+        if body.manager_alert is not None:
+            cur.execute("UPDATE users SET manager_alert = %s WHERE id = %s", (body.manager_alert, user_id))
+        if body.monthly_digest is not None:
+            cur.execute("UPDATE users SET monthly_digest = %s WHERE id = %s", (body.monthly_digest, user_id))
+        conn.commit()
+    finally:
+        cur.close(); conn.close()
+    return {"ok": True}
+
+
+# ── Background: check manager changes and alert users ─────────────────────────
+def run_manager_change_alerts():
+    """Called by nightly pipeline. Finds manager changes in last 30 days, emails affected users."""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        # Recent confirmed manager changes
+        cur.execute("""
+            SELECT mcl.scheme_code, fm.scheme_name,
+                   mcl.old_manager_name, mcl.new_manager_name, mcl.detected_date
+            FROM manager_change_log mcl
+            JOIN fund_metadata fm ON fm.scheme_code = mcl.scheme_code
+            WHERE mcl.detected_date >= CURRENT_DATE - INTERVAL '30 days'
+            ORDER BY mcl.detected_date DESC
+        """)
+        changes = cur.fetchall()
+        if not changes:
+            cur.close(); conn.close()
+            return
+        change_codes = {str(c[0]) for c in changes}
+        change_map = {str(c[0]): c for c in changes}
+
+        # Users who want manager alerts
+        cur.execute("""
+            SELECT DISTINCT u.id, u.email, u.display_name
+            FROM users u
+            JOIN saved_bouquets sb ON sb.user_id = u.id
+            WHERE u.manager_alert = TRUE
+        """)
+        users = cur.fetchall()
+        cur.close(); conn.close()
+
+        for uid, email, display_name in users:
+            # Check their saved bouquets' funds
+            conn2 = get_db(); cur2 = conn2.cursor()
+            cur2.execute("SELECT snapshot_json FROM saved_bouquets WHERE user_id = %s", (uid,))
+            bqs = cur2.fetchall()
+            cur2.close(); conn2.close()
+            affected = []
+            for (snap,) in bqs:
+                if snap:
+                    funds = snap if isinstance(snap, list) else snap.get("funds", [])
+                    for f in funds:
+                        code = str(f.get("scheme_code", ""))
+                        if code in change_codes:
+                            c = change_map[code]
+                            affected.append({"fund_name": c[1], "old_manager": c[2], "new_manager": c[3], "detected_date": str(c[4])})
+            if affected:
+                from api.alerts import send_manager_change_alert
+                threading.Thread(target=send_manager_change_alert, args=(email, display_name, affected), daemon=True).start()
+    except Exception as e:
+        print(f"[P15] run_manager_change_alerts error: {e}")
+
+
+# ── Background: send monthly digests ─────────────────────────────────────────
+def run_monthly_digests():
+    """Called monthly. Emails digest to opted-in users."""
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT u.id, u.email, u.display_name FROM users u WHERE u.monthly_digest = TRUE
+        """)
+        users = cur.fetchall()
+        cur.close(); conn.close()
+        for uid, email, display_name in users:
+            conn2 = get_db(); cur2 = conn2.cursor()
+            cur2.execute("""
+                SELECT name, archetype_id, horizon_years, target_cagr
+                FROM saved_bouquets WHERE user_id = %s ORDER BY saved_at DESC
+            """, (uid,))
+            bouquets = [{"name": r[0], "archetype_id": r[1], "horizon_years": r[2], "target_cagr": r[3]} for r in cur2.fetchall()]
+            cur2.close(); conn2.close()
+            if bouquets:
+                from api.alerts import send_monthly_digest
+                threading.Thread(target=send_monthly_digest, args=(email, display_name, bouquets), daemon=True).start()
+    except Exception as e:
+        print(f"[P15] run_monthly_digests error: {e}")
+
+
+# Admin trigger endpoint (protected by API key in header)
+@app.post("/api/admin/send-digests")
+async def trigger_monthly_digests(x_admin_key: Optional[str] = None):
+    expected = os.getenv("ADMIN_KEY", "")
+    if not expected or x_admin_key != expected:
+        raise HTTPException(403, "Forbidden")
+    threading.Thread(target=run_monthly_digests, daemon=True).start()
+    return {"ok": True, "message": "Monthly digest dispatch started"}
