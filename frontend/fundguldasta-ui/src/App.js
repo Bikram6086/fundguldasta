@@ -2222,7 +2222,7 @@ export default function App() {
                   </div>
                   <div style={{ marginTop: 16, padding: '12px 14px', background: 'rgba(240,165,0,0.05)', border: '1px solid rgba(240,165,0,0.15)', borderRadius: 8, fontSize: 11, color: G.mist, lineHeight: 1.7 }}>
                     <strong style={{ color: '#F0A500', display: 'block', marginBottom: 4 }}>Data Transparency â Known Limitations</strong>
-                    â¢ <strong>Manager Stability score (15% weight)</strong>: Fund manager SID parser not yet built. This dimension uses conservative default scores (40â45/100) â will become fund-specific once SID data is ingested.<br />
+                    â¢ <strong>Manager Stability score (15% weight)</strong>: Fund-specific manager data is used for all 13 verified funds — sourced from SIDs and manually verified. Lead manager (earliest appointment = longest tenure) is the primary scoring input; co-manager data is cross-referenced.<br />
                     â¢ <strong>Stock-level portfolio overlap</strong>: Requires parsing AMFI monthly disclosure PDFs. Return correlation (20yr NAV data) is the proxy and is accurate.<br />
                     â¢ <strong>Expense ratio</strong>: Direct plan TER sourced from AMFI; verify current rates at amfiindia.com before investing.
                   </div>

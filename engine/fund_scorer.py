@@ -164,7 +164,7 @@ def score_manager_stability(scheme_code):
         SELECT manager_name, appointment_date, total_experience_years
         FROM fund_managers
         WHERE scheme_code = %s AND is_current = TRUE
-        ORDER BY id DESC LIMIT 1
+        ORDER BY appointment_date ASC LIMIT 1
     """, (scheme_code,))
     manager = cursor.fetchone()
     cursor.close()
