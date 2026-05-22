@@ -1363,3 +1363,130 @@ def ai_explain(request: AIExplainRequest):
             yield "data: " + _json.dumps({"error": str(exc)}) + "\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# AUTH ENDPOINTS
+# ══════════════════════════════════════════════════════════════════════════════
+
+import re as _re
+from api.auth import hash_password, verify_password, create_token, decode_token
+import jwt as _jwt
+
+
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    display_name: Optional[str] = None
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+def _get_user_from_token(authorization: str = None):
+    """Extract user from Bearer token header. Returns user dict or raises 401."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Authentication required")
+    token = authorization[7:]
+    try:
+        payload = decode_token(token)
+    except _jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Session expired — please log in again")
+    except _jwt.PyJWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    return payload
+
+
+@app.post("/api/auth/register")
+def register(request: RegisterRequest):
+    """Create a new user account."""
+    email = request.email.strip().lower()
+    if not _re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", email):
+        raise HTTPException(status_code=400, detail="Invalid email address")
+    if len(request.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("SELECT id FROM users WHERE email = %s", (email,))
+        if cur.fetchone():
+            raise HTTPException(status_code=409, detail="An account with this email already exists")
+        pw_hash = hash_password(request.password)
+        display = (request.display_name or "").strip() or email.split("@")[0]
+        cur.execute(
+            "INSERT INTO users (email, password_hash, display_name) VALUES (%s, %s, %s) RETURNING id",
+            (email, pw_hash, display),
+        )
+        user_id = cur.fetchone()[0]
+        conn.commit()
+    except HTTPException:
+        conn.rollback()
+        raise
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+    token = create_token(user_id, email)
+    return {"token": token, "user": {"id": user_id, "email": email, "display_name": display}}
+
+
+@app.post("/api/auth/login")
+def login(request: LoginRequest):
+    """Authenticate and return a JWT token."""
+    email = request.email.strip().lower()
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT id, password_hash, display_name FROM users WHERE email = %s", (email,)
+        )
+        row = cur.fetchone()
+        if not row or not verify_password(request.password, row[1]):
+            raise HTTPException(status_code=401, detail="Incorrect email or password")
+        user_id, _, display = row
+        cur.execute("UPDATE users SET last_login = NOW() WHERE id = %s", (user_id,))
+        conn.commit()
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        cur.close()
+        conn.close()
+
+    token = create_token(user_id, email)
+    return {"token": token, "user": {"id": user_id, "email": email, "display_name": display}}
+
+
+from fastapi import Header as _Header
+
+
+@app.get("/api/auth/me")
+def get_me(authorization: Optional[str] = _Header(default=None)):
+    """Return current user info from JWT. Requires Authorization: Bearer <token>."""
+    payload = _get_user_from_token(authorization)
+    user_id = int(payload["sub"])
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT id, email, display_name, created_at FROM users WHERE id = %s", (user_id,)
+        )
+        row = cur.fetchone()
+    finally:
+        cur.close()
+        conn.close()
+    if not row:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {
+        "id": row[0],
+        "email": row[1],
+        "display_name": row[2],
+        "created_at": str(row[3]),
+    }

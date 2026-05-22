@@ -21,6 +21,20 @@ async function apiCall(method, path, body = null) {
   return response.json();
 }
 
+async function authRegister(email, password, displayName) {
+  return apiCall("POST", "/api/auth/register", { email, password, display_name: displayName });
+}
+async function authLogin(email, password) {
+  return apiCall("POST", "/api/auth/login", { email, password });
+}
+async function authMe(token) {
+  const res = await fetch(`${API_BASE}/api/auth/me`, {
+    headers: { "Authorization": `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Session expired");
+  return res.json();
+}
+
 async function curateBouquets(params) {
   if (USE_LIVE_DATA) {
     return apiCall("POST", "/api/bouquets/curate", params);
@@ -293,6 +307,14 @@ export default function App() {
   const cbResultsRef = useRef(null);
   const [cbSelectedSwaps, setCbSelectedSwaps] = useState(new Set());
   const [pwaPrompt, setPwaPrompt] = useState(null);
+  const [user, setUser] = useState(null);
+  const [authModal, setAuthModal] = useState(false);
+  const [authTab, setAuthTab] = useState("login");
+  const [authEmail, setAuthEmail] = useState("");
+  const [authPassword, setAuthPassword] = useState("");
+  const [authName, setAuthName] = useState("");
+  const [authError, setAuthError] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
 
   const impliedCAGR = (() => {
     if (mode === "return") return parseFloat(cagr) || null;
@@ -554,6 +576,14 @@ useEffect(() => {
     return () => window.removeEventListener("beforeinstallprompt", handler);
   }, []);
 
+  useEffect(() => {
+    const token = localStorage.getItem("fg_token");
+    if (!token) return;
+    authMe(token).then(u => setUser(u)).catch(() => {
+      localStorage.removeItem("fg_token");
+    });
+  }, []);
+
   const handleAskAI = async (question, contextType, contextData) => {
     const q = question || aiQuestion;
     if (!q.trim()) return;
@@ -669,8 +699,95 @@ useEffect(() => {
     </div>
   );
 
+  const handleAuthSubmit = async () => {
+    setAuthError("");
+    setAuthLoading(true);
+    try {
+      let res;
+      if (authTab === "login") {
+        res = await authLogin(authEmail, authPassword);
+      } else {
+        res = await authRegister(authEmail, authPassword, authName);
+      }
+      localStorage.setItem("fg_token", res.token);
+      setUser(res.user);
+      setAuthModal(false);
+      setAuthEmail(""); setAuthPassword(""); setAuthName("");
+    } catch (e) {
+      setAuthError(e.message || "Something went wrong");
+    }
+    setAuthLoading(false);
+  };
+
+  const handleSignOut = () => {
+    localStorage.removeItem("fg_token");
+    setUser(null);
+  };
+
+  const AuthModal = () => (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:2000, display:"flex", alignItems:"center", justifyContent:"center" }}
+      onClick={e => { if (e.target === e.currentTarget) setAuthModal(false); }}>
+      <div style={{ background:G.sur, border:`1px solid ${G.bordG}`, borderRadius:16, padding:32, width:360, maxWidth:"90vw", fontFamily:"Outfit,sans-serif" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
+          <span style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:20, fontWeight:700 }}>
+            {authTab === "login" ? "Sign In" : "Create Account"}
+          </span>
+          <button onClick={() => setAuthModal(false)} style={{ background:"none", border:"none", color:G.slate, cursor:"pointer", fontSize:18 }}>&#x2715;</button>
+        </div>
+        <div style={{ display:"flex", gap:0, marginBottom:24, background:G.bg, borderRadius:8, padding:3 }}>
+          {["login","register"].map(tab => (
+            <button key={tab} onClick={() => { setAuthTab(tab); setAuthError(""); }}
+              style={{ flex:1, padding:"7px 0", border:"none", borderRadius:6, cursor:"pointer", fontSize:13, fontWeight:600, letterSpacing:".03em",
+                background: authTab===tab ? G.gold : "none", color: authTab===tab ? G.bg : G.slate, transition:"all .2s" }}>
+              {tab === "login" ? "Sign In" : "Register"}
+            </button>
+          ))}
+        </div>
+        {authTab === "register" && (
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:11, color:G.slate, marginBottom:5 }}>Display Name (optional)</div>
+            <input value={authName} onChange={e => setAuthName(e.target.value)}
+              placeholder="e.g. Bikram"
+              style={{ width:"100%", background:G.bg, border:`1px solid ${G.bord}`, borderRadius:8, padding:"9px 12px",
+                color:G.white, fontSize:14, fontFamily:"Outfit,sans-serif", boxSizing:"border-box" }} />
+          </div>
+        )}
+        <div style={{ marginBottom:14 }}>
+          <div style={{ fontSize:11, color:G.slate, marginBottom:5 }}>Email</div>
+          <input value={authEmail} onChange={e => setAuthEmail(e.target.value)} type="email"
+            placeholder="you@example.com"
+            onKeyDown={e => e.key==="Enter" && handleAuthSubmit()}
+            style={{ width:"100%", background:G.bg, border:`1px solid ${G.bord}`, borderRadius:8, padding:"9px 12px",
+              color:G.white, fontSize:14, fontFamily:"Outfit,sans-serif", boxSizing:"border-box" }} />
+        </div>
+        <div style={{ marginBottom:20 }}>
+          <div style={{ fontSize:11, color:G.slate, marginBottom:5 }}>Password</div>
+          <input value={authPassword} onChange={e => setAuthPassword(e.target.value)} type="password"
+            placeholder={authTab==="register" ? "Min 8 characters" : ""}
+            onKeyDown={e => e.key==="Enter" && handleAuthSubmit()}
+            style={{ width:"100%", background:G.bg, border:`1px solid ${G.bord}`, borderRadius:8, padding:"9px 12px",
+              color:G.white, fontSize:14, fontFamily:"Outfit,sans-serif", boxSizing:"border-box" }} />
+        </div>
+        {authError && <div style={{ color:G.ro, fontSize:12, marginBottom:14, background:G.roBg, padding:"8px 12px", borderRadius:6 }}>{authError}</div>}
+        <button onClick={handleAuthSubmit} disabled={authLoading}
+          style={{ width:"100%", padding:"11px 0", background:G.gold, border:"none", borderRadius:8,
+            color:G.bg, fontSize:14, fontWeight:700, fontFamily:"Outfit,sans-serif", cursor:authLoading?"not-allowed":"pointer", opacity:authLoading?0.7:1 }}>
+          {authLoading ? "Please wait…" : authTab==="login" ? "Sign In" : "Create Account"}
+        </button>
+        <div style={{ marginTop:14, textAlign:"center", fontSize:12, color:G.slate }}>
+          {authTab==="login" ? "No account? " : "Already have one? "}
+          <button onClick={() => { setAuthTab(authTab==="login"?"register":"login"); setAuthError(""); }}
+            style={{ background:"none", border:"none", color:G.gold, cursor:"pointer", fontSize:12, fontWeight:600 }}>
+            {authTab==="login" ? "Register" : "Sign In"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
     if (screen === "hero") return (
     <>
+      {authModal && <AuthModal />}
       <style>{css}</style>
       <div className="hero">
         <div className="mesh" />
@@ -1203,6 +1320,7 @@ useEffect(() => {
 
   return (
     <>
+      {authModal && <AuthModal />}
       <style>{css}</style>
       <div onClick={() => healthOpen && setHealthOpen(false)}>
         <div className="rbar">
@@ -1221,6 +1339,23 @@ useEffect(() => {
                 style={{ display:'flex', alignItems:'center', gap:6, background:'rgba(212,175,55,0.12)', border:'1px solid rgba(212,175,55,0.4)', borderRadius:8, padding:'5px 14px', color:'#D4AF37', fontFamily:'Outfit,sans-serif', fontSize:11, fontWeight:600, cursor:'pointer', letterSpacing:'.04em' }}
               >
                 ⬇ Install App
+              </button>
+            )}
+            {user ? (
+              <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                <span style={{ fontSize:11, color:G.gold, fontWeight:600 }}>{user.display_name}</span>
+                <button onClick={handleSignOut}
+                  style={{ background:"none", border:`1px solid ${G.bord}`, borderRadius:6, padding:"4px 10px",
+                    color:G.slate, fontSize:11, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                  Sign Out
+                </button>
+              </div>
+            ) : (
+              <button onClick={() => { setAuthTab("login"); setAuthModal(true); }}
+                style={{ background:"rgba(212,175,55,0.1)", border:`1px solid rgba(212,175,55,0.35)`, borderRadius:8,
+                  padding:"5px 16px", color:G.gold, fontSize:11, fontWeight:600, cursor:"pointer",
+                  fontFamily:"Outfit,sans-serif", letterSpacing:".04em" }}>
+                Sign In
               </button>
             )}
             <HealthIndicator />
