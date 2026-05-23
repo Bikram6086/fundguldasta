@@ -1279,12 +1279,14 @@ def generate_more_bouquets(request: GenerateMoreRequest):
                     "fromCache": True,
                 }
 
-        # Rounds 3+ (or cache miss): live computation with reduced pool
+        # Round 2 cache miss or rounds 3+: fast mode (NAV-count proxy, no scoring DB calls)
+        # Completes in ~5s. Quality is lower than scored but avoids Railway timeout.
         result = build_alternative_round(
             horizon_years=int(request.horizonYears),
             target_cagr=float(request.targetCAGR),
             excluded_codes=[str(c) for c in request.excludedFunds],
             round_number=request.roundNumber,
+            fast=True,
         )
 
         if result["pool_exhausted"] and not result["archetypes"]:

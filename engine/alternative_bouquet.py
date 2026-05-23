@@ -161,11 +161,19 @@ def fetch_eligible_pool(excluded_codes: list) -> list:
     return pool
 
 
-def _score_pool(pool: list, horizon_years: int, target_cagr: float, max_funds: int = 10) -> list:
-    """Score candidate funds. Caps at max_funds by NAV count to manage time."""
-    from engine.fund_scorer import compute_composite_score
-
+def _score_pool(pool: list, horizon_years: int, target_cagr: float, max_funds: int = 10, fast: bool = False) -> list:
+    """Score candidate funds. Caps at max_funds by NAV count to manage time.
+    fast=True: skip composite scoring, use NAV count as quality proxy (completes in <1s).
+    """
     candidates = sorted(pool, key=lambda x: x['nav_count'], reverse=True)[:max_funds]
+    if fast:
+        for fund in candidates:
+            # NAV count / 1750 gives a 0-100 proxy for data quality
+            fund['composite_score'] = round(min(fund['nav_count'] / 1750 * 100, 100), 1)
+            fund['dimension_scores'] = {}
+        return candidates
+
+    from engine.fund_scorer import compute_composite_score
     scored = []
     for fund in candidates:
         try:
@@ -261,16 +269,19 @@ def build_alternative_round(
     target_cagr: float,
     excluded_codes: list,
     round_number: int,
+    fast: bool = False,
 ) -> dict:
     """
     Build a full set of 4 alternative archetypes for the given round.
     Returns dict with archetypes list + pool_exhausted flag.
+    fast=True: skip composite scoring — uses NAV count as quality proxy.
+    Completes in ~5s vs ~10min. Used as fallback when cache is cold.
     """
     from engine.bouquet_builder import compute_bouquet_metrics, build_correlation_matrix
     from engine.confidence_scorer import compute_bouquet_confidence
     from engine.precompute import compute_bouquet_stress_test, compute_comparator
 
-    print(f"\n=== Alternative Bouquet Round {round_number} ===")
+    print(f"\n=== Alternative Bouquet Round {round_number} {'[FAST]' if fast else ''} ===")
     print(f"Excluding {len(excluded_codes)} previously shown funds")
 
     pool = fetch_eligible_pool(excluded_codes)
@@ -280,7 +291,7 @@ def build_alternative_round(
         return {'archetypes': [], 'pool_exhausted': True, 'pool_size': len(pool)}
 
     print("Scoring candidates...")
-    scored = _score_pool(pool, horizon_years, target_cagr)
+    scored = _score_pool(pool, horizon_years, target_cagr, fast=fast)
 
     archetypes = []
     round_used_codes = set(excluded_codes)
