@@ -70,13 +70,39 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# ── Slow-request logger ───────────────────────────────────────────────────────
+from starlette.middleware.base import BaseHTTPMiddleware
+import time as _time
+
+_SLOW_REQUEST_THRESHOLD_S = 5.0   # log any endpoint that takes longer than this
+
+class SlowRequestMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        t0 = _time.monotonic()
+        response = await call_next(request)
+        elapsed = _time.monotonic() - t0
+        if elapsed >= _SLOW_REQUEST_THRESHOLD_S:
+            print(
+                f"[SLOW] {request.method} {request.url.path} "
+                f"took {elapsed:.1f}s — review for optimisation"
+            )
+        return response
+
+app.add_middleware(SlowRequestMiddleware)
+
 # ── Connection pool — replaces per-request psycopg2.connect() ────────────────
 _pool = None
+_pool_lock = threading.Lock()
 
 def _get_pool():
     global _pool
     if _pool is None:
-        _pool = pg_pool.ThreadedConnectionPool(minconn=2, maxconn=10, **DB_CONFIG)
+        with _pool_lock:
+            if _pool is None:
+                # maxconn=10 per worker. With --workers 2 that is 20 total.
+                # Timescale Cloud Hobby allows 25 connections — safe headroom.
+                _pool = pg_pool.ThreadedConnectionPool(minconn=2, maxconn=10, **DB_CONFIG)
     return _pool
 
 class _PooledConn:
@@ -86,10 +112,21 @@ class _PooledConn:
     def cursor(self):   return self._conn.cursor()
     def commit(self):   return self._conn.commit()
     def rollback(self): return self._conn.rollback()
-    def close(self):    _get_pool().putconn(self._conn)
+    def close(self):
+        try:
+            _get_pool().putconn(self._conn)
+        except Exception:
+            try:
+                self._conn.close()
+            except Exception:
+                pass
 
 def get_db():
-    return _PooledConn(_get_pool().getconn())
+    try:
+        return _PooledConn(_get_pool().getconn())
+    except pg_pool.PoolError as e:
+        # Pool exhausted — surface a 503 rather than hanging
+        raise HTTPException(status_code=503, detail="DB connection pool exhausted. Retry in a moment.")
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -318,6 +355,52 @@ def _health_loop():
 # Start health loop as daemon thread at import time
 _health_thread = threading.Thread(target=_health_loop, daemon=True, name="health-loop")
 _health_thread.start()
+
+
+# ── Nightly precompute scheduler ──────────────────────────────────────────────
+def _nightly_scheduler():
+    """
+    Runs every night at 02:00 IST (20:30 UTC).
+    Refreshes bouquet_cache for all horizons so the cache is never stale.
+    Runs as a daemon thread — Railway keeps the process alive between requests.
+    With --workers 2 both workers start this thread; that's harmless (DB writes
+    are idempotent and the second run completes instantly from warm cache).
+    """
+    import time
+    from datetime import datetime, timedelta
+
+    # Delay startup by 60s so the pool and health thread initialise first
+    time.sleep(60)
+
+    while True:
+        now = datetime.utcnow()
+        # Next 20:30 UTC (= 02:00 IST)
+        target = now.replace(hour=20, minute=30, second=0, microsecond=0)
+        if now >= target:
+            target += timedelta(days=1)
+        sleep_secs = (target - now).total_seconds()
+        print(f"[NIGHTLY] Next precompute scheduled in {sleep_secs/3600:.1f}h at {target.strftime('%Y-%m-%d %H:%M UTC')}")
+        time.sleep(sleep_secs)
+
+        run_ts = datetime.utcnow().isoformat()
+        print(f"[NIGHTLY] Starting scheduled precomputation — {run_ts}")
+        try:
+            from engine.precompute import run_all_horizons
+            run_all_horizons(target_cagr=16.0)
+            print(f"[NIGHTLY] Precomputation complete — {datetime.utcnow().isoformat()}")
+        except Exception as e:
+            print(f"[NIGHTLY] Precomputation failed: {e}")
+            try:
+                threading.Thread(
+                    target=send_pipeline_failure_alert,
+                    args=('nightly_precompute', str(e)),
+                    daemon=True,
+                ).start()
+            except Exception:
+                pass
+
+_nightly_thread = threading.Thread(target=_nightly_scheduler, daemon=True, name="nightly-precompute")
+_nightly_thread.start()
 
 # ══════════════════════════════════════════════════════════════════════════════
 _fund_universe_count = None
