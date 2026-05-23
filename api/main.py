@@ -147,7 +147,7 @@ _health_state = {
     "remediation_log": [],   # last 20 auto-fix actions
 }
 
-_HEALTH_CHECK_INTERVAL_HOURS = 6
+_HEALTH_CHECK_INTERVAL_HOURS = 0.5   # 30 minutes — fast self-correction
 _diag_lock = threading.Lock()
 
 
@@ -219,10 +219,13 @@ def _check_nav_data(state: dict):
             return
         from datetime import date
         staleness = (date.today() - latest).days
-        if staleness == 0:
-            status, detail = "healthy", "NAV data is current (today)"
-        elif staleness == 1:
-            status, detail = "healthy", "NAV data from yesterday (normal — AMFI publishes end-of-day)"
+        if staleness <= 1:
+            # staleness <= 0: AMFI pre-published tomorrow's data (timezone edge) — healthy
+            # staleness == 1: yesterday's data — normal AMFI publishing cadence
+            status = "healthy"
+            detail = ("NAV data is current (today)" if staleness == 0
+                      else "NAV data from yesterday (normal — AMFI publishes end-of-day)" if staleness == 1
+                      else f"NAV data pre-published ({-staleness} day ahead) — healthy")
         elif staleness <= 3:
             status, detail = "degraded", f"NAV data is {staleness} days old — refresh queued"
         else:
@@ -341,7 +344,7 @@ def _run_diagnostics():
 
 
 def _health_loop():
-    """Background thread: initial check after 20s (enough for DB pool), then every 6 hours."""
+    """Background thread: initial check after 20s, then every 30 minutes."""
     import time
     time.sleep(20)
     while True:
@@ -349,6 +352,8 @@ def _health_loop():
             _run_diagnostics()
         except Exception as e:
             print(f"[HEALTH] Diagnostic loop error: {e}")
+            with _diag_lock:
+                _health_state["last_check"] = datetime.now().isoformat()
         time.sleep(_HEALTH_CHECK_INTERVAL_HOURS * 3600)
 
 

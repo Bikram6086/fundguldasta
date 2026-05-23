@@ -486,6 +486,7 @@ export default function App() {
   const [taxCalcType, setTaxCalcType] = useState('equity');
   const [taxCalcSlab, setTaxCalcSlab] = useState('30');
   const [goalBuckets, setGoalBuckets] = useState([]);
+  const [goalSelectedTemplate, setGoalSelectedTemplate] = useState('');
   const [goalCustomName, setGoalCustomName] = useState('');
   const [goalCustomCorpus, setGoalCustomCorpus] = useState('');
   const [goalCustomYears, setGoalCustomYears] = useState('');
@@ -2453,11 +2454,6 @@ useEffect(() => {
     }
 
     // ── Goal templates ──
-    const goals = [
-      { icon:"🎓", label:"Child's Education", desc:"Build a corpus for higher education fees", years:15, cagr:14, corpus:5000000, archetype:"Balanced Growther", color:"#4A9EFF" },
-      { icon:"🏠", label:"House Down Payment", desc:"Save for a home down payment", years:7, cagr:13, corpus:3000000, archetype:"Steady Compounder", color:"#27AE78" },
-      { icon:"🌅", label:"Retirement Corpus", desc:"Long-horizon wealth compounding", years:25, cagr:15, corpus:50000000, archetype:"Aggressive Achiever", color:G.gold },
-    ];
 
     const TabBtn = ({ id, label }) => (
       <button onClick={() => setCalcTab(id)} style={{
@@ -2609,6 +2605,28 @@ useEffect(() => {
 
             {/* ── GOAL PLANNER TAB ── */}
             {calcTab === 'goals' && (() => {
+              const GOAL_TEMPLATES = [
+                { icon:"🎓", label:"Child's School Education",       corpus:2000000,  years:12, cagr:12 },
+                { icon:"🎓", label:"Child's College Education",       corpus:5000000,  years:15, cagr:13 },
+                { icon:"✈️", label:"Child's Higher Education Abroad", corpus:15000000, years:16, cagr:14 },
+                { icon:"💍", label:"Child's Wedding",                 corpus:5000000,  years:18, cagr:13 },
+                { icon:"🏠", label:"Home Down Payment",               corpus:3000000,  years:7,  cagr:13 },
+                { icon:"🏡", label:"Home Loan Prepayment Fund",       corpus:2000000,  years:5,  cagr:12 },
+                { icon:"🏙️", label:"Second Home / Investment Property",corpus:8000000, years:12, cagr:14 },
+                { icon:"🌅", label:"Retirement Corpus",               corpus:50000000, years:25, cagr:15 },
+                { icon:"🔥", label:"Early Retirement (FIRE)",         corpus:50000000, years:15, cagr:16 },
+                { icon:"🚗", label:"New Car Purchase",                corpus:1500000,  years:5,  cagr:12 },
+                { icon:"✈️", label:"International Vacation Fund",     corpus:500000,   years:3,  cagr:11 },
+                { icon:"🏥", label:"Medical Emergency Fund",          corpus:1000000,  years:5,  cagr:11 },
+                { icon:"🛡️", label:"Emergency Fund (6 months)",       corpus:600000,   years:2,  cagr:8  },
+                { icon:"💼", label:"Business Startup Fund",           corpus:3000000,  years:7,  cagr:14 },
+                { icon:"👨‍👩‍👧", label:"Parent Care Corpus",           corpus:2000000,  years:8,  cagr:12 },
+                { icon:"💒", label:"Own Wedding",                     corpus:2000000,  years:5,  cagr:12 },
+                { icon:"🔨", label:"Home Renovation",                 corpus:1500000,  years:4,  cagr:11 },
+                { icon:"📚", label:"Higher Education / Executive MBA",corpus:3000000,  years:5,  cagr:12 },
+                { icon:"❤️", label:"Social Cause / Charitable Fund",  corpus:5000000,  years:20, cagr:13 },
+                { icon:"🎯", label:"Add your own goal",               corpus:null,     years:null, cagr:null },
+              ];
               const sipForGoal = (corpus, years, cagr) => {
                 const rg = cagr / 100 / 12;
                 const ng = years * 12;
@@ -2621,65 +2639,73 @@ useEffect(() => {
               }, 0);
               const addGoal = (g) => setGoalBuckets(prev => [...prev, { ...g, id: Date.now() }]);
               const removeGoal = (id) => setGoalBuckets(prev => prev.filter(b => b.id !== id));
-              const addCustomGoal = () => {
-                if (!goalCustomCorpus || !goalCustomYears || !goalCustomCagr) return;
+              const selectedTpl = GOAL_TEMPLATES.find(t => t.label === goalSelectedTemplate);
+              const previewCorpus = parseFloat(goalCustomCorpus) || 0;
+              const previewYears  = parseFloat(goalCustomYears)  || 0;
+              const previewCagr   = parseFloat(goalCustomCagr)   || 0;
+              const previewSip = sipForGoal(previewCorpus, previewYears, previewCagr);
+              const addFromForm = () => {
+                if (!previewCorpus || !previewYears || !previewCagr) return;
                 addGoal({
-                  icon: "🎯", label: goalCustomName || "Custom Goal",
-                  corpus: parseFloat(goalCustomCorpus), years: parseFloat(goalCustomYears),
-                  cagr: parseFloat(goalCustomCagr), archetype: "—", color: G.gold
+                  icon: selectedTpl?.icon || "🎯",
+                  label: goalCustomName || goalSelectedTemplate || "Custom Goal",
+                  corpus: previewCorpus, years: previewYears, cagr: previewCagr,
+                  archetype: "—", color: G.gold
                 });
-                setGoalCustomName(''); setGoalCustomCorpus(''); setGoalCustomYears(''); setGoalCustomCagr('');
+                setGoalCustomName(''); setGoalCustomCorpus(''); setGoalCustomYears('');
+                setGoalCustomCagr(''); setGoalSelectedTemplate('');
               };
               return (
                 <div>
-                  <p style={{ color:G.slate, fontSize:13, marginBottom:16, marginTop:0 }}>Build a multi-goal plan. Add any combination of goals and see the total SIP you need across all of them.</p>
+                  <p style={{ color:G.slate, fontSize:13, marginBottom:16, marginTop:0 }}>Build a multi-goal plan. Pick any goal from the list, adjust the defaults, and add it. See the total SIP you need across all your goals.</p>
 
-                  {/* Preset templates */}
-                  <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:10 }}>Goal Templates</div>
-                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(230px,1fr))", gap:12, marginBottom:24 }}>
-                    {goals.map(g => {
-                      const sip = sipForGoal(g.corpus, g.years, g.cagr);
-                      const colorRgb = g.color==='#4A9EFF'?'74,158,255':g.color==='#27AE78'?'39,174,120':'212,175,55';
-                      return (
-                        <div key={g.label} style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:14, padding:18 }}>
-                          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
-                            <span style={{ fontSize:24 }}>{g.icon}</span>
-                            <div>
-                              <div style={{ color:G.white, fontSize:14, fontWeight:700 }}>{g.label}</div>
-                              <div style={{ color:G.slate, fontSize:11 }}>{g.desc}</div>
-                            </div>
-                          </div>
-                          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6, marginBottom:12 }}>
-                            {[[`${g.years}yr`, 'Horizon'],[`${g.cagr}%`, 'CAGR'],[fmtCr(g.corpus),'Target']].map(([v,lbl])=>(
-                              <div key={lbl} style={{ background:G.elv, borderRadius:8, padding:"6px 8px", textAlign:"center" }}>
-                                <div style={{ color:g.color, fontSize:12, fontWeight:700, fontFamily:"JetBrains Mono,monospace" }}>{v}</div>
-                                <div style={{ color:G.mist, fontSize:10 }}>{lbl}</div>
-                              </div>
-                            ))}
-                          </div>
-                          {sip && <div style={{ fontSize:11, color:G.slate, marginBottom:10 }}>Monthly SIP needed: <span style={{ color:G.white, fontWeight:700, fontFamily:"JetBrains Mono,monospace" }}>{fmtINR(sip)}</span></div>}
-                          <button onClick={() => addGoal(g)}
-                            style={{ width:"100%", padding:"7px 0", background:`rgba(${colorRgb},0.12)`, border:`1px solid ${g.color}`, borderRadius:8, color:g.color, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
-                            + Add to My Plan
-                          </button>
+                  {/* Dropdown goal selector */}
+                  <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:14, padding:20, marginBottom:24 }}>
+                    <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:12 }}>Choose a Goal</div>
+                    <select
+                      value={goalSelectedTemplate}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setGoalSelectedTemplate(val);
+                        const tpl = GOAL_TEMPLATES.find(t => t.label === val);
+                        if (tpl && tpl.corpus !== null) {
+                          setGoalCustomName(tpl.label);
+                          setGoalCustomCorpus(String(tpl.corpus));
+                          setGoalCustomYears(String(tpl.years));
+                          setGoalCustomCagr(String(tpl.cagr));
+                        } else if (val === "Add your own goal") {
+                          setGoalCustomName(''); setGoalCustomCorpus('');
+                          setGoalCustomYears(''); setGoalCustomCagr('');
+                        }
+                      }}
+                      style={{ width:"100%", padding:"11px 14px", background:G.elv, border:`1px solid ${G.bord}`, borderRadius:8, color: goalSelectedTemplate ? G.white : G.mist, fontSize:13, fontFamily:"Outfit,sans-serif", marginBottom: goalSelectedTemplate ? 16 : 0, cursor:"pointer", outline:"none", appearance:"auto" }}>
+                      <option value="">— Select a goal —</option>
+                      {GOAL_TEMPLATES.map(t => (
+                        <option key={t.label} value={t.label}>{t.icon}  {t.label}</option>
+                      ))}
+                    </select>
+
+                    {goalSelectedTemplate && (
+                      <>
+                        <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr", gap:10, marginBottom:12 }}>
+                          <CalcInputRow label="Goal Name" value={goalCustomName} setter={setGoalCustomName} placeholder="Enter goal name" />
+                          <CalcInputRow label="Target Corpus (₹)" value={goalCustomCorpus} setter={setGoalCustomCorpus} placeholder="e.g. 5000000" />
+                          <CalcInputRow label="Years" value={goalCustomYears} setter={setGoalCustomYears} placeholder="e.g. 15" />
+                          <CalcInputRow label="CAGR (%)" value={goalCustomCagr} setter={setGoalCustomCagr} placeholder="e.g. 13" />
                         </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Custom goal form */}
-                  <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:18, marginBottom:24 }}>
-                    <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:12 }}>Add Custom Goal</div>
-                    <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr", gap:10, marginBottom:12 }}>
-                      <CalcInputRow label="Goal Name" value={goalCustomName} setter={setGoalCustomName} placeholder="e.g. Europe Trip" />
-                      <CalcInputRow label="Target (₹)" value={goalCustomCorpus} setter={setGoalCustomCorpus} placeholder="2000000" />
-                      <CalcInputRow label="Years" value={goalCustomYears} setter={setGoalCustomYears} placeholder="5" />
-                      <CalcInputRow label="CAGR (%)" value={goalCustomCagr} setter={setGoalCustomCagr} placeholder="14" />
-                    </div>
-                    <button onClick={addCustomGoal}
-                      style={{ padding:"8px 20px", background:"rgba(212,175,55,0.12)", border:`1px solid ${G.bordG}`, borderRadius:8, color:G.gold, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
-                      + Add to My Plan
-                    </button>
+                        {previewSip && (
+                          <div style={{ fontSize:12, color:G.slate, marginBottom:14, padding:"10px 14px", background:G.elv, borderRadius:8 }}>
+                            Monthly SIP needed: <span style={{ color:G.gold, fontWeight:700, fontFamily:"JetBrains Mono,monospace" }}>{fmtINR(previewSip)}/mo</span>
+                            {previewCorpus > 0 && <span style={{ color:G.mist, marginLeft:10 }}>to build {fmtCr(previewCorpus)} in {previewYears} yr at {previewCagr}% CAGR</span>}
+                          </div>
+                        )}
+                        <button onClick={addFromForm}
+                          disabled={!previewCorpus || !previewYears || !previewCagr}
+                          style={{ padding:"9px 24px", background: (previewCorpus && previewYears && previewCagr) ? "rgba(212,175,55,0.12)" : "transparent", border:`1px solid ${(previewCorpus && previewYears && previewCagr) ? G.bordG : G.bord}`, borderRadius:8, color: (previewCorpus && previewYears && previewCagr) ? G.gold : G.mist, fontSize:13, fontWeight:600, cursor: (previewCorpus && previewYears && previewCagr) ? "pointer" : "default", fontFamily:"Outfit,sans-serif" }}>
+                          + Add to My Plan
+                        </button>
+                      </>
+                    )}
                   </div>
 
                   {/* Active goal buckets */}
