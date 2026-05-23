@@ -1352,7 +1352,7 @@ useEffect(() => {
                       <div style={{ color:G.slate, fontSize:11, marginTop:2 }}>{f.category || f.sebi_category}</div>
                     </div>
                     <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
-                      <input type="number" min={1} max={100} value={f.allocation_pct}
+                      <input type="text" inputMode="numeric" value={f.allocation_pct}
                         onChange={e => handlePfAlloc(f.scheme_code, e.target.value)}
                         style={{ width:56, background:G.bg, border:`1px solid ${G.bordG}`, borderRadius:6, padding:"4px 8px", color:G.gold, fontSize:13, fontFamily:"Outfit,sans-serif", textAlign:"right" }} />
                       <span style={{ color:G.slate, fontSize:12 }}>%</span>
@@ -1535,7 +1535,7 @@ useEffect(() => {
           <div style={{ display:"flex", gap:12, marginBottom:20, flexWrap:"wrap" }}>
             <div style={{ display:"flex", alignItems:"center", gap:8, flex:1, minWidth:180 }}>
               <span style={{ fontSize:12, color:G.mist, whiteSpace:"nowrap" }}>Monthly SIP ₹</span>
-              <input type="number" value={btSip} onChange={e => setBtSip(Number(e.target.value))} min={1000} step={1000}
+              <input type="text" inputMode="numeric" value={btSip} onChange={e => setBtSip(Number(e.target.value))}
                 style={{ flex:1, background:G.elv, border:`1px solid rgba(255,255,255,0.1)`, borderRadius:8, padding:"6px 10px", color:G.white, fontFamily:"JetBrains Mono,monospace", fontSize:14, outline:"none" }} />
             </div>
             <div style={{ display:"flex", alignItems:"center", gap:8 }}>
@@ -2120,8 +2120,8 @@ useEffect(() => {
             <div style={{ marginBottom: 24 }}>
               <label className="lbl">Target CAGR & investment horizon (any value — we'll show you what it means)</label>
               <div className="row">
-                <div className="iw"><input className="inp" type="number" placeholder="16" min="1" max="50" value={cagr} onChange={e => setCAGR(e.target.value)} /><span className="sfx">% CAGR</span></div>
-                <div className="iw"><input className="inp" type="number" placeholder="7" min="1" max="40" value={yrs} onChange={e => setYrs(e.target.value)} /><span className="sfx">Years</span></div>
+                <div className="iw"><input className="inp" type="text" inputMode="numeric" placeholder="16" value={cagr} onChange={e => setCAGR(e.target.value)} /><span className="sfx">% CAGR</span></div>
+                <div className="iw"><input className="inp" type="text" inputMode="numeric" placeholder="7" value={yrs} onChange={e => setYrs(e.target.value)} /><span className="sfx">Years</span></div>
               </div>
               {cagr && yrs && (() => {
                 const c = parseFloat(cagr), y = parseFloat(yrs);
@@ -2145,13 +2145,13 @@ useEffect(() => {
               <div style={{ marginBottom: 14 }}>
                 <label className="lbl">Target corpus & horizon</label>
                 <div className="row">
-                  <div className="iw"><input className="inp inp-sm" type="number" placeholder="50" value={corpus} onChange={e => setCorpus(e.target.value)} /><span className="sfx" style={{ fontSize: 11 }}>₹ Lakhs</span></div>
-                  <div className="iw"><input className="inp inp-sm" type="number" placeholder="7" value={yrs} onChange={e => setYrs(e.target.value)} /><span className="sfx" style={{ fontSize: 11 }}>Yrs</span></div>
+                  <div className="iw"><input className="inp inp-sm" type="text" inputMode="numeric" placeholder="50" value={corpus} onChange={e => setCorpus(e.target.value)} /><span className="sfx" style={{ fontSize: 11 }}>₹ Lakhs</span></div>
+                  <div className="iw"><input className="inp inp-sm" type="text" inputMode="numeric" placeholder="7" value={yrs} onChange={e => setYrs(e.target.value)} /><span className="sfx" style={{ fontSize: 11 }}>Yrs</span></div>
                 </div>
               </div>
               <div style={{ marginBottom: 14 }}>
                 <label className="lbl">Starting lump sum (₹ Lakhs)</label>
-                <div className="iw"><input className="inp inp-sm" type="number" placeholder="10" value={ls} onChange={e => setLs(e.target.value)} /><span className="sfx" style={{ fontSize: 11 }}>₹ L</span></div>
+                <div className="iw"><input className="inp inp-sm" type="text" inputMode="numeric" placeholder="10" value={ls} onChange={e => setLs(e.target.value)} /><span className="sfx" style={{ fontSize: 11 }}>₹ L</span></div>
               </div>
               {impliedCAGR && impliedCAGR > 0 && (
                 <div className="implied">Implied CAGR: <strong style={{ color: G.gold }}>~{impliedCAGR}%</strong></div>
@@ -2163,8 +2163,8 @@ useEffect(() => {
               <div style={{ marginBottom: 14 }}>
                 <label className="lbl">Monthly SIP & horizon</label>
                 <div className="row">
-                  <div className="iw"><input className="inp inp-sm" type="number" placeholder="15000" value={sip} onChange={e => setSip(e.target.value)} /><span className="sfx" style={{ fontSize: 11 }}>/mo</span></div>
-                  <div className="iw"><input className="inp inp-sm" type="number" placeholder="10" value={yrs} onChange={e => setYrs(e.target.value)} /><span className="sfx" style={{ fontSize: 11 }}>Yrs</span></div>
+                  <div className="iw"><input className="inp inp-sm" type="text" inputMode="numeric" placeholder="15000" value={sip} onChange={e => setSip(e.target.value)} /><span className="sfx" style={{ fontSize: 11 }}>/mo</span></div>
+                  <div className="iw"><input className="inp inp-sm" type="text" inputMode="numeric" placeholder="10" value={yrs} onChange={e => setYrs(e.target.value)} /><span className="sfx" style={{ fontSize: 11 }}>Yrs</span></div>
                 </div>
               </div>
               {sip && yrs && (
@@ -2878,8 +2878,8 @@ useEffect(() => {
                   </div>
                   <input
                     className="byob-weight-input"
-                    type="number"
-                    min="1" max="100"
+                    type="text"
+                    inputMode="numeric"
                     value={f.weight}
                     onChange={e => handleCbWeightChange(f.scheme_code, e.target.value)}
                   />
@@ -2898,7 +2898,7 @@ useEffect(() => {
           <div className="byob-controls">
             <div className="byob-horizon-wrap">
               <span className="byob-horizon-label">Investment horizon</span>
-              <input className="byob-horizon-input" type="number" min="1" max="25" value={cbHorizon} onChange={e => setCbHorizon(e.target.value)} />
+              <input className="byob-horizon-input" type="text" inputMode="numeric" value={cbHorizon} onChange={e => setCbHorizon(e.target.value)} />
               <span className="byob-horizon-label">years</span>
             </div>
             <button
@@ -3527,7 +3527,7 @@ useEffect(() => {
                           <div style={{ flex: 1, fontSize: 12, color: G.fog, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</div>
                           <div style={{ fontSize: 10, color: G.mist, minWidth: 58, textAlign: 'right' }}>Target {f.weight}%</div>
                           <input
-                            type="number" placeholder="₹ value"
+                            type="text" inputMode="numeric" placeholder="₹ value"
                             value={rebalValues[f.scheme_code] || ''}
                             onChange={e => setRebalValues(v => ({ ...v, [String(f.scheme_code)]: e.target.value }))}
                             style={{ width: 110, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, padding: '5px 8px', color: G.white, fontFamily: "'JetBrains Mono',monospace", fontSize: 12, outline: 'none', textAlign: 'right' }}
@@ -3596,7 +3596,7 @@ useEffect(() => {
                         ].map(f => (
                           <div key={f.key}>
                             <div style={{ fontSize: 10, color: G.mist, marginBottom: 4 }}>{f.label}</div>
-                            <input type="number" value={ltcgInputs[f.key] || ''}
+                            <input type="text" inputMode="numeric" value={ltcgInputs[f.key] || ''}
                               onChange={e => { setLtcgInputs(v => ({ ...v, [f.key]: e.target.value })); setLtcgResult(null); }}
                               style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, padding: '7px 10px', color: G.white, fontFamily: "'JetBrains Mono',monospace", fontSize: 13, outline: 'none' }}
                             />
@@ -3678,7 +3678,7 @@ useEffect(() => {
                         ].map(f => (
                           <div key={f.key}>
                             <div style={{ fontSize: 10, color: G.mist, marginBottom: 4 }}>{f.label}</div>
-                            <input type="number" value={sipInputs[f.key] || ''} placeholder={f.ph}
+                            <input type="text" inputMode="numeric" value={sipInputs[f.key] || ''} placeholder={f.ph}
                               onChange={e => setSipInputs(v => ({ ...v, [f.key]: e.target.value }))}
                               style={{ width: '100%', boxSizing: 'border-box', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 6, padding: '7px 10px', color: G.white, fontFamily: "'JetBrains Mono',monospace", fontSize: 13, outline: 'none' }}
                             />
