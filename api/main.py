@@ -616,6 +616,38 @@ def trigger_diagnostic():
     threading.Thread(target=_run_diagnostics, daemon=True).start()
     return {"status": "triggered", "message": "Diagnostic running — check /api/health/full in 10s"}
 
+@app.get("/api/calibration/achievement-probs")
+def get_calibration_probs(horizon: int = 7, refresh: bool = False):
+    """
+    Return data-calibrated CAGR achievement probabilities computed from actual
+    NAV data of 10 Tier 1 Indian equity MFs. Cached daily.
+    horizon: investment horizon in years (nearest available: 3, 5, 7, 10)
+    """
+    from engine.calibration import get_horizon_probs, get_calibration_summary
+    try:
+        if refresh:
+            data = get_calibration_summary(force_refresh=True).get(horizon)
+        else:
+            data = get_horizon_probs(horizon)
+        if not data:
+            raise HTTPException(status_code=503, detail="Calibration data unavailable — building in background")
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)[:200])
+
+
+@app.get("/api/calibration/summary")
+def get_calibration_full():
+    """Return calibration data for all available horizons."""
+    from engine.calibration import get_calibration_summary
+    try:
+        return get_calibration_summary()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)[:200])
+
+
 ARCHETYPE_CAGR_RANGES = {
     'steady':     (14, 16),
     'balanced':   (15, 17),

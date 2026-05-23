@@ -430,6 +430,7 @@ export default function App() {
   const [navRefreshMsg, setNavRefreshMsg] = useState(null);
   const [apiError, setApiError] = useState(null);
   const [cagrAdvisory, setCagrAdvisory] = useState(null);
+  const [calibrationData, setCalibrationData] = useState(null);
   const [sysHealth, setSysHealth] = useState(null);
   const [healthOpen, setHealthOpen] = useState(false);
   const [approxHorizon, setApproxHorizon] = useState(null);
@@ -867,6 +868,15 @@ useEffect(() => {
   useEffect(() => {
     if (advisorEndRef.current) advisorEndRef.current.scrollIntoView({ behavior: "smooth" });
   }, [advisorMessages]);
+
+  useEffect(() => {
+    if (!curationResult) return;
+    const horizon = curationResult.archetypes?.[0]?.horizonYears || 7;
+    fetch(`${API_BASE}/api/calibration/achievement-probs?horizon=${horizon}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setCalibrationData(d); })
+      .catch(() => {});
+  }, [curationResult]);
 
   const handleAskAI = async (question, contextType, contextData) => {
     const q = question || aiQuestion;
@@ -3783,6 +3793,34 @@ useEffect(() => {
               </div>
             </div>
           )}
+
+          {/* Calibration transparency panel */}
+          {calibrationData && calibrationData.actual_probs && (() => {
+            const cagrKey = Math.round(impliedCAGR || parseFloat(cagr) || 16);
+            const keys = Object.keys(calibrationData.actual_probs).map(Number).sort((a,b)=>a-b);
+            const nearest = keys.reduce((prev, k) => Math.abs(k-cagrKey) < Math.abs(prev-cagrKey) ? k : prev, keys[0]);
+            const actual = calibrationData.actual_probs[nearest];
+            const expected = calibrationData.expected_probs?.[nearest];
+            return (
+              <div style={{ background:"rgba(212,175,55,0.04)", border:`1px solid rgba(212,175,55,0.2)`, borderRadius:10, padding:"12px 16px", marginBottom:20, display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+                <div style={{ fontSize:14 }}>📊</div>
+                <div style={{ flex:1, minWidth:200 }}>
+                  <div style={{ color:G.gold, fontSize:12, fontWeight:700, marginBottom:2 }}>Live-Calibrated Achievement Rate</div>
+                  <div style={{ color:G.slate, fontSize:11, lineHeight:1.6 }}>
+                    {calibrationData.fund_count} Tier 1 Indian equity funds · {calibrationData.horizon_years}yr rolling windows · {calibrationData.period_count || '—'} periods analysed
+                  </div>
+                </div>
+                <div style={{ textAlign:"center", flexShrink:0 }}>
+                  <div style={{ color:G.white, fontSize:11, marginBottom:3 }}>Achieved ≥{nearest}% CAGR</div>
+                  <div style={{ color:G.gold, fontSize:22, fontWeight:800, fontFamily:"JetBrains Mono,monospace" }}>{actual}%</div>
+                  {expected != null && <div style={{ color:G.mist, fontSize:10 }}>Nifty 500 TRI est.: {expected}%</div>}
+                </div>
+                <div style={{ fontSize:10, color:G.mist, width:"100%", marginTop:4 }}>
+                  Calibrated from actual NAV data. Tier 1 funds outperform the broader index because this platform selects only consistently top-performing direct plans. Past performance does not guarantee future results.
+                </div>
+              </div>
+            );
+          })()}
 
           <div style={{ marginBottom: 26 }}>
             <div className="slbl">Select Your Risk Archetype</div>
