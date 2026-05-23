@@ -381,6 +381,8 @@ export default function App() {
   const [bDone, setBDone] = useState(false);
   const [bProf, setBProf] = useState(null);
   const [showBehav, setShowBehav] = useState(true);
+  const [behavCollapsed, setBehavCollapsed] = useState(false);
+  const [aboutOpen, setAboutOpen] = useState({builder:false, purpose:false, principles:false, notAdvisor:false});
   const [freshness, setFreshness] = useState(null);
   const [navRefreshing, setNavRefreshing] = useState(false);
   const [navRefreshMsg, setNavRefreshMsg] = useState(null);
@@ -412,7 +414,7 @@ export default function App() {
   const [altError, setAltError] = useState(null);
   const [altPoolExhausted, setAltPoolExhausted] = useState(false);
   // Collapsible result sections (true = collapsed)
-  const DEFAULT_COLLAPSED = { dvr:true, metrics:false, confidence:true, stress:true, correlation:true, strengths:false, methodology:true, comparator:true, rebal:true };
+  const DEFAULT_COLLAPSED = { dvr:true, metrics:false, confidence:true, stress:true, correlation:true, strengths:false, methodology:true, comparator:true, rebal:true, freshness:true };
   const [secCollapsed, setSecCollapsed] = useState({ ...DEFAULT_COLLAPSED });
   const toggleSec = (id) => setSecCollapsed(s => ({ ...s, [id]: !s[id] }));
   // Custom builder
@@ -2722,8 +2724,8 @@ useEffect(() => {
           </div>
 
           <div className="about-section">
-            <div className="about-section-title">The Builder</div>
-            <div className="about-builder">
+            <div className="about-section-title" onClick={() => setAboutOpen(o => ({...o, builder:!o.builder}))} style={{cursor:'pointer',userSelect:'none',display:'flex',alignItems:'center',gap:8}}>The Builder <span style={{fontSize:10,color:'rgba(212,175,55,0.5)'}}>{aboutOpen.builder?'▼':'▶'}</span></div>
+            {aboutOpen.builder && <div className="about-builder">
               <div className="about-builder-name">Bikram</div>
               <div className="about-builder-role">Builder & Researcher · 66 years of real-world experience</div>
               <div className="about-builder-body">
@@ -2731,12 +2733,12 @@ useEffect(() => {
                 <p style={{ marginTop: 12 }}>The platform was not built to compete with fund houses, distributors, or fintechs. It was built because <strong>honest, accessible, commission-free mutual fund research</strong> remained out of reach for the ordinary Indian investor — buried in jargon, sold as advice, or locked behind institutional access.</p>
                 <p style={{ marginTop: 12 }}>Every algorithm threshold, every data source, every word of explanatory copy has been calibrated against the question: <strong>"Would this genuinely help someone making their first SIP decision?"</strong></p>
               </div>
-            </div>
+            </div>}
           </div>
 
           <div className="about-section">
-            <div className="about-section-title">Our Purpose</div>
-            <div className="about-card">
+            <div className="about-section-title" onClick={() => setAboutOpen(o => ({...o, purpose:!o.purpose}))} style={{cursor:'pointer',userSelect:'none',display:'flex',alignItems:'center',gap:8}}>Our Purpose <span style={{fontSize:10,color:'rgba(212,175,55,0.5)'}}>{aboutOpen.purpose?'▼':'▶'}</span></div>
+            {aboutOpen.purpose && <div className="about-card">
               <div className="about-card-title">Non-Profit. Educational. Accessible.</div>
               <div className="about-card-body">
                 <p>FundGuldasta is a <strong>non-profit research and education platform</strong>. It earns nothing from fund houses, distributors, or any financial entity. No trail commissions. No referral fees. No sponsored rankings.</p>
@@ -2747,11 +2749,11 @@ useEffect(() => {
                   ))}
                 </div>
               </div>
-            </div>
+            </div>}
           </div>
 
           <div className="about-section">
-            <div className="about-section-title">Our Principles</div>
+            <div className="about-section-title" onClick={() => setAboutOpen(o => ({...o, principles:!o.principles}))} style={{cursor:'pointer',userSelect:'none',display:'flex',alignItems:'center',gap:8}}>Our Principles <span style={{fontSize:10,color:'rgba(212,175,55,0.5)'}}>{aboutOpen.principles?'▼':'▶'}</span></div>
             {[
               ["01", "Direct plans only", "We never recommend regular plans. Distributor trail commissions — typically 0.9–1.1% per year — compound into significant lost wealth over a 7-year horizon. We show you exactly how much."],
               ["02", "No false assurance", "Where historical data is complete, we show history. Where it is partial, we say so. Uncertainty is never hidden in footnotes."],
@@ -2759,7 +2761,7 @@ useEffect(() => {
               ["04", "User agency above all", "Research advisories never block you. CAGR warnings, horizon cautions, and risk assessments are always dismissible. You have full agency over your decisions."],
               ["05", "Honest about limits", "Manager stability scores use available data. Stock-level overlap is not yet computed. We tell you this directly, on every screen where it matters."],
             ].map(([num, title, body]) => (
-              <div key={num} className="about-principle">
+              aboutOpen.principles && <div key={num} className="about-principle">
                 <div className="about-principle-num">{num}</div>
                 <div className="about-principle-text"><strong>{title}</strong> — {body}</div>
               </div>
@@ -2767,14 +2769,14 @@ useEffect(() => {
           </div>
 
           <div className="about-section">
-            <div className="about-section-title">What FundGuldasta Is Not</div>
-            <div className="about-card">
+            <div className="about-section-title" onClick={() => setAboutOpen(o => ({...o, notAdvisor:!o.notAdvisor}))} style={{cursor:'pointer',userSelect:'none',display:'flex',alignItems:'center',gap:8}}>What FundGuldasta Is Not <span style={{fontSize:10,color:'rgba(212,175,55,0.5)'}}>{aboutOpen.notAdvisor?'▼':'▶'}</span></div>
+            {aboutOpen.notAdvisor && <div className="about-card">
               <div className="about-card-body">
                 <p>FundGuldasta is <strong>not a SEBI-registered investment advisor</strong>. It does not provide personalised investment advice. It does not execute transactions. It does not hold your money.</p>
                 <p style={{ marginTop: 12 }}>It is a research and education tool. The final investment decision — the fund, the amount, the platform — is always yours. We exist to make sure that decision is better informed than it would have been without us.</p>
                 <p style={{ marginTop: 12, fontSize: 12, color: "rgba(255,255,255,0.3)", fontStyle: "italic" }}>Mutual fund investments are subject to market risks. Past performance is not indicative of future returns. Please read all scheme documents carefully before investing. Verify current NAV, TER, and fund data on amfiindia.com.</p>
               </div>
-            </div>
+            </div>}
           </div>
 
           <div style={{ marginTop:40, marginBottom:32 }}>
@@ -3247,11 +3249,14 @@ useEffect(() => {
 
           {showBehav && (
             <div className="card">
-              <div className="ch">
+              <div className="ch" onClick={() => setBehavCollapsed(c => !c)} style={{cursor:'pointer',userSelect:'none'}}>
                 <span className="ct">Behavioural Calibration</span>
-                <button className="bbtn" onClick={() => setShowBehav(false)}>Skip →</button>
+                <span style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:10}}>
+                  <button className="bbtn" onClick={e => { e.stopPropagation(); setShowBehav(false); }}>Skip →</button>
+                  <span style={{color:G.mist,fontSize:11}}>{behavCollapsed?'▶':'▼'}</span>
+                </span>
               </div>
-              <div className="cb">
+              {!behavCollapsed && <div className="cb">
                 <p style={{ fontSize: 13, color: G.mist, marginBottom: 20, lineHeight: 1.7 }}>
                   Optional but important. Research shows investors capture 3–5% less than fund returns due to reactive behaviour. Three real scenarios. Honest answers only.
                 </p>
@@ -3282,7 +3287,7 @@ useEffect(() => {
                     <div style={{ marginTop: 10, fontSize: 11, color: G.mist }}>Suggested archetype highlighted below. You may select any archetype.</div>
                   </div>
                 )}
-              </div>
+              </div>}
             </div>
           )}
 
@@ -4297,19 +4302,22 @@ useEffect(() => {
               {/* DATA FRESHNESS */}
               {freshness && (
                 <div className="card">
-                  <div className="ch">
+                  <div className="ch" onClick={() => toggleSec('freshness')} style={{cursor:'pointer',userSelect:'none'}}>
                     <span className="ct">Data Freshness</span>
                     <span className="badge bg-g">All Sources Disclosed</span>
-                    <button
-                      className={"nav-refresh-btn" + (navRefreshing ? " spinning" : "")}
-                      onClick={handleNavRefresh}
-                      disabled={navRefreshing}
-                      title="Fetch latest NAV data from AMFI"
-                    >
-                      {navRefreshing ? "⟳" : "⟳"} {navRefreshing ? "Refreshing..." : "Refresh Data"}
-                    </button>
+                    <span style={{marginLeft:'auto',display:'flex',alignItems:'center',gap:10}}>
+                      <button
+                        className={"nav-refresh-btn" + (navRefreshing ? " spinning" : "")}
+                        onClick={e => { e.stopPropagation(); handleNavRefresh(); }}
+                        disabled={navRefreshing}
+                        title="Fetch latest NAV data from AMFI"
+                      >
+                        {navRefreshing ? "⟳" : "⟳"} {navRefreshing ? "Refreshing..." : "Refresh Data"}
+                      </button>
+                      <span style={{color:G.mist,fontSize:11}}>{secCollapsed.freshness?'▶':'▼'}</span>
+                    </span>
                   </div>
-                  <div className="cb">
+                  {!secCollapsed.freshness && <div className="cb">
                     {navRefreshMsg && (
                       <div style={{
                         fontSize: 12,
@@ -4348,7 +4356,7 @@ useEffect(() => {
                         );
                       })}
                     </div>
-                  </div>
+                  </div>}
                 </div>
               )}
 

@@ -13,6 +13,8 @@ flagged. User has full agency to explore or stop.
 
 import psycopg2
 import os
+import pandas as pd
+from collections import defaultdict
 from dotenv import load_dotenv
 
 from config.db import get_db_config
@@ -264,6 +266,154 @@ def _alt_compute_pros(funds, metrics_dict, confidence, avg_corr, stress_test):
     return pros[:4]
 
 
+def _batch_load_nav(scheme_codes: list) -> dict:
+    """Load full NAV history for multiple funds in ONE query — no per-fund round trips."""
+    if not scheme_codes:
+        return {}
+    conn = _get_db()
+    cur = conn.cursor()
+    placeholders = ','.join(['%s'] * len(scheme_codes))
+    cur.execute(f"""
+        SELECT scheme_code::text, nav_date, nav_value
+        FROM nav_data
+        WHERE scheme_code IN ({placeholders})
+        ORDER BY scheme_code, nav_date ASC
+    """, [str(c) for c in scheme_codes])
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    fund_data = defaultdict(list)
+    for code, date, nav in rows:
+        fund_data[str(code)].append((date, float(nav)))
+    result = {}
+    for code, records in fund_data.items():
+        dates, navs = zip(*records)
+        result[code] = pd.Series(navs, index=pd.DatetimeIndex(dates))
+    return result
+
+
+def _fast_metrics(fund_weights: list, nav_cache: dict) -> dict:
+    """Compute bouquet CAGR metrics from in-memory NAV cache."""
+    periods = {'5 Yr': 5, '7 Yr': 7, '10 Yr': 10, '15 Yr': 15}
+    total_w = sum(w for _, w in fund_weights)
+    result = {}
+    for label, yrs in periods.items():
+        cagr_pairs = []
+        for code, weight in fund_weights:
+            series = nav_cache.get(str(code))
+            if series is None or len(series) < 2:
+                continue
+            end_date = series.index[-1]
+            target = end_date - pd.Timedelta(days=int(yrs * 365.25))
+            mask = (series.index <= target + pd.Timedelta(days=30)) & \
+                   (series.index >= target - pd.Timedelta(days=30))
+            avail = series.index[mask]
+            if len(avail) == 0:
+                continue
+            start_date = avail[-1]
+            actual_yrs = (end_date - start_date).days / 365.25
+            nav_s = float(series[start_date])
+            nav_e = float(series[end_date])
+            if nav_s > 0 and actual_yrs > 0.5:
+                cagr = ((nav_e / nav_s) ** (1 / actual_yrs) - 1) * 100
+                cagr_pairs.append((cagr, weight / total_w))
+        if cagr_pairs:
+            tw = sum(w for _, w in cagr_pairs)
+            wavg = sum(c * w for c, w in cagr_pairs) / tw
+            result[label] = {
+                'bouquet': round(wavg, 2),
+                'realCAGR': round(((1 + wavg / 100) / 1.06 - 1) * 100, 2),
+                'postTax': round(wavg - wavg * 0.125 * 0.30, 2),
+                'nifty50': None,
+                'nifty500': None,
+                'fdRate': 6.8,
+                'inflation': 6.0,
+            }
+    return result
+
+
+def _fast_correlation(fund_weights: list, nav_cache: dict) -> float:
+    """Compute avg pairwise correlation from in-memory NAV cache."""
+    codes = [str(c) for c, _ in fund_weights]
+    returns = {}
+    for code in codes:
+        series = nav_cache.get(code)
+        if series is not None and len(series) > 100:
+            cutoff = series.index[-1] - pd.Timedelta(days=5 * 365)
+            s = series[series.index >= cutoff]
+            returns[code] = s.pct_change().dropna()
+    corrs = []
+    for i in range(len(codes)):
+        for j in range(i + 1, len(codes)):
+            c1, c2 = codes[i], codes[j]
+            if c1 in returns and c2 in returns:
+                common = returns[c1].index.intersection(returns[c2].index)
+                if len(common) >= 100:
+                    corrs.append(float(returns[c1][common].corr(returns[c2][common])))
+    return round(sum(corrs) / len(corrs), 4) if corrs else 0.89
+
+
+def _fast_stress(fund_weights: list, nav_cache: dict) -> dict:
+    """Compute stress test from in-memory NAV cache."""
+    CRASHES = [
+        {'name': '2008 Global Financial Crisis', 'peak': '2008-01-08', 'trough': '2009-03-09'},
+        {'name': '2020 COVID Crash', 'peak': '2020-01-14', 'trough': '2020-03-23'},
+        {'name': '2022 Rate Hike Selloff', 'peak': '2021-10-19', 'trough': '2022-06-17'},
+    ]
+    total_w = sum(w for _, w in fund_weights)
+    periods = []
+    for crash in CRASHES:
+        peak_dt = pd.Timestamp(crash['peak'])
+        trough_dt = pd.Timestamp(crash['trough'])
+        falls = []
+        for code, weight in fund_weights:
+            series = nav_cache.get(str(code))
+            if series is None or len(series) < 2:
+                continue
+            pk_avail = series.index[(series.index >= peak_dt - pd.Timedelta(days=10)) &
+                                    (series.index <= peak_dt + pd.Timedelta(days=10))]
+            tr_avail = series.index[(series.index >= trough_dt - pd.Timedelta(days=10)) &
+                                    (series.index <= trough_dt + pd.Timedelta(days=10))]
+            if len(pk_avail) == 0 or len(tr_avail) == 0:
+                continue
+            nav_peak = float(series[pk_avail[0]])
+            nav_trough = float(series[tr_avail[-1]])
+            if nav_peak > 0:
+                fall_pct = (nav_trough - nav_peak) / nav_peak * 100
+                falls.append((fall_pct, weight))
+        if falls:
+            tw = sum(w for _, w in falls)
+            avg_fall = sum(f * w for f, w in falls) / tw
+            recovery_months = round(max(6.0, min(36.0, abs(avg_fall) * 1.2)), 1)
+            periods.append({
+                'event': crash['name'],
+                'peakFallPct': round(avg_fall, 1),
+                'recoveryMonths': recovery_months,
+                'postRecoveryCAGR': None,
+            })
+    return {'periods': periods}
+
+
+def _fast_confidence(fund_details: list) -> dict:
+    """Simplified confidence from composite scores — no DB calls."""
+    scores = [d.get('composite_score') or 50 for d in fund_details]
+    avg_score = sum(scores) / len(scores) if scores else 50
+    composite = round(50 + avg_score * 0.25, 1)
+    return {
+        'score': composite,
+        'label': 'Moderate' if composite < 65 else 'Good',
+        'factors': {
+            'rolling_consistency': {'score': round(composite * 0.9, 1), 'value': 'Estimated from NAV data quality proxy', 'weight': 30},
+            'downside_protection': {'score': round(composite * 0.85, 1), 'value': 'Estimated from historical data', 'weight': 20},
+            'manager_stability':   {'score': 55.0, 'value': 'Not individually verified for alternative universe', 'weight': 20},
+            'category_tailwind':   {'score': 60.0, 'value': 'Equity — long-term growth tailwind assumed', 'weight': 15},
+            'cost_efficiency':     {'score': 72.0, 'value': 'Direct plans — low-cost structure', 'weight': 15},
+        },
+        'interpretation': f'Alternative confidence estimated from data quality proxy. Avg composite score: {avg_score:.0f}/100.',
+        'cagrAchievabilityPct': None,
+    }
+
+
 def build_alternative_round(
     horizon_years: int,
     target_cagr: float,
@@ -277,9 +427,12 @@ def build_alternative_round(
     fast=True: skip composite scoring — uses NAV count as quality proxy.
     Completes in ~5s vs ~10min. Used as fallback when cache is cold.
     """
-    from engine.bouquet_builder import compute_bouquet_metrics, build_correlation_matrix
-    from engine.confidence_scorer import compute_bouquet_confidence
-    from engine.precompute import compute_bouquet_stress_test, compute_comparator
+    from engine.precompute import compute_comparator
+
+    if not fast:
+        from engine.bouquet_builder import compute_bouquet_metrics, build_correlation_matrix
+        from engine.confidence_scorer import compute_bouquet_confidence
+        from engine.precompute import compute_bouquet_stress_test
 
     print(f"\n=== Alternative Bouquet Round {round_number} {'[FAST]' if fast else ''} ===")
     print(f"Excluding {len(excluded_codes)} previously shown funds")
@@ -293,21 +446,32 @@ def build_alternative_round(
     print("Scoring candidates...")
     scored = _score_pool(pool, horizon_years, target_cagr, fast=fast)
 
-    archetypes = []
+    # Pass 1: pick slots for all archetypes (collect all codes before any DB calls)
     round_used_codes = set(excluded_codes)
     round_used_amcs = set()
-
+    all_selections = {}
     for arch_id in ['steady', 'balanced', 'aggressive', 'conviction']:
-        print(f"\nBuilding {arch_id}...")
+        print(f"\nSlot selection: {arch_id}...")
         result = _pick_slots(arch_id, scored, round_used_codes, round_used_amcs)
         if result is None:
             print(f"  Skipping {arch_id} — pool too thin")
             continue
-
         selected, new_codes, new_amcs = result
+        all_selections[arch_id] = selected
         round_used_codes = new_codes
         round_used_amcs = new_amcs
 
+    # Batch-load NAV data for ALL selected funds in one query (fast path only)
+    nav_cache = {}
+    if fast and all_selections:
+        all_codes = list({f['scheme_code'] for sel in all_selections.values() for f, _ in sel})
+        print(f"Batch loading NAV for {len(all_codes)} funds (1 query)...")
+        nav_cache = _batch_load_nav(all_codes)
+        print(f"NAV cache ready: {len(nav_cache)} funds loaded")
+
+    # Pass 2: build archetype data using the in-memory NAV cache
+    archetypes = []
+    for arch_id, selected in all_selections.items():
         fund_weights = [(f['scheme_code'], w) for f, w in selected]
         fund_details = [
             {
@@ -324,13 +488,18 @@ def build_alternative_round(
         ]
 
         try:
-            metrics = compute_bouquet_metrics(fund_weights, horizon_years)
-            confidence = compute_bouquet_confidence(fund_weights, fund_details, horizon_years, target_cagr)
-            stress = compute_bouquet_stress_test(fund_weights)
-
-            corr_matrix = build_correlation_matrix([c for c, _ in fund_weights])
-            all_corrs = [v for k, v in corr_matrix.items() if k[0] < k[1]]
-            avg_corr = round(float(sum(all_corrs) / len(all_corrs)), 4) if all_corrs else 0.5
+            if fast:
+                metrics = _fast_metrics(fund_weights, nav_cache)
+                avg_corr = _fast_correlation(fund_weights, nav_cache)
+                stress = _fast_stress(fund_weights, nav_cache)
+                confidence = _fast_confidence(fund_details)
+            else:
+                metrics = compute_bouquet_metrics(fund_weights, horizon_years)
+                confidence = compute_bouquet_confidence(fund_weights, fund_details, horizon_years, target_cagr)
+                stress = compute_bouquet_stress_test(fund_weights)
+                corr_matrix = build_correlation_matrix([c for c, _ in fund_weights])
+                all_corrs = [v for k, v in corr_matrix.items() if k[0] < k[1]]
+                avg_corr = round(float(sum(all_corrs) / len(all_corrs)), 4) if all_corrs else 0.5
 
             bouquet_7yr = metrics.get('7 Yr', {}).get('bouquet', 16)
             comparator = compute_comparator(bouquet_7yr, horizon_years)
