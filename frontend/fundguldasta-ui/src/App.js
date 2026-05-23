@@ -332,48 +332,6 @@ body{font-family:'Outfit',sans-serif;background:${G.bg};color:${G.fog};min-heigh
 .footer-legal{font-size:10px;color:rgba(255,255,255,0.18);width:100%;margin-top:24px;line-height:1.8;border-top:1px solid rgba(255,255,255,0.05);padding-top:18px}
 `;
 
-// Inline SVG logo — no network request, crisp at all DPIs.
-// 5 stems represent the 5 fund categories in every bouquet archetype.
-function GuldastalLogo({ size = 108 }) {
-  const g0 = "#D4AF37"; const g1 = "#C49B2A"; const g2 = "#A07D1E";
-  // stems from (50,80), angles -35,-18,0,18,35 deg, varying lengths
-  const stems = [
-    { x2:33.9, y2:57.1, c:g2 }, { x2:40.7, y2:51.5, c:g1 },
-    { x2:50,   y2:48,   c:g0 }, { x2:59.3, y2:51.5, c:g1 },
-    { x2:66.1, y2:57.1, c:g2 },
-  ];
-  const heads = [
-    { cx:33.9, cy:57.1, r:5.5, c:g2 }, { cx:40.7, cy:51.5, r:6,   c:g1 },
-    { cx:50,   cy:48,   r:7,   c:g0 }, { cx:59.3, cy:51.5, r:6,   c:g1 },
-    { cx:66.1, cy:57.1, r:5.5, c:g2 },
-  ];
-  return (
-    <svg width={size} height={size} viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="FundGuldasta — five funds as a bouquet">
-      <defs>
-        <radialGradient id="hgl" cx="40%" cy="35%" r="60%">
-          <stop offset="0%" stopColor="rgba(255,255,255,0.25)" />
-          <stop offset="100%" stopColor="rgba(0,0,0,0)" />
-        </radialGradient>
-      </defs>
-      {stems.map((s, i) => (
-        <line key={i} x1="50" y1="80" x2={s.x2} y2={s.y2}
-          stroke={s.c} strokeWidth="2.2" strokeLinecap="round" />
-      ))}
-      {heads.map((h, i) => (
-        <g key={i}>
-          <circle cx={h.cx} cy={h.cy} r={h.r+2} fill={h.c} opacity="0.15" />
-          <circle cx={h.cx} cy={h.cy} r={h.r} fill={h.c} />
-          <circle cx={h.cx} cy={h.cy} r={h.r} fill="url(#hgl)" />
-          <circle cx={h.cx} cy={h.cy} r={h.r-2.5} fill="none" stroke="rgba(255,255,255,0.22)" strokeWidth="0.8" />
-        </g>
-      ))}
-      {/* ribbon tie at base */}
-      <path d="M 44,80 Q 38,87 44,93 Q 50,87 56,93 Q 62,87 56,80" fill="none" stroke={g0} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <line x1="44" y1="80" x2="56" y2="80" stroke={g0} strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
 // Defined at module level so its identity is stable across re-renders.
 // Defining components inside a render function causes React to unmount+remount
 // the input DOM node on every keystroke, losing focus each time.
@@ -2320,7 +2278,7 @@ useEffect(() => {
         <img src="/hero-bouquet.png" className="hero-deco-left" alt="" />
         <div className="brand">
           <div className="bmark">
-            <GuldastalLogo size={108} />
+            <img src="/logo-bouquet-real.png" alt="FundGuldasta — five fund categories as a bouquet" style={{width:'108px',height:'108px',objectFit:'cover',display:'block'}}/>
           </div>
           <div>
             <div className="bname">FundGuldasta</div>
@@ -2342,7 +2300,7 @@ useEffect(() => {
             onClick={() => { pwaPrompt.prompt(); pwaPrompt.userChoice.then(() => setPwaPrompt(null)); }}
             style={{ display:'inline-flex', alignItems:'center', gap:8, background:'rgba(212,175,55,0.1)', border:'1px solid rgba(212,175,55,0.35)', borderRadius:10, padding:'9px 22px', color:'#D4AF37', fontFamily:'Outfit,sans-serif', fontSize:13, fontWeight:600, cursor:'pointer', letterSpacing:'.04em', marginBottom:16 }}
           >
-            <GuldastalLogo size={28} />
+            <img src="/logo-bouquet-real.png" alt="" style={{width:28,height:28,objectFit:'cover',borderRadius:6,flexShrink:0}} />
             Install App
           </button>
         )}
@@ -3068,7 +3026,7 @@ useEffect(() => {
           <button className="about-back" onClick={() => setScreen("hero")}>← Back to FundGuldasta</button>
 
           <div className="about-hero">
-            <div className="about-mark">FG</div>
+            <img src="/logo-bouquet-real.png" alt="FundGuldasta" className="about-mark" style={{width:80,height:80,objectFit:'cover',borderRadius:16,boxShadow:'0 0 32px rgba(212,175,55,0.35)',display:'block',flexShrink:0}} />
             <div>
               <div className="about-headline">Mutual Fund Research.<br />Unfiltered.</div>
               <div className="about-tagline">India's Honest-by-Design Research Platform</div>
