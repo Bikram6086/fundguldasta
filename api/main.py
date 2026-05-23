@@ -1008,6 +1008,30 @@ def trigger_nav_refresh():
         'nav_date': str(max_nav) if max_nav else None,
     }
 
+@app.post("/api/pipeline/trigger-alt-precompute")
+def trigger_alt_precompute():
+    """
+    Trigger alternative bouquet precomputation in the background.
+    Populates steady_r2, balanced_r2, aggressive_r2, conviction_r2 in bouquet_cache.
+    Returns immediately — computation runs in background thread (~10-20 min).
+    """
+    import threading
+    from engine.precompute import run_alternative_precomputation
+
+    def _run():
+        for h, c in [(7, 16), (5, 14), (10, 16)]:
+            try:
+                run_alternative_precomputation(horizon_years=h, target_cagr=c)
+            except Exception as e:
+                print(f"  Alt precompute {h}yr failed: {e}")
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {
+        'status': 'started',
+        'message': 'Alternative precompute running in background. Check bouquet_cache for steady_r2 etc. in ~15 min.',
+    }
+
+
 # ── FUND CUSTOMIZATION ENDPOINTS ─────────────────────────────
 
 @app.get("/api/funds/search")

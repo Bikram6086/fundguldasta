@@ -296,12 +296,20 @@ def run_precomputation(horizon_years=7, target_cagr=DEFAULT_TARGET_CAGR):
 
     log_precompute_run('success', len(results))
 
+    import threading
+    threading.Thread(
+        target=lambda: _run_alt_precompute_safe(horizon_years, target_cagr),
+        daemon=True,
+    ).start()
+
+    return results
+
+
+def _run_alt_precompute_safe(horizon_years, target_cagr):
     try:
         run_alternative_precomputation(horizon_years, target_cagr)
     except Exception as e:
-        print(f"  Alternative precompute skipped: {e}")
-
-    return results
+        print(f"  Alternative precompute background thread failed: {e}")
 
 def log_precompute_run(status, count, error=None):
     conn = psycopg2.connect(**DB_CONFIG)
