@@ -484,6 +484,11 @@ export default function App() {
   const [taxCalcMonths, setTaxCalcMonths] = useState('');
   const [taxCalcType, setTaxCalcType] = useState('equity');
   const [taxCalcSlab, setTaxCalcSlab] = useState('30');
+  const [goalBuckets, setGoalBuckets] = useState([]);
+  const [goalCustomName, setGoalCustomName] = useState('');
+  const [goalCustomCorpus, setGoalCustomCorpus] = useState('');
+  const [goalCustomYears, setGoalCustomYears] = useState('');
+  const [goalCustomCagr, setGoalCustomCagr] = useState('');
   const [pfFunds, setPfFunds] = useState([]);
   const [pfSearch, setPfSearch] = useState('');
   const [pfResults, setPfResults] = useState([]);
@@ -2485,53 +2490,146 @@ useEffect(() => {
             )}
 
             {/* ── GOAL PLANNER TAB ── */}
-            {calcTab === 'goals' && (
-              <div>
-                <p style={{ color:G.slate, fontSize:13, marginBottom:20, marginTop:0 }}>Pick a goal to pre-fill the SIP calculator. Each goal maps to the most suitable FundGuldasta archetype.</p>
-                <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))", gap:16, marginBottom:28 }}>
-                  {goals.map(g => (
-                    <div key={g.label} style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:14, padding:24, cursor:"pointer", transition:"all .2s" }}
-                      onClick={() => {
-                        setSipCalcYears(String(g.years));
-                        setSipCalcCagr(String(g.cagr));
-                        setSipCalcCorpus(String(g.corpus));
-                        setSipMode('to-sip');
-                        setCalcTab('sip');
-                      }}
-                      onMouseEnter={e => e.currentTarget.style.border=`1px solid ${g.color}`}
-                      onMouseLeave={e => e.currentTarget.style.border=`1px solid ${G.bord}`}>
-                      <div style={{ fontSize:32, marginBottom:12 }}>{g.icon}</div>
-                      <div style={{ color:G.white, fontSize:15, fontWeight:700, marginBottom:6 }}>{g.label}</div>
-                      <div style={{ color:G.slate, fontSize:12, lineHeight:1.6, marginBottom:14 }}>{g.desc}</div>
-                      <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:16 }}>
-                        {[[`${g.years}-year horizon`, g.color],[`${g.cagr}% target CAGR`, g.color],[`Target: ${fmtCr(g.corpus)}`, G.white]].map(([t,c])=>(
-                          <div key={t} style={{ fontSize:12, color:c, fontFamily:"JetBrains Mono,monospace" }}>{t}</div>
-                        ))}
+            {calcTab === 'goals' && (() => {
+              const sipForGoal = (corpus, years, cagr) => {
+                const rg = cagr / 100 / 12;
+                const ng = years * 12;
+                if (!corpus || !years || !cagr) return null;
+                return rg === 0 ? corpus / ng : (corpus * rg) / ((Math.pow(1+rg,ng)-1) * (1+rg));
+              };
+              const totalSIP = goalBuckets.reduce((sum, b) => {
+                const s = sipForGoal(b.corpus, b.years, b.cagr);
+                return sum + (s || 0);
+              }, 0);
+              const addGoal = (g) => setGoalBuckets(prev => [...prev, { ...g, id: Date.now() }]);
+              const removeGoal = (id) => setGoalBuckets(prev => prev.filter(b => b.id !== id));
+              const addCustomGoal = () => {
+                if (!goalCustomCorpus || !goalCustomYears || !goalCustomCagr) return;
+                addGoal({
+                  icon: "🎯", label: goalCustomName || "Custom Goal",
+                  corpus: parseFloat(goalCustomCorpus), years: parseFloat(goalCustomYears),
+                  cagr: parseFloat(goalCustomCagr), archetype: "—", color: G.gold
+                });
+                setGoalCustomName(''); setGoalCustomCorpus(''); setGoalCustomYears(''); setGoalCustomCagr('');
+              };
+              return (
+                <div>
+                  <p style={{ color:G.slate, fontSize:13, marginBottom:16, marginTop:0 }}>Build a multi-goal plan. Add any combination of goals and see the total SIP you need across all of them.</p>
+
+                  {/* Preset templates */}
+                  <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:10 }}>Goal Templates</div>
+                  <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(230px,1fr))", gap:12, marginBottom:24 }}>
+                    {goals.map(g => {
+                      const sip = sipForGoal(g.corpus, g.years, g.cagr);
+                      const colorRgb = g.color==='#4A9EFF'?'74,158,255':g.color==='#27AE78'?'39,174,120':'212,175,55';
+                      return (
+                        <div key={g.label} style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:14, padding:18 }}>
+                          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+                            <span style={{ fontSize:24 }}>{g.icon}</span>
+                            <div>
+                              <div style={{ color:G.white, fontSize:14, fontWeight:700 }}>{g.label}</div>
+                              <div style={{ color:G.slate, fontSize:11 }}>{g.desc}</div>
+                            </div>
+                          </div>
+                          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:6, marginBottom:12 }}>
+                            {[[`${g.years}yr`, 'Horizon'],[`${g.cagr}%`, 'CAGR'],[fmtCr(g.corpus),'Target']].map(([v,lbl])=>(
+                              <div key={lbl} style={{ background:G.elv, borderRadius:8, padding:"6px 8px", textAlign:"center" }}>
+                                <div style={{ color:g.color, fontSize:12, fontWeight:700, fontFamily:"JetBrains Mono,monospace" }}>{v}</div>
+                                <div style={{ color:G.mist, fontSize:10 }}>{lbl}</div>
+                              </div>
+                            ))}
+                          </div>
+                          {sip && <div style={{ fontSize:11, color:G.slate, marginBottom:10 }}>Monthly SIP needed: <span style={{ color:G.white, fontWeight:700, fontFamily:"JetBrains Mono,monospace" }}>{fmtINR(sip)}</span></div>}
+                          <button onClick={() => addGoal(g)}
+                            style={{ width:"100%", padding:"7px 0", background:`rgba(${colorRgb},0.12)`, border:`1px solid ${g.color}`, borderRadius:8, color:g.color, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                            + Add to My Plan
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Custom goal form */}
+                  <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:18, marginBottom:24 }}>
+                    <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:12 }}>Add Custom Goal</div>
+                    <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr", gap:10, marginBottom:12 }}>
+                      <CalcInputRow label="Goal Name" value={goalCustomName} setter={setGoalCustomName} placeholder="e.g. Europe Trip" />
+                      <CalcInputRow label="Target (₹)" value={goalCustomCorpus} setter={setGoalCustomCorpus} placeholder="2000000" />
+                      <CalcInputRow label="Years" value={goalCustomYears} setter={setGoalCustomYears} placeholder="5" />
+                      <CalcInputRow label="CAGR (%)" value={goalCustomCagr} setter={setGoalCustomCagr} placeholder="14" />
+                    </div>
+                    <button onClick={addCustomGoal}
+                      style={{ padding:"8px 20px", background:"rgba(212,175,55,0.12)", border:`1px solid ${G.bordG}`, borderRadius:8, color:G.gold, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                      + Add to My Plan
+                    </button>
+                  </div>
+
+                  {/* Active goal buckets */}
+                  {goalBuckets.length === 0 ? (
+                    <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:32, textAlign:"center" }}>
+                      <div style={{ fontSize:32, marginBottom:10 }}>🪣</div>
+                      <div style={{ color:G.slate, fontSize:13 }}>Your goal plan is empty. Add goals from the templates above or create a custom one.</div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:10 }}>My Goal Plan ({goalBuckets.length} goal{goalBuckets.length!==1?'s':''})</div>
+                      <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:20 }}>
+                        {goalBuckets.map((b, idx) => {
+                          const sip = sipForGoal(b.corpus, b.years, b.cagr);
+                          const invested = sip ? sip * b.years * 12 : 0;
+                          return (
+                            <div key={b.id} style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:"14px 18px", display:"flex", alignItems:"center", gap:14 }}>
+                              <span style={{ fontSize:22, flexShrink:0 }}>{b.icon}</span>
+                              <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                                  <span style={{ color:G.white, fontSize:13, fontWeight:700 }}>{b.label}</span>
+                                  <span style={{ fontSize:10, color:G.mist, background:G.elv, padding:"2px 8px", borderRadius:4 }}>Goal {idx+1}</span>
+                                </div>
+                                <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
+                                  {[[`Target: ${fmtCr(b.corpus)}`, G.white],[`${b.years}yr`, G.slate],[`${b.cagr}% CAGR`, G.slate]].map(([v,c])=>(
+                                    <span key={v} style={{ fontSize:11, color:c, fontFamily:"JetBrains Mono,monospace" }}>{v}</span>
+                                  ))}
+                                  {b.archetype !== '—' && <span style={{ fontSize:11, color:b.color }}>→ {b.archetype}</span>}
+                                </div>
+                              </div>
+                              <div style={{ textAlign:"right", flexShrink:0 }}>
+                                <div style={{ color:G.gold, fontSize:16, fontWeight:700, fontFamily:"JetBrains Mono,monospace" }}>{sip ? fmtINR(sip)+'/mo' : '—'}</div>
+                                {invested > 0 && <div style={{ color:G.mist, fontSize:10 }}>Total invest: {fmtCr(invested)}</div>}
+                              </div>
+                              <button onClick={() => removeGoal(b.id)}
+                                style={{ background:"none", border:`1px solid ${G.bord}`, borderRadius:6, color:G.mist, fontSize:11, cursor:"pointer", padding:"4px 10px", flexShrink:0 }}>
+                                ✕
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
-                      <div style={{ borderTop:`1px solid ${G.bord}`, paddingTop:12, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                        <div style={{ fontSize:11, color:G.mist }}>Suggested archetype</div>
-                        <div style={{ fontSize:11, color:g.color, fontWeight:600 }}>{g.archetype}</div>
-                      </div>
-                      <div style={{ marginTop:10, padding:"7px 14px", background:`rgba(${g.color==='#4A9EFF'?'74,158,255':g.color==='#27AE78'?'39,174,120':'212,175,55'},0.1)`, borderRadius:7, color:g.color, fontSize:12, fontWeight:600, textAlign:"center" }}>
-                        Use this goal →
+
+                      {/* Total SIP summary */}
+                      <div style={{ background:"rgba(212,175,55,0.06)", border:`1px solid ${G.bordG}`, borderRadius:14, padding:"20px 24px" }}>
+                        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+                          <div>
+                            <div style={{ color:G.white, fontSize:14, fontWeight:700 }}>Total Monthly SIP Required</div>
+                            <div style={{ color:G.mist, fontSize:11, marginTop:2 }}>Across all {goalBuckets.length} goal{goalBuckets.length!==1?'s':''}</div>
+                          </div>
+                          <div style={{ color:G.gold, fontSize:26, fontWeight:800, fontFamily:"JetBrains Mono,monospace" }}>{fmtINR(totalSIP)}<span style={{ fontSize:14 }}>/mo</span></div>
+                        </div>
+                        <div style={{ display:"flex", justifyContent:"space-between", fontSize:12, color:G.slate, paddingTop:12, borderTop:`1px solid ${G.bord}` }}>
+                          <span>Per-goal breakdown adds up to the total above.</span>
+                          <button onClick={() => { setSipCalcCorpus(''); setSipCalcYears(''); setSipCalcCagr(String(goalBuckets[0]?.cagr||14)); setSipMode('to-corpus'); setCalcTab('sip'); }}
+                            style={{ background:"none", border:"none", color:G.gold, fontSize:12, cursor:"pointer", fontFamily:"Outfit,sans-serif", padding:0 }}>
+                            Open SIP Calculator →
+                          </button>
+                        </div>
+                        <div style={{ marginTop:10, fontSize:10, color:G.mist, lineHeight:1.6 }}>
+                          Each goal SIP is calculated independently. In practice you may overlap SIPs into the same fund depending on horizon alignment. Consult a financial planner for actual allocation. Projections assume constant CAGR and do not account for LTCG tax.
+                        </div>
                       </div>
                     </div>
-                  ))}
+                  )}
                 </div>
-                <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20 }}>
-                  <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:10 }}>Custom Goal</div>
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:14 }}>
-                    <CalcInputRow label="Target Corpus (₹)" value={sipCalcCorpus} setter={setSipCalcCorpus} placeholder="5000000" />
-                    <CalcInputRow label="Horizon (years)" value={sipCalcYears} setter={setSipCalcYears} placeholder="10" />
-                    <CalcInputRow label="Expected CAGR (%)" value={sipCalcCagr} setter={setSipCalcCagr} placeholder="14" />
-                  </div>
-                  <button onClick={() => { setSipMode('to-sip'); setCalcTab('sip'); }}
-                    style={{ padding:"8px 22px", background:"rgba(212,175,55,0.12)", border:`1px solid ${G.bordG}`, borderRadius:8, color:G.gold, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
-                    Calculate SIP Required →
-                  </button>
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* ── TAX CALCULATOR TAB ── */}
             {calcTab === 'tax' && (
