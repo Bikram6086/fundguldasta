@@ -413,6 +413,7 @@ export default function App() {
   const [altLoading, setAltLoading] = useState(false);
   const [altError, setAltError] = useState(null);
   const [altPoolExhausted, setAltPoolExhausted] = useState(false);
+  const [loadingTooLong, setLoadingTooLong] = useState(false);
   // Collapsible result sections (true = collapsed)
   const DEFAULT_COLLAPSED = { dvr:true, metrics:false, confidence:true, stress:true, correlation:true, strengths:false, methodology:true, comparator:true, rebal:true, freshness:true };
   const [secCollapsed, setSecCollapsed] = useState({ ...DEFAULT_COLLAPSED });
@@ -495,9 +496,9 @@ export default function App() {
   const HI_HERO = {
     tagline: "म्यूचुअल फंड रिसर्च। बेबाक।",
     secTag: "ईमानदारी से डिज़ाइन किया गया म्यूचुअल फंड रिसर्च",
-    headline: "चुने हुए फंड बुके।",
+    headline: "चुने हुए फंड गुलदस्ता।",
     headlineEm: "ईमानदारी से।",
-    sub: "दो इनपुट। चार बुके आर्केटाइप। पारदर्शी रिसर्च की दस परतें। कोई कमीशन नहीं। कोई झूठा आश्वासन नहीं।",
+    sub: "दो इनपुट। चार गुलदस्ता आर्केटाइप। पारदर्शी रिसर्च की दस परतें। कोई कमीशन नहीं। कोई झूठा आश्वासन नहीं।",
     tabReturn: "रिटर्न लक्ष्य",
     tabCorpus: "कोष लक्ष्य",
     tabSip: "SIP क्षमता",
@@ -505,8 +506,8 @@ export default function App() {
     labelCorpus: "लक्षित कोष और अवधि",
     labelSIP: "मासिक SIP और अवधि",
     labelLumpsum: "शुरुआती एकमुश्त राशि (₹ लाख)",
-    btnCurate: "मेरे बुके तैयार करें →",
-    btnBYOB: "✎ अपना बुके बनाएं",
+    btnCurate: "मेरे गुलदस्ता तैयार करें →",
+    btnBYOB: "✎ अपना गुलदस्ता बनाएं",
     btnPortfolio: "📊 पोर्टफोलियो विश्लेषण",
     btnCalc: "📐 SIP और टैक्स कैलकुलेटर",
     btnRisk: "🎯 मेरी जोखिम प्रोफाइल",
@@ -522,7 +523,7 @@ export default function App() {
     compare: "⊟ तुलना",
     fundExplorer: "🔍 फंड एक्सप्लोरर",
     riskProfile: "🎯 जोखिम प्रोफाइल",
-    savedBouquets: "सहेजे हुए बुके",
+    savedBouquets: "सहेजे हुए गुलदस्ता",
   };
 
   const impliedCAGR = (() => {
@@ -545,8 +546,12 @@ export default function App() {
   })();
 
   const handleFind = async () => {
+    if (impliedCAGR && impliedCAGR > 22) {
+      setInputWarn(`${impliedCAGR}% CAGR over a sustained horizon has never been achieved at scale by any diversified mutual fund portfolio in India — this is a hard historical fact, not a conservative estimate. No active fund with ₹500Cr+ AUM has delivered this consistently across a full market cycle. You may still proceed, but your goal inputs may need revisiting.`);
+      return;
+    }
     if (impliedCAGR && impliedCAGR > 20) {
-      setInputWarn(`Your goal implies ~${impliedCAGR}% CAGR. No diversified bouquet has delivered this consistently. You may still proceed.`);
+      setInputWarn(`Your goal implies ~${impliedCAGR}% CAGR — aggressive territory. Historical rolling return data shows this has been achieved only in exceptional bull-run periods, not consistently. You may still proceed.`);
       return;
     }
     setInputWarn("");
@@ -796,6 +801,14 @@ useEffect(() => {
       localStorage.removeItem("fg_token");
     });
   }, []);
+
+  useEffect(() => {
+    if (screen === "loading") {
+      setLoadingTooLong(false);
+      const t = setTimeout(() => setLoadingTooLong(true), 10000);
+      return () => clearTimeout(t);
+    }
+  }, [screen]);
 
   const handleAskAI = async (question, contextType, contextData) => {
     const q = question || aiQuestion;
@@ -2175,8 +2188,22 @@ useEffect(() => {
               )}
             </>
           )}
-          {inputWarn && <div className="warn-box">⚠️ {inputWarn}</div>}
-          <button className="btn-p" disabled={!isValid} onClick={handleFind}>{tr("Curate My Bouquets →","मेरे बुके तैयार करें →")}</button>
+          {inputWarn && (
+            <div className="warn-box">
+              ⚠️ {inputWarn}
+              <div style={{ marginTop: 10, display: "flex", gap: 8 }}>
+                <button onClick={() => { setInputWarn(""); setScreen("loading"); curateBouquets({ mode, targetCAGR: parseFloat(cagr) || impliedCAGR, targetCorpus: parseFloat(corpus) * 100000 || null, lumpsum: parseFloat(ls) * 100000 || null, sipAmount: parseFloat(sip) || null, horizonYears: parseFloat(yrs) || 7 }).then(result => { setCurationResult(result); if (result.archetypes?.length > 0) { setCagrAdvisory(result.archetypes[0].realisticAssessment || null); setApproxHorizon(result.horizonApproximate ? { used: result.horizonUsed, requested: result.horizonRequested } : null); } return getFreshness().catch(() => null); }).then(fdata => { setFreshness(fdata); setScreen("results"); }).catch(() => { setApiError("Could not connect to API."); setScreen("hero"); }); }}
+                  style={{ fontSize: 11, color: G.gold, background: "rgba(212,175,55,0.1)", border: "1px solid rgba(212,175,55,0.3)", borderRadius: 6, padding: "4px 12px", cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>
+                  I understand — proceed anyway
+                </button>
+                <button onClick={() => setInputWarn("")}
+                  style={{ fontSize: 11, color: G.mist, background: "transparent", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, padding: "4px 12px", cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>
+                  Revise inputs
+                </button>
+              </div>
+            </div>
+          )}
+          <button className="btn-p" disabled={!isValid} onClick={handleFind}>{tr("Curate My Bouquets →","मेरे गुलदस्ता तैयार करें →")}</button>
           <button className="byob-entry" style={{ marginTop: 8 }} onClick={() => setScreen("custom_builder")}>{tr("✎ Build Your Own Bouquet", HI_HERO.btnBYOB)}</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.08)" }} onClick={() => setScreen("portfolio")}>{tr("📊 Analyse My Portfolio", HI_HERO.btnPortfolio)}</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.06)" }} onClick={() => { setCalcPreFill(null); setCalcTab('sip'); setScreen("calculators"); }}>{tr("📐 SIP & Tax Calculators", HI_HERO.btnCalc)}</button>
@@ -3151,6 +3178,17 @@ useEffect(() => {
         <div style={{ fontSize: 12, color: G.mist, marginTop: 8 }}>
           <span style={{ color: G.em, fontWeight: 600 }}>● Live Data</span> · Connected to fundguldasta.com API
         </div>
+        {loadingTooLong && (
+          <div style={{ marginTop: 24, display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
+            <div style={{ fontSize: 12, color: G.mist }}>Taking longer than expected?</div>
+            <button
+              onClick={handleFind}
+              style={{ background: "rgba(212,175,55,0.12)", border: "1px solid rgba(212,175,55,0.3)", borderRadius: 8, padding: "8px 20px", color: G.gold, fontFamily: "Outfit,sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
+            >
+              ↻ Retry
+            </button>
+          </div>
+        )}
       </div>
     </>
   );
