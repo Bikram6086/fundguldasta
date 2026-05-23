@@ -3422,8 +3422,8 @@ useEffect(() => {
               {altLoading && (
                 <div className="gen-loading">
                   <div className="gen-spinner" />
-                  <div>Scoring {300 - altRounds.length * 20}+ funds from the eligible universe...</div>
-                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.2)" }}>This takes 2-4 minutes. Same engine, different fund pool.</div>
+                  <div>Curating alternative bouquets from our eligible universe...</div>
+                  <div style={{ fontSize: 11, color: "rgba(255,255,255,0.2)" }}>Same 6-dimension scoring engine, different fund pool.</div>
                 </div>
               )}
 
@@ -3440,7 +3440,7 @@ useEffect(() => {
                   <div className="gen-more-title">Want another set of bouquets?</div>
                   <div className="gen-more-sub">
                     We will curate another round using different funds from our eligible universe — same scoring engine, no repetition from previous rounds.
-                    {altRounds.length === 0 ? " Takes 2-4 minutes." : ""}
+                    {altRounds.length === 0 ? " Pre-curated for speed — typically ready in seconds." : ""}
                   </div>
                   {altError && <div style={{ color: "#E05555", fontSize: 12, marginBottom: 12 }}>{altError}</div>}
                   <button className="gen-more-btn" onClick={handleGenerateMore}>
