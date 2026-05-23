@@ -10,16 +10,9 @@ trade-off of any substitution without blocking the user's preference.
 
 import psycopg2
 import os
-from dotenv import load_dotenv
+from config.db import get_db_config
 
-load_dotenv(os.path.expanduser('~/fundguldasta/config/.env'))
-
-DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': os.getenv('DB_PORT', '5432'),
-    'dbname': os.getenv('DB_NAME', 'fundguldasta_dev'),
-    'user': os.getenv('DB_USER', 'fundguldasta_user'),
-}
+DB_CONFIG = get_db_config()
 
 from config.scheme_codes import ARCHETYPE_FUNDS, VERIFIED_FUNDS
 from config.thresholds import TIER_1_MIN_RECORDS, TIER_2_MIN_RECORDS, TIER_3_MIN_RECORDS

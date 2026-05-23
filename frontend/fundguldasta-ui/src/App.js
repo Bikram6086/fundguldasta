@@ -332,6 +332,38 @@ body{font-family:'Outfit',sans-serif;background:${G.bg};color:${G.fog};min-heigh
 .footer-legal{font-size:10px;color:rgba(255,255,255,0.18);width:100%;margin-top:24px;line-height:1.8;border-top:1px solid rgba(255,255,255,0.05);padding-top:18px}
 `;
 
+// Defined at module level so its identity is stable across re-renders.
+// Defining components inside a render function causes React to unmount+remount
+// the input DOM node on every keystroke, losing focus each time.
+function CalcInputRow({ label, value, setter, placeholder, suffix="" }) {
+  return (
+    <div>
+      <div style={{ fontSize:11, color:G.slate, marginBottom:5 }}>{label}</div>
+      <div style={{ display:"flex", alignItems:"center", background:G.elv, border:`1px solid ${G.bord}`, borderRadius:8, overflow:"hidden" }}>
+        <input
+          type="text"
+          inputMode="numeric"
+          value={value}
+          onChange={e => setter(e.target.value)}
+          placeholder={placeholder}
+          style={{ flex:1, background:"transparent", border:"none", padding:"10px 12px", color:G.white, fontSize:14, fontFamily:"JetBrains Mono,monospace", outline:"none" }}
+        />
+        {suffix && <span style={{ paddingRight:12, color:G.mist, fontSize:12 }}>{suffix}</span>}
+      </div>
+    </div>
+  );
+}
+
+function CalcResultRow({ label, value, color, big=false, border=true }) {
+  const col = color || G.white;
+  return (
+    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding: big?"12px 0":"8px 0", borderBottom: border ? `1px solid ${G.bord}` : "none" }}>
+      <span style={{ fontSize: big?13:12, color:G.slate }}>{label}</span>
+      <span style={{ fontSize: big?18:14, color:col, fontFamily:"JetBrains Mono,monospace", fontWeight: big?700:500 }}>{value}</span>
+    </div>
+  );
+}
+
 export default function App() {
   const { t, i18n } = useTranslation();
   const [screen, setScreen] = useState("hero");
@@ -2218,23 +2250,7 @@ useEffect(() => {
       }}>{label}</button>
     );
 
-    const InputRow = ({ label, value, setter, placeholder, type="number", suffix="" }) => (
-      <div>
-        <div style={{ fontSize:11, color:G.slate, marginBottom:5 }}>{label}</div>
-        <div style={{ display:"flex", alignItems:"center", background:G.elv, border:`1px solid ${G.bord}`, borderRadius:8, overflow:"hidden" }}>
-          <input type={type} value={value} onChange={e => setter(e.target.value)} placeholder={placeholder}
-            style={{ flex:1, background:"transparent", border:"none", padding:"10px 12px", color:G.white, fontSize:14, fontFamily:"JetBrains Mono,monospace", outline:"none" }} />
-          {suffix && <span style={{ paddingRight:12, color:G.mist, fontSize:12 }}>{suffix}</span>}
-        </div>
-      </div>
-    );
-
-    const ResultRow = ({ label, value, color=G.white, big=false, border=true }) => (
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding: big?"12px 0":"8px 0", borderBottom: border ? `1px solid ${G.bord}` : "none" }}>
-        <span style={{ fontSize: big?13:12, color:G.slate }}>{label}</span>
-        <span style={{ fontSize: big?18:14, color, fontFamily:"JetBrains Mono,monospace", fontWeight: big?700:500 }}>{value}</span>
-      </div>
-    );
+    // CalcInputRow and CalcResultRow are defined at module level (stable identity — no focus loss)
 
     return (
       <>
@@ -2277,11 +2293,11 @@ useEffect(() => {
                   <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:24, display:"flex", flexDirection:"column", gap:16 }}>
                     <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:4 }}>Inputs</div>
                     {sipMode === 'to-corpus'
-                      ? <InputRow label="Monthly SIP (₹)" value={sipCalcSip} setter={setSipCalcSip} placeholder="10000" suffix="₹/mo" />
-                      : <InputRow label="Target Corpus (₹)" value={sipCalcCorpus} setter={setSipCalcCorpus} placeholder="10000000" suffix="₹" />
+                      ? <CalcInputRow label="Monthly SIP (₹)" value={sipCalcSip} setter={setSipCalcSip} placeholder="10000" suffix="₹/mo" />
+                      : <CalcInputRow label="Target Corpus (₹)" value={sipCalcCorpus} setter={setSipCalcCorpus} placeholder="10000000" suffix="₹" />
                     }
-                    <InputRow label="Investment Horizon (years)" value={sipCalcYears} setter={setSipCalcYears} placeholder="7" suffix="yrs" />
-                    <InputRow label="Expected CAGR (%)" value={sipCalcCagr} setter={setSipCalcCagr} placeholder={calcPreFill ? String(calcPreFill.cagr) : "14"} suffix="%" />
+                    <CalcInputRow label="Investment Horizon (years)" value={sipCalcYears} setter={setSipCalcYears} placeholder="7" suffix="yrs" />
+                    <CalcInputRow label="Expected CAGR (%)" value={sipCalcCagr} setter={setSipCalcCagr} placeholder={calcPreFill ? String(calcPreFill.cagr) : "14"} suffix="%" />
                     {/* Quick CAGR presets */}
                     <div>
                       <div style={{ fontSize:10, color:G.mist, marginBottom:6 }}>Quick CAGR presets:</div>
@@ -2305,11 +2321,11 @@ useEffect(() => {
                       <div style={{ color:G.mist, fontSize:12, marginTop:24, textAlign:"center" }}>Fill in the inputs to see your projection</div>
                     ) : (
                       <>
-                        {sipMode === 'to-sip' && <ResultRow label="Required monthly SIP" value={fmtINR(sipResult.sip)} color={G.gold} big={true} />}
-                        <ResultRow label="Final corpus" value={fmtCr(sipResult.corpus)} color="#27AE78" big={sipMode==='to-corpus'} />
-                        <ResultRow label="Total invested" value={fmtCr(sipResult.invested)} color={G.fog} />
-                        <ResultRow label="Wealth gain" value={fmtCr(sipResult.gain)} color="#27AE78" />
-                        <ResultRow label="Wealth multiplier" value={sipResult.mult.toFixed(2)+'x'} color={G.gold} border={false} />
+                        {sipMode === 'to-sip' && <CalcResultRow label="Required monthly SIP" value={fmtINR(sipResult.sip)} color={G.gold} big={true} />}
+                        <CalcResultRow label="Final corpus" value={fmtCr(sipResult.corpus)} color="#27AE78" big={sipMode==='to-corpus'} />
+                        <CalcResultRow label="Total invested" value={fmtCr(sipResult.invested)} color={G.fog} />
+                        <CalcResultRow label="Wealth gain" value={fmtCr(sipResult.gain)} color="#27AE78" />
+                        <CalcResultRow label="Wealth multiplier" value={sipResult.mult.toFixed(2)+'x'} color={G.gold} border={false} />
                         {/* Visual bar */}
                         <div style={{ marginTop:16 }}>
                           <div style={{ display:"flex", height:12, borderRadius:6, overflow:"hidden", marginBottom:6 }}>
@@ -2410,9 +2426,9 @@ useEffect(() => {
                 <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20 }}>
                   <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:10 }}>Custom Goal</div>
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:14 }}>
-                    <InputRow label="Target Corpus (₹)" value={sipCalcCorpus} setter={setSipCalcCorpus} placeholder="5000000" />
-                    <InputRow label="Horizon (years)" value={sipCalcYears} setter={setSipCalcYears} placeholder="10" />
-                    <InputRow label="Expected CAGR (%)" value={sipCalcCagr} setter={setSipCalcCagr} placeholder="14" />
+                    <CalcInputRow label="Target Corpus (₹)" value={sipCalcCorpus} setter={setSipCalcCorpus} placeholder="5000000" />
+                    <CalcInputRow label="Horizon (years)" value={sipCalcYears} setter={setSipCalcYears} placeholder="10" />
+                    <CalcInputRow label="Expected CAGR (%)" value={sipCalcCagr} setter={setSipCalcCagr} placeholder="14" />
                   </div>
                   <button onClick={() => { setSipMode('to-sip'); setCalcTab('sip'); }}
                     style={{ padding:"8px 22px", background:"rgba(212,175,55,0.12)", border:`1px solid ${G.bordG}`, borderRadius:8, color:G.gold, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
@@ -2429,9 +2445,9 @@ useEffect(() => {
                   <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
                     <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:24, display:"flex", flexDirection:"column", gap:14 }}>
                       <div style={{ color:G.white, fontSize:13, fontWeight:600 }}>Investment Details</div>
-                      <InputRow label="Amount Invested (₹)" value={taxCalcInvested} setter={setTaxCalcInvested} placeholder="500000" />
-                      <InputRow label="Current Value (₹)" value={taxCalcCurrent} setter={setTaxCalcCurrent} placeholder="850000" />
-                      <InputRow label="Holding Period (months)" value={taxCalcMonths} setter={setTaxCalcMonths} placeholder="24" />
+                      <CalcInputRow label="Amount Invested (₹)" value={taxCalcInvested} setter={setTaxCalcInvested} placeholder="500000" />
+                      <CalcInputRow label="Current Value (₹)" value={taxCalcCurrent} setter={setTaxCalcCurrent} placeholder="850000" />
+                      <CalcInputRow label="Holding Period (months)" value={taxCalcMonths} setter={setTaxCalcMonths} placeholder="24" />
                       <div>
                         <div style={{ fontSize:11, color:G.slate, marginBottom:6 }}>Fund Type</div>
                         <div style={{ display:"flex", gap:8 }}>
@@ -2469,16 +2485,16 @@ useEffect(() => {
                       <div style={{ color:G.mist, fontSize:12, marginTop:24, textAlign:"center" }}>Fill in investment details to calculate</div>
                     ) : (
                       <>
-                        <ResultRow label="Amount invested" value={fmtINR(taxCalcInvested)} color={G.fog} />
-                        <ResultRow label="Current value" value={fmtINR(taxCalcCurrent)} color="#27AE78" />
-                        <ResultRow label="Gross gain" value={fmtINR(taxResult.gain)} color={taxResult.gain>=0?"#27AE78":"#E05555"} />
-                        <ResultRow label="Tax type" value={taxResult.taxType} color={G.mist} />
+                        <CalcResultRow label="Amount invested" value={fmtINR(taxCalcInvested)} color={G.fog} />
+                        <CalcResultRow label="Current value" value={fmtINR(taxCalcCurrent)} color="#27AE78" />
+                        <CalcResultRow label="Gross gain" value={fmtINR(taxResult.gain)} color={taxResult.gain>=0?"#27AE78":"#E05555"} />
+                        <CalcResultRow label="Tax type" value={taxResult.taxType} color={G.mist} />
                         {taxCalcType==='equity' && parseInt(taxCalcMonths)>12 && taxResult.gain > 0 && (
-                          <ResultRow label="Exempt (₹1.25L/yr)" value={fmtINR(Math.min(taxResult.gain, 125000))} color={G.mist} />
+                          <CalcResultRow label="Exempt (₹1.25L/yr)" value={fmtINR(Math.min(taxResult.gain, 125000))} color={G.mist} />
                         )}
-                        <ResultRow label="Estimated tax" value={taxResult.tax > 0 ? fmtINR(taxResult.tax) : '₹0'} color="#E8A000" big />
-                        <ResultRow label="Post-tax corpus" value={fmtINR(taxResult.postTaxCorpus)} color="#27AE78" big />
-                        <ResultRow label="Post-tax CAGR" value={taxResult.postTaxCagr > 0 ? taxResult.postTaxCagr.toFixed(2)+'%' : '—'} color={G.gold} border={false} />
+                        <CalcResultRow label="Estimated tax" value={taxResult.tax > 0 ? fmtINR(taxResult.tax) : '₹0'} color="#E8A000" big />
+                        <CalcResultRow label="Post-tax corpus" value={fmtINR(taxResult.postTaxCorpus)} color="#27AE78" big />
+                        <CalcResultRow label="Post-tax CAGR" value={taxResult.postTaxCagr > 0 ? taxResult.postTaxCagr.toFixed(2)+'%' : '—'} color={G.gold} border={false} />
                         <div style={{ marginTop:16, padding:"10px 14px", background:"rgba(255,255,255,0.03)", borderRadius:8, fontSize:10, color:G.mist, lineHeight:1.7 }}>
                           <strong style={{ color:G.slate }}>Budget 2024 rates:</strong> Equity LTCG 12.5% (above ₹1.25L/yr exemption), STCG 20%. Debt/FOF/International funds taxed at income slab rate regardless of holding. Always consult a CA for your exact liability.
                         </div>
