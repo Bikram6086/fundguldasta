@@ -414,6 +414,11 @@ export default function App() {
   const [altError, setAltError] = useState(null);
   const [altPoolExhausted, setAltPoolExhausted] = useState(false);
   const [loadingTooLong, setLoadingTooLong] = useState(false);
+  // Guldasta Advisor (M2)
+  const [advisorMessages, setAdvisorMessages] = useState([]);
+  const [advisorInput, setAdvisorInput] = useState("");
+  const [advisorLoading, setAdvisorLoading] = useState(false);
+  const advisorEndRef = useRef(null);
   // Collapsible result sections (true = collapsed)
   const DEFAULT_COLLAPSED = { dvr:true, metrics:false, confidence:true, stress:true, correlation:true, strengths:false, methodology:true, comparator:true, rebal:true, freshness:true };
   const [secCollapsed, setSecCollapsed] = useState({ ...DEFAULT_COLLAPSED });
@@ -810,6 +815,10 @@ useEffect(() => {
     }
   }, [screen]);
 
+  useEffect(() => {
+    if (advisorEndRef.current) advisorEndRef.current.scrollIntoView({ behavior: "smooth" });
+  }, [advisorMessages]);
+
   const handleAskAI = async (question, contextType, contextData) => {
     const q = question || aiQuestion;
     if (!q.trim()) return;
@@ -867,6 +876,55 @@ useEffect(() => {
       setAiError('Connection error — is the API running?');
     }
     setAiLoading(false);
+  };
+
+  const handleAdvisorSend = async (questionOverride) => {
+    const q = questionOverride || advisorInput.trim();
+    if (!q || advisorLoading) return;
+    const userMsg = { role: "user", content: q };
+    const newMessages = [...advisorMessages, userMsg];
+    setAdvisorMessages(newMessages);
+    setAdvisorInput("");
+    setAdvisorLoading(true);
+    const assistantMsg = { role: "assistant", content: "" };
+    setAdvisorMessages([...newMessages, assistantMsg]);
+    try {
+      const res = await fetch(`${API_BASE}/api/ai/advisor`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: newMessages }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        setAdvisorMessages(prev => { const m = [...prev]; m[m.length-1] = { role: "assistant", content: `Error: ${err.detail || "AI unavailable"}` }; return m; });
+        setAdvisorLoading(false);
+        return;
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let full = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop();
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const payload = line.slice(6).trim();
+          if (payload === "[DONE]") { setAdvisorLoading(false); return; }
+          try {
+            const parsed = JSON.parse(payload);
+            if (parsed.text) { full += parsed.text; setAdvisorMessages(prev => { const m = [...prev]; m[m.length-1] = { role: "assistant", content: full }; return m; }); }
+            if (parsed.error) { setAdvisorMessages(prev => { const m = [...prev]; m[m.length-1] = { role: "assistant", content: `Error: ${parsed.error}` }; return m; }); setAdvisorLoading(false); return; }
+          } catch {}
+        }
+      }
+    } catch (e) {
+      setAdvisorMessages(prev => { const m = [...prev]; m[m.length-1] = { role: "assistant", content: "Connection error — is the API running?" }; return m; });
+    }
+    setAdvisorLoading(false);
   };
 
   const computeLTCG = (purchase, current, months, fundType) => {
@@ -2216,6 +2274,7 @@ useEffect(() => {
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.08)" }} onClick={() => setScreen("portfolio")}>{tr("📊 Analyse My Portfolio", HI_HERO.btnPortfolio)}</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.06)" }} onClick={() => { setCalcPreFill(null); setCalcTab('sip'); setScreen("calculators"); }}>{tr("📐 SIP & Tax Calculators", HI_HERO.btnCalc)}</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.04)" }} onClick={() => { handleQuizReset(); setQuizModal(true); }}>{tr("🎯 Find My Risk Profile", HI_HERO.btnRisk)}</button>
+          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.08)", border:"1px solid rgba(212,175,55,0.25)" }} onClick={() => { setAdvisorMessages([]); setAdvisorInput(""); setScreen("advisor"); }}>💬 Guldasta Advisor — Ask anything about Indian MF</button>
           <p className="note">{lang === 'hi' ? HI_HERO.note : "Research & education only · Not investment advice · Past performance does not guarantee future returns\nAll fund data sourced from AMFI · No commission earned on any recommendation · fundguldasta.com"}</p>
         </div>
       </div>
@@ -3172,6 +3231,84 @@ useEffect(() => {
     </>
   );
 
+  if (screen === "advisor") return (
+    <>
+      <style>{css}</style>
+      <div style={{ minHeight: "100vh", background: G.bg, display: "flex", flexDirection: "column" }}>
+        {/* Header */}
+        <div style={{ background: "rgba(9,12,17,0.96)", backdropFilter: "blur(16px)", borderBottom: `1px solid ${G.bord}`, padding: "14px 28px", display: "flex", alignItems: "center", gap: 16, position: "sticky", top: 0, zIndex: 100 }}>
+          <button onClick={() => setScreen(curationResult ? "results" : "hero")} style={{ background: "none", border: "none", color: G.mist, fontSize: 13, cursor: "pointer", fontFamily: "Outfit,sans-serif", display: "flex", alignItems: "center", gap: 6 }}>← Back</button>
+          <div style={{ fontFamily: "Cormorant Garamond,serif", fontSize: 20, fontWeight: 700, color: G.gold }}>Guldasta Advisor</div>
+          <div style={{ fontSize: 11, color: G.mist, marginLeft: 4 }}>Indian mutual fund research & education</div>
+          <button onClick={() => setAdvisorMessages([])} style={{ marginLeft: "auto", fontSize: 11, color: G.mist, background: "transparent", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>Clear chat</button>
+        </div>
+
+        {/* Disclaimer */}
+        <div style={{ background: "rgba(240,165,0,0.05)", borderBottom: "1px solid rgba(240,165,0,0.12)", padding: "8px 28px", fontSize: 11, color: G.mist, textAlign: "center" }}>
+          ⚠️ Research &amp; education only — not a SEBI-registered investment advisor. Not personalised investment advice.
+        </div>
+
+        {/* Chat area */}
+        <div style={{ flex: 1, maxWidth: 760, margin: "0 auto", width: "100%", padding: "24px 24px 0", display: "flex", flexDirection: "column", gap: 16, overflowY: "auto" }}>
+          {advisorMessages.length === 0 && (
+            <div style={{ textAlign: "center", paddingTop: 32 }}>
+              <div style={{ fontFamily: "Cormorant Garamond,serif", fontSize: 28, color: G.gold, marginBottom: 8 }}>What would you like to understand?</div>
+              <div style={{ fontSize: 13, color: G.mist, marginBottom: 32, lineHeight: 1.7 }}>Ask anything about Indian mutual funds — categories, tax, cost, risk, portfolio construction, regulations, or how FundGuldasta works.</div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, justifyContent: "center" }}>
+                {[
+                  "What is the difference between Direct and Regular plans?",
+                  "How does LTCG tax work for equity mutual funds?",
+                  "What is a Flexi Cap fund and when does it make sense?",
+                  "Why is expense ratio so important over a 10-year horizon?",
+                  "What does Sortino ratio tell me that Sharpe ratio doesn't?",
+                  "How should I think about rebalancing my mutual fund portfolio?",
+                  "What is survivorship bias and why does it matter for fund selection?",
+                  "What is the difference between AUM and NAV?",
+                ].map((q, i) => (
+                  <button key={i} onClick={() => handleAdvisorSend(q)}
+                    style={{ fontSize: 12, padding: "8px 14px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(255,255,255,0.03)", color: G.fog, cursor: "pointer", fontFamily: "Outfit,sans-serif", textAlign: "left", maxWidth: 340, lineHeight: 1.4 }}>
+                    {q}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          {advisorMessages.map((msg, idx) => (
+            <div key={idx} style={{ display: "flex", justifyContent: msg.role === "user" ? "flex-end" : "flex-start" }}>
+              <div style={{
+                maxWidth: "80%", padding: "12px 16px", borderRadius: msg.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                background: msg.role === "user" ? "rgba(212,175,55,0.12)" : G.sur,
+                border: msg.role === "user" ? "1px solid rgba(212,175,55,0.3)" : `1px solid ${G.bord}`,
+                fontSize: 13, color: G.fog, lineHeight: 1.75, whiteSpace: "pre-wrap",
+              }}>
+                {msg.content || (advisorLoading && idx === advisorMessages.length - 1 ? <span style={{ color: G.mist }}>●●●</span> : "")}
+              </div>
+            </div>
+          ))}
+          <div ref={advisorEndRef} />
+        </div>
+
+        {/* Input */}
+        <div style={{ maxWidth: 760, margin: "0 auto", width: "100%", padding: "16px 24px 24px" }}>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              value={advisorInput}
+              onChange={e => setAdvisorInput(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAdvisorSend(); } }}
+              placeholder="Ask about Indian mutual funds, tax rules, categories, portfolio strategy..."
+              style={{ flex: 1, background: G.elv, border: `1px solid rgba(255,255,255,0.1)`, borderRadius: 10, padding: "12px 16px", fontFamily: "Outfit,sans-serif", fontSize: 13, color: G.white, outline: "none" }}
+            />
+            <button onClick={() => handleAdvisorSend()} disabled={!advisorInput.trim() || advisorLoading}
+              style={{ padding: "12px 20px", background: advisorInput.trim() && !advisorLoading ? "rgba(212,175,55,0.15)" : "rgba(255,255,255,0.03)", border: `1px solid ${advisorInput.trim() && !advisorLoading ? "rgba(212,175,55,0.4)" : "rgba(255,255,255,0.06)"}`, borderRadius: 10, color: advisorInput.trim() && !advisorLoading ? G.gold : G.mist, fontFamily: "Outfit,sans-serif", fontSize: 13, cursor: advisorInput.trim() && !advisorLoading ? "pointer" : "default" }}>
+              {advisorLoading ? "●●●" : "Ask →"}
+            </button>
+          </div>
+          <div style={{ fontSize: 10, color: G.mist, marginTop: 8, textAlign: "center" }}>Research & education only · Not SEBI-registered investment advice · Verify data on amfiindia.com</div>
+        </div>
+      </div>
+    </>
+  );
+
   if (screen === "loading") return (
     <>
       <style>{css}</style>
@@ -3222,6 +3359,7 @@ useEffect(() => {
             <button className="byob-entry" style={{ marginTop: 0, fontSize: 11, padding: "5px 14px", background:"rgba(212,175,55,0.06)" }} onClick={() => { setCalcPreFill(selectedArch ? { cagr: (selectedArch.metrics?.bouquet_cagr||selectedArch.cagrRange||14), label: selectedArch.label } : null); setCalcTab('sip'); setScreen("calculators"); }}>📐 Calculators</button>
             <button className="byob-entry" style={{ marginTop: 0, fontSize: 11, padding: "5px 14px", background:"rgba(212,175,55,0.04)" }} onClick={() => { setCmpA("steady"); setCmpB("balanced"); setCmpModal(true); }}>⊟ Compare</button>
             <button className="byob-entry" style={{ marginTop: 0, fontSize: 11, padding: "5px 14px", background:"rgba(212,175,55,0.03)" }} onClick={() => { setWnSearch(''); setWnData(null); setWnSelected(null); setWnResults([]); setWnModal(true); }}>🔍 Fund Explorer</button>
+            <button className="byob-entry" style={{ marginTop: 0, fontSize: 11, padding: "5px 14px", background:"rgba(212,175,55,0.08)", border:"1px solid rgba(212,175,55,0.3)" }} onClick={() => { setAdvisorMessages([]); setAdvisorInput(""); setScreen("advisor"); }}>💬 Advisor</button>
             <div className="pill">{goalPill}</div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>

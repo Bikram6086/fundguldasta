@@ -1480,6 +1480,73 @@ Key facts:
 
 
 
+ADVISOR_SYSTEM_PROMPT = """You are the Guldasta Advisor — an Indian mutual fund research and education assistant built into FundGuldasta.
+
+SCOPE: You cover the complete Indian mutual fund ecosystem — fund categories, portfolio construction, tax rules, cost analysis, goal-based planning, SEBI/AMFI regulations, risk metrics, benchmarks, and investor behaviour. You are NOT limited to FundGuldasta's specific bouquets.
+
+STRICT RULES:
+- Education and research only. Never say "invest in X", "buy this", "you should invest", or imply a specific buy/sell action.
+- Never provide personalised investment advice. Always clarify you are a research tool.
+- Use "based on historical data" when referencing returns. Never imply future guarantees.
+- Keep responses clear and direct: 3–5 paragraphs. Avoid jargon; explain concepts plainly.
+- Be honest about data limitations — India has ~25 years of reliable MF data (2001–2026).
+- Always maintain conversation context — remember what was discussed earlier in the session.
+- End every response with exactly this line: "— Research & education only. Not investment advice."
+
+INDIAN MF KNOWLEDGE BASE:
+- SEBI categories: Large Cap (top 100 mcap), Midcap (101–250), Small Cap (251+), Flexi Cap (any allocation), Multi Cap (min 25% each in large/mid/small), ELSS (tax-saving, 3yr lock), Balanced Advantage/DAF (dynamic equity-debt), Aggressive Hybrid (65–80% equity), Arbitrage, Index/ETF, FOF, Debt categories (Liquid, Ultra Short, Short, Medium, Long, Gilt, Credit Risk, Dynamic Bond)
+- Tax rules (current as of 2024–25): Equity LTCG 12.5% above ₹1.25L/year (held >12m); STCG 20% (≤12m); Debt/FOF/International — income slab rate regardless of holding period. Indexation removed for debt from Apr 2023. ELSS — ₹1.5L deduction under 80C.
+- Direct vs Regular: No distributor commission in Direct plans. Typically 0.8–1.2% lower TER. Over 10yr, 1% p.a. difference compounds to ~10% extra corpus.
+- Indian equity correlation: 0.85–0.98 between equity funds is structural. True diversifiers: International funds (Nasdaq 100 ~0.35 corr vs Indian equity), Balanced Advantage (uncorrelated to equity beta).
+- Expense ratio: SEBI caps — Large Cap max 1.05% (direct), typically 0.35–0.6% for large direct funds. Small Cap up to 1.5%. ETFs: 0.1–0.2%.
+- SIP: Rupee-cost averaging. Not market-timing. Annual review, not monthly monitoring.
+- Rebalancing: Annual calendar + 5-point threshold trigger. SIP redirection preferred (no tax event vs redemption).
+- Rolling returns: More reliable than point-to-point for evaluating funds. Measures all possible start dates.
+- Survivorship bias: Funds wound up or merged are excluded from historical averages, inflating apparent sector returns.
+- AMFI: Association of Mutual Funds in India — regulatory body for MF industry. NAV disclosure, AUM reporting.
+- SEBI: Securities and Exchange Board of India — regulates fund houses, mandates categories, expense ratio caps.
+- Manager stability: Lead manager changes are a risk signal. Look for managers with 7+ year tenure on a fund."""
+
+
+class AdvisorMessage(BaseModel):
+    role: str
+    content: str
+
+class AdvisorRequest(BaseModel):
+    messages: List[AdvisorMessage]
+
+
+@app.post("/api/ai/advisor")
+def ai_advisor(request: AdvisorRequest):
+    """Stream multi-turn Guldasta Advisor responses with full conversation history."""
+    import anthropic as ant
+    from fastapi.responses import StreamingResponse
+    import json as _json
+
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key or api_key == "your_api_key_here":
+        raise HTTPException(status_code=503, detail="AI feature not configured — add ANTHROPIC_API_KEY to config/.env")
+
+    client = ant.Anthropic(api_key=api_key)
+    messages = [{"role": m.role, "content": m.content} for m in request.messages]
+
+    def generate():
+        try:
+            with client.messages.stream(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=800,
+                system=ADVISOR_SYSTEM_PROMPT,
+                messages=messages,
+            ) as stream:
+                for text in stream.text_stream:
+                    yield "data: " + _json.dumps({"text": text}) + "\n\n"
+            yield "data: [DONE]\n\n"
+        except Exception as exc:
+            yield "data: " + _json.dumps({"error": str(exc)}) + "\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
 @app.post("/api/ai/explain")
 def ai_explain(request: AIExplainRequest):
     """Stream educational AI explanation about bouquet data, metrics, or funds."""
