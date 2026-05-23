@@ -158,7 +158,7 @@ def _check_cache(state: dict):
             else:
                 # It's a date object — compute age in hours from days
                 age_hours = round((_date.today() - latest).days * 24.0, 1)
-        if age_hours is not None and age_hours > 30:
+        if age_hours is not None and age_hours > 72:
             status = "degraded"
             detail = f"{count} bouquets cached but stale ({age_hours:.0f}h old) — auto-refresh queued"
         else:

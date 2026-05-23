@@ -411,6 +411,10 @@ export default function App() {
   const [altLoading, setAltLoading] = useState(false);
   const [altError, setAltError] = useState(null);
   const [altPoolExhausted, setAltPoolExhausted] = useState(false);
+  // Collapsible result sections (true = collapsed)
+  const DEFAULT_COLLAPSED = { dvr:true, metrics:false, confidence:true, stress:true, correlation:true, strengths:false, methodology:true, comparator:true, rebal:true };
+  const [secCollapsed, setSecCollapsed] = useState({ ...DEFAULT_COLLAPSED });
+  const toggleSec = (id) => setSecCollapsed(s => ({ ...s, [id]: !s[id] }));
   // Custom builder
   const [cbFunds, setCbFunds] = useState([]);
   const [cbSearch, setCbSearch] = useState('');
@@ -2069,7 +2073,7 @@ useEffect(() => {
 
     if (screen === "hero") return (
     <>
-      {authModal && <AuthModal />}
+      {authModal && AuthModal()}
       <style>{css}</style>
       <div className="hero">
         <div className="mesh" />
@@ -3151,13 +3155,13 @@ useEffect(() => {
 
   return (
     <>
-      {authModal && <AuthModal />}
-      {savedPanel && <SavedPanel />}
-      {btModal && <BacktestModal />}
-      {fdModal && <FundDetailModal />}
-      {quizModal && <QuizModal />}
-      {cmpModal && archetypes.length >= 2 && <CompareModal />}
-      {wnModal && <WhyNotModal />}
+      {authModal && AuthModal()}
+      {savedPanel && SavedPanel()}
+      {btModal && BacktestModal()}
+      {fdModal && FundDetailModal()}
+      {quizModal && QuizModal()}
+      {cmpModal && archetypes.length >= 2 && CompareModal()}
+      {wnModal && WhyNotModal()}
       <style>{css}</style>
       <div onClick={() => healthOpen && setHealthOpen(false)}>
         <div className="rbar">
@@ -3914,8 +3918,8 @@ useEffect(() => {
 
               {/* BOX 3.5 — DIRECT vs REGULAR */}
               <div className="card" id="sec-dvr">
-                <div className="ch"><span className="ct">Direct vs Regular Plan — What You Save</span><span className="badge" style={{ background: "rgba(39,174,120,0.15)", border: "1px solid rgba(39,174,120,0.3)", color: "#27AE78" }}>Your Advantage</span></div>
-                <div className="cb">
+                <div className="ch" onClick={() => toggleSec('dvr')} style={{cursor:'pointer',userSelect:'none'}}><span className="ct">Direct vs Regular Plan — What You Save</span><span className="badge" style={{ background: "rgba(39,174,120,0.15)", border: "1px solid rgba(39,174,120,0.3)", color: "#27AE78" }}>Your Advantage</span><span style={{marginLeft:'auto',color:G.mist,fontSize:11}}>{secCollapsed.dvr?'▶':'▼'}</span></div>
+                {!secCollapsed.dvr && <div className="cb">
                   <p style={{ fontSize: 13, color: G.mist, lineHeight: 1.7, marginBottom: 14 }}>Regular plans pay distributors ~1% extra TER every year. On ₹10L over {parseFloat(yrs)||7} years, this compounds into significant lost wealth — for zero additional service.</p>
                   <div style={{ overflowX: "auto" }}>
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
@@ -3949,13 +3953,13 @@ useEffect(() => {
                   <div style={{ fontSize: 11, color: G.mist, marginTop: 12, lineHeight: 1.6, padding: "10px 14px", background: "rgba(255,255,255,0.02)", borderRadius: 8, borderLeft: `3px solid ${G.gold}` }}>
                     Estimate uses assumed 16% gross return. Regular TER estimated at Direct TER + 1.0% (typical distributor trail). FundGuldasta recommends direct plans only. Verify current TERs on AMFI.
                   </div>
-                </div>
+                </div>}
               </div>
 
               {/* BOX 4 — METRICS */}
               <div className="card" id="sec-metrics">
-                <div className="ch"><span className="ct">Historical Performance Metrics</span><span className="badge bg-g">Live AMFI Data</span></div>
-                <div className="cb" style={{ overflowX: "auto" }}>
+                <div className="ch" onClick={() => toggleSec('metrics')} style={{cursor:'pointer',userSelect:'none'}}><span className="ct">Historical Performance Metrics</span><span className="badge bg-g">Live AMFI Data</span><span style={{marginLeft:'auto',color:G.mist,fontSize:11}}>{secCollapsed.metrics?'▶':'▼'}</span></div>
+                {!secCollapsed.metrics && <div className="cb" style={{ overflowX: "auto" }}>
                   <table className="mt">
                     <thead>
                       <tr>
@@ -3983,16 +3987,17 @@ useEffect(() => {
                   {a.intlTaxWarning && (
                     <div className="itax">⚠️ Tax Alert: Motilal Oswal Nasdaq 100 FOF is taxed as a DEBT fund regardless of holding period. Income slab rate applies — not 12.5% LTCG.</div>
                   )}
-                </div>
+                </div>}
               </div>
 
               {/* BOX 5 — CONFIDENCE */}
               <div className="card" id="sec-confidence">
-                <div className="ch">
+                <div className="ch" onClick={() => toggleSec('confidence')} style={{cursor:'pointer',userSelect:'none'}}>
                   <span className="ct">Confidence Score</span>
                   <span className="badge" style={{ background: `rgba(${a.rgb},.12)`, color: a.color }}>{a.confidence?.level}</span>
+                  <span style={{marginLeft:'auto',color:G.mist,fontSize:11}}>{secCollapsed.confidence?'▶':'▼'}</span>
                 </div>
-                <div className="cb">
+                {!secCollapsed.confidence && <div className="cb">
                   <div className="cg">
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
                       <div className="dial" style={{ borderColor: a.color }}>
@@ -4018,13 +4023,13 @@ useEffect(() => {
                     This bouquet beat its target in {a.confidence?.target_beaten_pct}% of all rolling windows.
                     Assessment of historical consistency — not a prediction.
                   </div>
-                </div>
+                </div>}
               </div>
 
               {/* BOX 6 — STRESS TEST */}
               <div className="card" id="sec-stress">
-                <div className="ch"><span className="ct">Stress Test — Historical Crash Performance</span><span className="badge bg-r">Real Market Data</span></div>
-                <div className="cb">
+                <div className="ch" onClick={() => toggleSec('stress')} style={{cursor:'pointer',userSelect:'none'}}><span className="ct">Stress Test — Historical Crash Performance</span><span className="badge bg-r">Real Market Data</span><span style={{marginLeft:'auto',color:G.mist,fontSize:11}}>{secCollapsed.stress?'▶':'▼'}</span></div>
+                {!secCollapsed.stress && <div className="cb">
                   <div className="sg">
                     {(a.stressTest?.periods || []).map((s, i) => (
                       <div key={i} className="sk">
@@ -4046,13 +4051,13 @@ useEffect(() => {
                       </div>
                     ))}
                   </div>
-                </div>
+                </div>}
               </div>
 
               {/* BOX 7 — OVERLAP */}
               <div className="card" id="sec-correlation">
-                <div className="ch"><span className="ct">Portfolio Analysis</span><span className="badge bg-g">Correlation Data</span></div>
-                <div className="cb">
+                <div className="ch" onClick={() => toggleSec('correlation')} style={{cursor:'pointer',userSelect:'none'}}><span className="ct">Portfolio Analysis</span><span className="badge bg-g">Correlation Data</span><span style={{marginLeft:'auto',color:G.mist,fontSize:11}}>{secCollapsed.correlation?'▶':'▼'}</span></div>
+                {!secCollapsed.correlation && <div className="cb">
                   <div style={{ fontSize: 14, color: G.fog, marginBottom: 14 }}>
                     <strong style={{ color: G.white }}>Return Correlation</strong> — computed from daily NAV data
                   </div>
@@ -4072,13 +4077,13 @@ useEffect(() => {
                   <div style={{ marginTop: 14, fontSize: 11, color: G.mist, padding: "8px 12px", background: "rgba(255,255,255,0.02)", borderRadius: 6, lineHeight: 1.6, borderLeft: "3px solid rgba(255,255,255,0.08)" }}>
                     Stock-level overlap (shared holdings) requires individual fund factsheet parsing — that feature is under development. Return correlation above is accurate and computed from 7+ years of daily NAV data.
                   </div>
-                </div>
+                </div>}
               </div>
 
               {/* BOX 8 — PROS & CONS */}
               <div className="card" id="sec-strengths">
-                <div className="ch"><span className="ct">Strengths & Risks</span><span className="badge bg-gold">Research Perspective</span></div>
-                <div className="cb">
+                <div className="ch" onClick={() => toggleSec('strengths')} style={{cursor:'pointer',userSelect:'none'}}><span className="ct">Strengths & Risks</span><span className="badge bg-gold">Research Perspective</span><span style={{marginLeft:'auto',color:G.mist,fontSize:11}}>{secCollapsed.strengths?'▶':'▼'}</span></div>
+                {!secCollapsed.strengths && <div className="cb">
                   <div className="pros-cons-grid">
                     <div className="pros-col">
                       <div className="pros-col-header">
@@ -4107,7 +4112,7 @@ useEffect(() => {
                       </ul>
                     </div>
                   </div>
-                </div>
+                </div>}
               </div>
 
               {/* REBALANCING GUIDELINES */}
@@ -4237,8 +4242,8 @@ useEffect(() => {
 
               {/* BOX 9 — METHODOLOGY */}
               <div className="card" id="sec-methodology">
-                <div className="ch"><span className="ct">Selection Methodology</span><span className="badge bg-g">Full Transparency</span></div>
-                <div className="cb">
+                <div className="ch" onClick={() => toggleSec('methodology')} style={{cursor:'pointer',userSelect:'none'}}><span className="ct">Selection Methodology</span><span className="badge bg-g">Full Transparency</span><span style={{marginLeft:'auto',color:G.mist,fontSize:11}}>{secCollapsed.methodology?'▶':'▼'}</span></div>
+                {!secCollapsed.methodology && <div className="cb">
                   <div className="mg">
                     {(a.methodology || []).map((m, i) => (
                       <div key={i} className="mi">
@@ -4253,13 +4258,13 @@ useEffect(() => {
                     â¢ <strong>Stock-level portfolio overlap</strong>: Requires parsing AMFI monthly disclosure PDFs. Return correlation (20yr NAV data) is the proxy and is accurate.<br />
                     â¢ <strong>Expense ratio</strong>: Direct plan TER sourced from AMFI; verify current rates at amfiindia.com before investing.
                   </div>
-                </div>
+                </div>}
               </div>
 
               {/* BOX 10 — COMPARATOR */}
               <div className="card" id="sec-comparator">
-                <div className="ch"><span className="ct">How Does This Compare?</span><span className="badge bg-gold">₹10L Invested · {yrs || 7} Years</span></div>
-                <div className="cb">
+                <div className="ch" onClick={() => toggleSec('comparator')} style={{cursor:'pointer',userSelect:'none'}}><span className="ct">How Does This Compare?</span><span className="badge bg-gold">₹10L Invested · {yrs || 7} Years</span><span style={{marginLeft:'auto',color:G.mist,fontSize:11}}>{secCollapsed.comparator?'▶':'▼'}</span></div>
+                {!secCollapsed.comparator && <div className="cb">
                   <div className="cog">
                     <div className="coc pri">
                       <div style={{ fontSize: 11, color: G.mist, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 12 }}>This Bouquet</div>
@@ -4286,7 +4291,7 @@ useEffect(() => {
                     All figures illustrative — based on historical CAGR applied to ₹10L lump sum. Not a projection of future returns.
                     The Nifty 50 Index Fund comparison is intentional — a passive fund at ~12% CAGR is a genuine alternative this bouquet must justify exceeding.
                   </div>
-                </div>
+                </div>}
               </div>
 
               {/* DATA FRESHNESS */}

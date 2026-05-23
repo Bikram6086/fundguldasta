@@ -20,6 +20,53 @@ def _get_db():
     return psycopg2.connect(**DB_CONFIG)
 
 
+def _batch_load_scores(scheme_codes: list, horizon_years: int) -> dict:
+    """
+    Fetch pre-computed scores from computed_metrics in a single batch query.
+    Returns {scheme_code: {composite_score, dimension_scores}} for found codes.
+    Falls back gracefully — caller does live scoring for any missing codes.
+    """
+    if not scheme_codes:
+        return {}
+    conn = _get_db()
+    cur = conn.cursor()
+    placeholders = ','.join(['%s'] * len(scheme_codes))
+    cur.execute(f"""
+        SELECT DISTINCT ON (scheme_code)
+            scheme_code,
+            fund_score,
+            return_consistency_score,
+            risk_adjusted_score,
+            downside_score,
+            manager_score,
+            portfolio_quality_score,
+            forward_context_score
+        FROM computed_metrics
+        WHERE scheme_code IN ({placeholders})
+          AND horizon_years = %s
+          AND fund_score IS NOT NULL
+        ORDER BY scheme_code, computation_date DESC
+    """, [str(c) for c in scheme_codes] + [horizon_years])
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    result = {}
+    for row in rows:
+        code, fs, rc, ra, ds, ms, pq, fc = row
+        result[str(code)] = {
+            'composite_score': float(fs) if fs is not None else None,
+            'dimension_scores': {
+                'return_consistency': float(rc) if rc is not None else 0,
+                'risk_adjusted':     float(ra) if ra is not None else 0,
+                'downside_behaviour':float(ds) if ds is not None else 0,
+                'manager_stability': float(ms) if ms is not None else 0,
+                'portfolio_quality': float(pq) if pq is not None else 0,
+                'forward_context':   float(fc) if fc is not None else 0,
+            },
+        }
+    return result
+
+
 def _get_tier(nav_count: int) -> int:
     if nav_count >= 1750:
         return 1
@@ -210,21 +257,27 @@ def analyse_custom_bouquet(
     # Fetch fund metadata
     meta = _fetch_fund_meta(scheme_codes)
 
-    # Score each fund
-    print("Scoring funds...")
+    # Score each fund — batch load from computed_metrics first, live score only for misses
+    print("Scoring funds (batch cache lookup)...")
+    cached_scores = _batch_load_scores(scheme_codes, horizon_years)
     fund_analyses = []
     for code in scheme_codes:
         info = meta.get(code, {})
         category = info.get('category') or 'Unknown'
-        try:
-            score_result = compute_composite_score(code, horizon_years, target_cagr, category)
-            composite = score_result.get('composite_score')
-            dimensions = score_result.get('dimension_scores', {})
-            score_error = score_result.get('error')
-        except Exception as e:
-            composite = None
-            dimensions = {}
-            score_error = str(e)
+        if code in cached_scores:
+            composite = cached_scores[code]['composite_score']
+            dimensions = cached_scores[code]['dimension_scores']
+            score_error = None
+        else:
+            try:
+                score_result = compute_composite_score(code, horizon_years, target_cagr, category)
+                composite = score_result.get('composite_score')
+                dimensions = score_result.get('dimension_scores', {})
+                score_error = score_result.get('error')
+            except Exception as e:
+                composite = None
+                dimensions = {}
+                score_error = str(e)
 
         rolling_cagr = get_fund_rolling_cagr(code, horizon_years)
 
