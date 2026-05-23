@@ -26,14 +26,8 @@ from datetime import datetime, date
 from dotenv import load_dotenv
 from engine.rolling_returns import get_nav_series, get_benchmark_series, compute_cagr
 
-load_dotenv(os.path.expanduser('~/fundguldasta/config/.env'))
-
-DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': os.getenv('DB_PORT', '5432'),
-    'dbname': os.getenv('DB_NAME', 'fundguldasta_dev'),
-    'user': os.getenv('DB_USER', 'fundguldasta_user'),
-}
+from config.db import get_db_config
+DB_CONFIG = get_db_config()
 
 # Risk-free rate — approximate 6-month T-bill rate in India
 RISK_FREE_RATE_ANNUAL = 6.5
