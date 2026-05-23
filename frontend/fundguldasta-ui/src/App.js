@@ -921,7 +921,7 @@ useEffect(() => {
           if (payload === "[DONE]") { setAdvisorLoading(false); return; }
           try {
             const parsed = JSON.parse(payload);
-            if (parsed.text) { full += parsed.text; setAdvisorMessages(prev => { const m = [...prev]; m[m.length-1] = { role: "assistant", content: full }; return m; }); }
+            if (parsed.text) { full += parsed.text; const snap = full; setAdvisorMessages(prev => { const m = [...prev]; m[m.length-1] = { role: "assistant", content: snap }; return m; }); }
             if (parsed.error) { setAdvisorMessages(prev => { const m = [...prev]; m[m.length-1] = { role: "assistant", content: `Error: ${parsed.error}` }; return m; }); setAdvisorLoading(false); return; }
           } catch {}
         }
