@@ -365,7 +365,7 @@ function CalcResultRow({ label, value, color, big=false, border=true }) {
 }
 
 export default function App() {
-  const { t, i18n } = useTranslation();
+  const { i18n } = useTranslation();
   const [screen, setScreen] = useState("hero");
   const [mode, setMode] = useState("return");
   const [cagr, setCAGR] = useState("");
@@ -440,7 +440,7 @@ export default function App() {
   const [btResult, setBtResult] = useState(null);
   const [btLoading, setBtLoading] = useState(false);
   const [fdModal, setFdModal] = useState(false);
-  const [fdCode, setFdCode] = useState(null);
+  const [, setFdCode] = useState(null);
   const [fdResult, setFdResult] = useState(null);
   const [fdLoading, setFdLoading] = useState(false);
   // Priority 14 state
@@ -454,7 +454,7 @@ export default function App() {
   const [wnModal, setWnModal] = useState(false);
   const [wnSearch, setWnSearch] = useState('');
   const [wnResults, setWnResults] = useState([]);
-  const [wnSelected, setWnSelected] = useState(null);
+  const [, setWnSelected] = useState(null);
   const [wnLoading, setWnLoading] = useState(false);
   const [wnData, setWnData] = useState(null);
   const [lang, setLang] = useState('en');
@@ -969,7 +969,6 @@ useEffect(() => {
     aggressive:{ label:"Aggressive Achiever",cagr:17, yrs:7, color:"#F0A500", desc:"Mid and small-cap driven. Higher volatility, higher growth potential." },
     conviction:{ label:"High Conviction",    cagr:19, yrs:7, color:"#E05555", desc:"Maximum growth orientation. Best for long horizons with high risk tolerance." },
   };
-  const quizScore = () => quizAnswers.reduce((sum, a, i) => sum + QUIZ_QUESTIONS[i].scores[a], 0);
   const quizRecommend = (score) =>
     score <= 9 ? "steady" : score <= 12 ? "balanced" : score <= 16 ? "aggressive" : "conviction";
 
@@ -1492,15 +1491,11 @@ useEffect(() => {
     );
   }
 
-  // ── SVG helpers shared by charts ────────────────────────────────────────────
-  const svgLine = (pts) => pts.map((p, i) => (i === 0 ? `M${p[0]},${p[1]}` : `L${p[0]},${p[1]}`)).join(" ");
-
   // ── Backtest Modal ────────────────────────────────────────────────────────
   const BacktestModal = () => {
     const PL = 52, PT = 10, PR = 12, PB = 28;
     const W = 560, H = 180, CW = W - PL - PR, CH = H - PT - PB;
     const fmt = (n) => n >= 1e7 ? `₹${(n/1e7).toFixed(2)}Cr` : n >= 1e5 ? `₹${(n/1e5).toFixed(1)}L` : `₹${n.toLocaleString("en-IN")}`;
-    const fmtCr = (n) => n >= 1e7 ? `${(n/1e7).toFixed(2)} Cr` : n >= 1e5 ? `${(n/1e5).toFixed(1)}L` : n?.toLocaleString("en-IN");
     const s = btResult?.series || [];
     const fp = btResult?.future || [];
     const sum = btResult?.summary || {};
