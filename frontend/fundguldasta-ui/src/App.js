@@ -538,6 +538,8 @@ export default function App() {
   const [pfAnalysis, setPfAnalysis] = useState(null);
   const [pfAnalysing, setPfAnalysing] = useState(false);
   const [pfError, setPfError] = useState(null);
+  const [pfAiReview, setPfAiReview] = useState('');
+  const [pfAiReviewLoading, setPfAiReviewLoading] = useState(false);
   const [casLoading, setCasLoading] = useState(false);
   const [casResult, setCasResult] = useState(null);
   const [casSelected, setCasSelected] = useState(new Set());
@@ -1215,7 +1217,7 @@ useEffect(() => {
   const handlePfAlloc = (code, val) => setPfFunds(prev => prev.map(f => f.scheme_code === code ? { ...f, allocation_pct: parseFloat(val) || 0 } : f));
   const handlePfAnalyse = async () => {
     if (pfFunds.length < 1) { setPfError("Add at least one fund"); return; }
-    setPfAnalysing(true); setPfError(null); setPfAnalysis(null);
+    setPfAnalysing(true); setPfError(null); setPfAnalysis(null); setPfAiReview(''); setPfAiReviewLoading(false);
     try {
       const result = await apiAnalysePortfolio(pfFunds.map(f => ({ scheme_code: f.scheme_code, allocation_pct: f.allocation_pct })));
       setPfAnalysis(result);
@@ -1599,6 +1601,112 @@ useEffect(() => {
                 {pfAnalysis.missing_data_codes?.length > 0 && (
                   <div style={{ color:G.slate, fontSize:11, marginTop:8 }}>Note: No computed data for scheme codes {pfAnalysis.missing_data_codes.join(", ")} — those funds were not scored.</div>
                 )}
+
+                {/* Portfolio Health Score */}
+                {(() => {
+                  const comp = pfAnalysis.portfolio_metrics?.weighted_composite_score || 0;
+                  const er = (pfAnalysis.portfolio_metrics?.weighted_expense_ratio || 0) * 100;
+                  const topSim = pfAnalysis.archetype_matches?.[0]?.similarity_score || 0;
+                  const catCount = Object.keys(pfAnalysis.portfolio_metrics?.category_distribution || {}).length;
+                  const erScore = Math.max(0, Math.min(20, (1.5 - er) / 1.5 * 20));
+                  const divScore = Math.min(10, catCount * 2.5);
+                  const healthScore = Math.round(comp * 0.4 + topSim * 0.3 + erScore + divScore);
+                  const hColor = healthScore >= 75 ? "#27AE78" : healthScore >= 55 ? G.am : "#E05555";
+                  const hLabel = healthScore >= 75 ? "Good" : healthScore >= 55 ? "Fair" : "Needs Attention";
+
+                  const recs = [];
+                  if (pfAnalysis.gap_analysis?.missing_funds?.length > 0)
+                    recs.push({ p:"Medium", text:`Consider adding ${pfAnalysis.gap_analysis.missing_funds[0].scheme_name || "a fund from the closest archetype"} to improve alignment with the ${ARCHETYPE_LABELS[pfAnalysis.gap_analysis.archetype_id]} strategy.` });
+                  if (er > 1.0)
+                    recs.push({ p:"High", text:`Your blended expense ratio is ${er.toFixed(2)}% — above the 1% benchmark. Review if all holdings are direct plan variants.` });
+                  if (catCount < 2)
+                    recs.push({ p:"High", text:"Your portfolio is concentrated in a single fund category. Adding diversification across categories improves long-term risk-adjusted returns." });
+                  if (topSim < 40)
+                    recs.push({ p:"Low", text:"Your portfolio is quite different from all four bouquet archetypes — this isn't necessarily bad, but review whether the fund mix reflects your actual risk appetite." });
+                  if (pfAnalysis.portfolio_metrics?.fund_count > 7)
+                    recs.push({ p:"Medium", text:`You hold ${pfAnalysis.portfolio_metrics.fund_count} funds. Research consistently shows that beyond 5–6 funds you add complexity without meaningful diversification in Indian equities.` });
+                  if (recs.length === 0)
+                    recs.push({ p:"Info", text:"Your portfolio is well-structured. Continue monitoring annually or after major market events." });
+
+                  const pColor = { High:"#E05555", Medium:G.am, Low:G.gold, Info:"#27AE78" };
+
+                  return (
+                    <div>
+                      {/* Health Score */}
+                      <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20, marginBottom:16 }}>
+                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
+                          <div>
+                            <div style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:18, fontWeight:700 }}>Portfolio Health Score</div>
+                            <div style={{ color:G.slate, fontSize:11, marginTop:2 }}>Composite of fund quality, archetype alignment, cost efficiency, and diversification.</div>
+                          </div>
+                          <div style={{ textAlign:"right" }}>
+                            <div style={{ color:hColor, fontSize:36, fontWeight:800, fontFamily:"JetBrains Mono,monospace", lineHeight:1 }}>{healthScore}</div>
+                            <div style={{ color:hColor, fontSize:11, fontWeight:600, marginTop:4 }}>{hLabel}</div>
+                          </div>
+                        </div>
+                        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8 }}>
+                          {[["Fund Quality", Math.round(comp*0.4), 40],["Archetype Fit", Math.round(topSim*0.3), 30],["Cost Efficiency", Math.round(erScore), 20],["Diversification", Math.round(divScore), 10]].map(([lbl, sc, mx]) => (
+                            <div key={lbl} style={{ background:G.elv, borderRadius:8, padding:"10px 10px 8px" }}>
+                              <div style={{ color:G.mist, fontSize:10, marginBottom:6 }}>{lbl}</div>
+                              <div style={{ height:4, background:G.bord, borderRadius:2, marginBottom:5 }}>
+                                <div style={{ height:"100%", background:hColor, borderRadius:2, width:`${Math.round(sc/mx*100)}%`, transition:"width .5s" }} />
+                              </div>
+                              <div style={{ color:G.white, fontSize:12, fontFamily:"JetBrains Mono,monospace", fontWeight:600 }}>{sc}<span style={{ color:G.mist, fontSize:10 }}>/{mx}</span></div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Recommendations */}
+                      <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20, marginBottom:16 }}>
+                        <div style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:18, fontWeight:700, marginBottom:14 }}>Actionable Recommendations</div>
+                        {recs.map((r, i) => (
+                          <div key={i} style={{ display:"flex", gap:10, alignItems:"flex-start", marginBottom:10, padding:"10px 14px", background:G.elv, borderRadius:8 }}>
+                            <span style={{ background:pColor[r.p], color:"#fff", fontSize:9, fontWeight:700, borderRadius:4, padding:"2px 7px", flexShrink:0, marginTop:1, letterSpacing:".06em" }}>{r.p.toUpperCase()}</span>
+                            <div style={{ color:G.fog, fontSize:12, lineHeight:1.6 }}>{r.text}</div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* AI Portfolio Review */}
+                      <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20, marginBottom:16 }}>
+                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:pfAiReview ? 14 : 0 }}>
+                          <div style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:18, fontWeight:700 }}>AI Portfolio Review</div>
+                          {!pfAiReview && !pfAiReviewLoading && (
+                            <button onClick={async () => {
+                              setPfAiReviewLoading(true); setPfAiReview('');
+                              const question = `Review this portfolio: ${pfFunds.length} funds, blended expense ratio ${er.toFixed(2)}%, composite score ${comp.toFixed(0)}/100. Closest archetype: ${ARCHETYPE_LABELS[pfAnalysis.archetype_matches?.[0]?.archetype_id]} (${topSim.toFixed(0)}% similarity). ${pfAnalysis.gap_analysis?.missing_funds?.length > 0 ? `Missing from archetype: ${pfAnalysis.gap_analysis.missing_funds.map(f=>f.scheme_name||f.scheme_code).join(', ')}.` : ''} Provide 3-4 specific, actionable insights about this portfolio's construction quality, risk profile, and one clear improvement step.`;
+                              try {
+                                const res = await fetch(`${API_BASE}/api/ai/explain`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ question, context_type:'general' }) });
+                                const reader = res.body.getReader(); const dec = new TextDecoder(); let buf='';
+                                while(true) {
+                                  const {done, val2} = await reader.read().then(({done: d, value: v}) => ({done:d, val2:v}));
+                                  if (done) break;
+                                  buf += dec.decode(val2, {stream:true});
+                                  const lines = buf.split('\n'); buf = lines.pop();
+                                  for (const line of lines) {
+                                    if (!line.startsWith('data: ')) continue;
+                                    const pl = line.slice(6).trim();
+                                    if (pl === '[DONE]') break;
+                                    try { const p = JSON.parse(pl); if (p.text) { const snap2 = p.text; setPfAiReview(prev => prev + snap2); } } catch {}
+                                  }
+                                }
+                              } catch {}
+                              setPfAiReviewLoading(false);
+                            }}
+                              style={{ background:"rgba(212,175,55,0.12)", border:`1px solid ${G.bordG}`, borderRadius:8, padding:"7px 16px", color:G.gold, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                              Get AI Review
+                            </button>
+                          )}
+                          {pfAiReviewLoading && <span style={{ color:G.slate, fontSize:12 }}>Analysing…</span>}
+                        </div>
+                        {pfAiReview && <div style={{ color:G.fog, fontSize:13, lineHeight:1.8, whiteSpace:"pre-wrap" }}>{pfAiReview}</div>}
+                        {!pfAiReview && !pfAiReviewLoading && <div style={{ color:G.mist, fontSize:12, marginTop:8 }}>Click to get an AI-powered review of your portfolio's construction and specific improvement steps.</div>}
+                        <div style={{ marginTop:12, fontSize:10, color:G.mist }}>Educational only — not investment advice. Powered by Claude.</div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             )}
 
