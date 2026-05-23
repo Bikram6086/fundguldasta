@@ -30,14 +30,8 @@ from engine.risk_metrics import compute_all_risk_metrics, compute_crash_performa
 from engine.fund_scorer import compute_composite_score
 from config.scheme_codes import ARCHETYPE_FUNDS, VERIFIED_FUNDS, BENCHMARKS
 
-load_dotenv(os.path.expanduser('~/fundguldasta/config/.env'))
-
-DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': os.getenv('DB_PORT', '5432'),
-    'dbname': os.getenv('DB_NAME', 'fundguldasta_dev'),
-    'user': os.getenv('DB_USER', 'fundguldasta_user'),
-}
+from config.db import get_db_config
+DB_CONFIG = get_db_config()
 
 MAX_PAIRWISE_CORRELATION = 0.85
 MAX_HOLDING_OVERLAP = 0.25

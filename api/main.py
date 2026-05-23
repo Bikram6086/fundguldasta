@@ -247,20 +247,21 @@ def _auto_heal(component_state: dict):
                 _log_remediation(f"Auto-precompute failed: {e}")
         threading.Thread(target=_bg_precompute, daemon=True).start()
 
-    # Heal stale NAV data — re-run ingestion via subprocess
+    # Heal stale NAV data — call ingestion module directly (works on Railway + local)
     if nav.get("staleness_days") and nav["staleness_days"] >= 2:
         _log_remediation(f"NAV data {nav['staleness_days']} days old — auto-triggering ingestion")
         def _bg_nav():
-            import subprocess, os, sys
             try:
-                venv_python = os.path.join(os.path.expanduser("~/fundguldasta"), "venv", "bin", "python3")
-                script = os.path.join(os.path.expanduser("~/fundguldasta"), "data", "nav_ingestion.py")
-                result = subprocess.run(
-                    [venv_python, script], capture_output=True, text=True,
-                    timeout=180, cwd=os.path.expanduser("~/fundguldasta"),
-                )
-                status = "ok" if result.returncode == 0 else f"exit {result.returncode}"
-                _log_remediation(f"Auto NAV ingestion {status}")
+                from data.nav_ingestion import fetch_nav_data, parse_nav_data, insert_nav_records, log_pipeline
+                raw = fetch_nav_data()
+                records = parse_nav_data(raw)
+                inserted, skipped = insert_nav_records(records)
+                log_pipeline("success", inserted)
+                _log_remediation(f"Auto NAV ingestion: {inserted} new, {skipped} skipped")
+                # Re-run precompute so bouquet cache stays fresh
+                for h, c in [(7, 16), (5, 14), (10, 16)]:
+                    run_precomputation(horizon_years=h, target_cagr=c)
+                _log_remediation("Auto precompute after NAV refresh: complete")
             except Exception as e:
                 _log_remediation(f"Auto NAV ingestion failed: {e}")
         threading.Thread(target=_bg_nav, daemon=True).start()
@@ -303,9 +304,9 @@ def _run_diagnostics():
 
 
 def _health_loop():
-    """Background thread: initial check after 45s, then every 6 hours."""
+    """Background thread: initial check after 20s (enough for DB pool), then every 6 hours."""
     import time
-    time.sleep(45)   # let DB pool and startup hooks settle
+    time.sleep(20)
     while True:
         try:
             _run_diagnostics()

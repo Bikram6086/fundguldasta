@@ -4,14 +4,8 @@ import os
 from datetime import datetime, date
 from dotenv import load_dotenv
 
-load_dotenv(os.path.expanduser('~/fundguldasta/config/.env'))
-
-DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': os.getenv('DB_PORT', '5432'),
-    'dbname': os.getenv('DB_NAME', 'fundguldasta_dev'),
-    'user': os.getenv('DB_USER', 'fundguldasta_user'),
-}
+from config.db import get_db_config
+DB_CONFIG = get_db_config()
 
 # Yahoo Finance tickers for Indian indices
 BENCHMARKS = {

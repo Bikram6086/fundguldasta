@@ -22,14 +22,8 @@ from engine.risk_metrics import compute_crash_performance, CRASH_PERIODS
 from engine.rolling_returns import get_nav_series
 from config.scheme_codes import ARCHETYPE_FUNDS, VERIFIED_FUNDS
 
-load_dotenv(os.path.expanduser('~/fundguldasta/config/.env'))
-
-DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': os.getenv('DB_PORT', '5432'),
-    'dbname': os.getenv('DB_NAME', 'fundguldasta_dev'),
-    'user': os.getenv('DB_USER', 'fundguldasta_user'),
-}
+from config.db import get_db_config
+DB_CONFIG = get_db_config()
 
 ARCHETYPES = {
     'steady': {

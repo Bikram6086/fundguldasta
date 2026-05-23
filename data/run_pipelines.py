@@ -5,16 +5,10 @@ import sys
 from datetime import datetime
 from dotenv import load_dotenv
 
-load_dotenv(os.path.expanduser('~/fundguldasta/config/.env'))
+from config.db import get_db_config
+DB_CONFIG = get_db_config()
 
-DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': os.getenv('DB_PORT', '5432'),
-    'dbname': os.getenv('DB_NAME', 'fundguldasta_dev'),
-    'user': os.getenv('DB_USER', 'fundguldasta_user'),
-}
-
-BASE_DIR = os.path.expanduser('~/fundguldasta')
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 PIPELINES = [
     {
@@ -39,7 +33,7 @@ PIPELINES = [
 
 def run_pipeline(pipeline):
     script_path = os.path.join(BASE_DIR, pipeline['script'])
-    python_path = os.path.join(BASE_DIR, 'venv/bin/python3')
+    python_path = sys.executable
 
     print(f"\n{'='*50}")
     print(f"Running: {pipeline['description']}")

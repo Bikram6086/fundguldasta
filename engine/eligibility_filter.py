@@ -23,14 +23,8 @@ from datetime import datetime, date
 from dotenv import load_dotenv
 from engine.rolling_returns import get_nav_series, get_benchmark_series
 
-load_dotenv(os.path.expanduser('~/fundguldasta/config/.env'))
-
-DB_CONFIG = {
-    'host': os.getenv('DB_HOST', 'localhost'),
-    'port': os.getenv('DB_PORT', '5432'),
-    'dbname': os.getenv('DB_NAME', 'fundguldasta_dev'),
-    'user': os.getenv('DB_USER', 'fundguldasta_user'),
-}
+from config.db import get_db_config
+DB_CONFIG = get_db_config()
 
 # Eligibility thresholds
 MIN_AUM_CRORES = 500
