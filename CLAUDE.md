@@ -1,6 +1,6 @@
-# CLAUDE.md
+# CLAUDE.md — FundGuldasta Canonical Reference
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file is the authoritative starting point for every Claude Code session. It reflects the complete current state of the platform after Priorities 1–17.
 
 ---
 
@@ -8,91 +8,81 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Remote: `https://github.com/Bikram6086/fundguldasta` (public)
 
-**Auto-push policy:** After completing any meaningful set of changes (feature, fix, visual update, refactor), commit and push to GitHub without waiting for explicit instructions. Use clear commit messages. Push at minimum after every session and after any significant milestone.
+**Auto-push policy:** After any meaningful change (feature, fix, refactor), commit and push immediately. Do not wait for instructions. Use descriptive commit messages. The pre-push hook runs the full test suite — if it fails, fix it before pushing.
 
 ---
 
-## Project Overview
+## Project
 
-**FundGuldasta** — Indian mutual fund research and education platform. Tagline: "Mutual Fund Research. Unfiltered."
+**FundGuldasta** — Indian mutual fund research and education platform.  
+Tagline: *"Mutual Fund Research. Unfiltered."*
 
-Research/education only. Never investment advice. Never guarantee returns. Direct plans only. No commission. User has full agency — platform educates but never overrides user choice.
+- Research and education only. Never investment advice. Never guarantee returns.
+- Direct plans only. No commission. User has full agency — platform educates, never overrides.
+- Domain: fundguldasta.com (not yet live — cloud deployment is next priority)
 
-The actual project lives in WSL2 at `~/fundguldasta/`. This Windows directory (`c:\Users\HP\Fund Guldasta`) is the Claude Code workspace pointing to it.
+**WSL2 path:** `~/fundguldasta/`  
+**Windows workspace:** `c:\Users\HP\Fund Guldasta` (holds only CLAUDE.md — all code is in WSL2)
 
 ---
 
 ## Running the Platform
 
-Three terminals required (all in WSL2):
+Three WSL2 terminals required:
 
-**Terminal 1 — API server (FastAPI on port 8000):**
 ```bash
+# Terminal 1 — API (port 8000)
 cd ~/fundguldasta && source venv/bin/activate
 python3 -m uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload
-```
 
-**Terminal 2 — React frontend (port 3000):**
-```bash
+# Terminal 2 — React frontend (port 3000)
 cd ~/fundguldasta/frontend/fundguldasta-ui && npm start
-```
 
-**Terminal 3 — Commands/scripts:**
-```bash
+# Terminal 3 — scripts / DB / CLI
 cd ~/fundguldasta && source venv/bin/activate
 ```
 
-Browser: http://localhost:3000
+Browser: http://localhost:3000 | API health: http://localhost:8000/health
+
+**IMPORTANT — PowerShell → WSL2 command pattern that works:**
+```powershell
+wsl -d Ubuntu -e bash -lc "cd /home/hpbikram6086/fundguldasta && source venv/bin/activate && <command>"
+```
+Use `-lc` (login shell) so the venv activates correctly. `-e bash -c` without `-l` loses the environment and fails silently.
 
 ---
 
 ## Architecture
 
 ```
-UI (React, port 3000)
-  → apiCall() helper in App.js
-  → FastAPI (port 8000)
-  → bouquet_cache table in PostgreSQL
-  → (cache populated nightly by engine/precompute.py)
+React SPA (port 3000, App.js single file)
+  → apiCall() / fetch()
+  → FastAPI (port 8000, api/main.py)
+  → PostgreSQL 18.3 + TimescaleDB (fundguldasta_dev)
+      ↑ populated nightly by engine/precompute.py
 ```
 
-Switching prototype → production: one flag change in `dataService.js`.
+### Key file paths (WSL2)
 
-### Key paths in WSL2
 | Path | Purpose |
 |---|---|
-| `~/fundguldasta/config/scheme_codes.py` | Verified scheme codes + archetype compositions |
-| `~/fundguldasta/config/thresholds.py` | All algorithm thresholds (calibrated for Indian MF market) |
-| `~/fundguldasta/config/.env` | Environment variables |
-| `~/fundguldasta/engine/eligibility_filter.py` | Layer 1: Fund eligibility + tier classification |
-| `~/fundguldasta/engine/fund_scorer.py` | Layer 2: 6-dimension scoring |
-| `~/fundguldasta/engine/bouquet_builder.py` | Layer 3: Bouquet construction + correlation matrix |
-| `~/fundguldasta/engine/confidence_scorer.py` | Layer 4: Confidence scoring (5 factors) |
-| `~/fundguldasta/engine/precompute.py` | Layer 5: Pre-computation orchestrator (nightly job) |
-| `~/fundguldasta/api/main.py` | FastAPI app — all endpoints |
-| `~/fundguldasta/frontend/fundguldasta-ui/src/App.js` | React 18 SPA (single file, all components) |
-| `~/fundguldasta/docs/schema.sql` | PostgreSQL schema |
-| `~/fundguldasta/data/` | Data ingestion pipelines |
-
-### Computation engine (5 layers)
-1. **Eligibility Filter** — Direct plan, AUM ≥ ₹500Cr, expense ratio ≤ 1.5%, tier by NAV history length
-2. **Fund Scorer** — Return Consistency 25%, Risk-Adjusted Quality 20%, Downside Behaviour 20%, Manager Stability 15%, Portfolio Quality 10%, Forward Context 10%
-3. **Bouquet Builder** — Correlation matrix, weighted metrics, benchmark comparisons
-4. **Confidence Scorer** — Rolling Consistency 30%, Downside Protection 20%, Manager Stability 20%, Category Tailwind 15%, Cost Efficiency 15%
-5. **Precompute** — Writes to `bouquet_cache`; API reads only from cache, never triggers live computation
-
-### API endpoints
-```
-GET  /health
-POST /api/bouquets/curate              ← main endpoint, returns 4 archetypes
-GET  /api/bouquets/{id}/metrics
-GET  /api/bouquets/{id}/confidence
-GET  /api/bouquets/{id}/stress-test
-GET  /api/bouquets/{id}/overlap
-GET  /api/bouquets/{id}/freshness
-GET  /api/pipeline/status
-GET  /api/stats
-```
+| `api/main.py` | FastAPI — all endpoints (~2300 lines) |
+| `api/auth.py` | bcrypt password hash + JWT (direct bcrypt, NOT passlib) |
+| `frontend/fundguldasta-ui/src/App.js` | React 18 SPA — single file, all components |
+| `engine/eligibility_filter.py` | Layer 1: eligibility + tier classification |
+| `engine/fund_scorer.py` | Layer 2: 6-dimension composite score |
+| `engine/bouquet_builder.py` | Layer 3: bouquet construction + correlation |
+| `engine/confidence_scorer.py` | Layer 4: confidence scoring (5 factors) |
+| `engine/precompute.py` | Layer 5: nightly pre-computation orchestrator |
+| `engine/cagr_advisor.py` | CAGR realism assessment (P7.1) |
+| `engine/fund_replacement.py` | Fund substitution + impact calc (P7.4) |
+| `engine/cas_parser.py` | CAS PDF parser — CAMS + KFintech (P16) |
+| `config/scheme_codes.py` | Verified scheme codes + archetype compositions |
+| `config/thresholds.py` | All algorithm thresholds (calibrated for Indian MF) |
+| `config/.env` | Environment variables — **gitignored, never commit** |
+| `docs/schema.sql` | PostgreSQL schema |
+| `data/` | Data ingestion pipelines |
+| `tests/` | 119 tests across multiple test files |
 
 ---
 
@@ -100,42 +90,184 @@ GET  /api/stats
 
 - PostgreSQL 18.3 + TimescaleDB
 - DB: `fundguldasta_dev`, User: `fundguldasta_user`
-- Auth: trust mode via TCP from localhost (no password for local dev)
-- `/etc/postgresql/18/main/pg_hba.conf`: `host all all 127.0.0.1/32 trust`
+- Local auth: trust mode via TCP (`/etc/postgresql/18/main/pg_hba.conf`: `host all all 127.0.0.1/32 trust`)
 
-**Current state:** 877,758 NAV records, 14,366 funds, 4 archetypes cached (7-year horizon)
+**Current state:** 877,758 NAV records | 14,366 funds | 84 cached bouquets (multiple horizons)
 
-**9 tables:** `fund_metadata`, `nav_data`, `fund_managers`, `manager_change_log`, `portfolio_holdings` (empty — parser not built), `benchmark_data`, `computed_metrics`, `bouquet_cache`, `pipeline_log`
+**11 tables:**
 
-**Schema note:** `fund_metadata.sebi_category` and `fund_type` are VARCHAR(200) (not 100 — increased during build).
+| Table | Notes |
+|---|---|
+| `fund_metadata` | sebi_category, fund_type are VARCHAR(200) |
+| `nav_data` | TimescaleDB hypertable |
+| `fund_managers` | Placeholder data — SID parser not built |
+| `manager_change_log` | Used by P15 alert system |
+| `portfolio_holdings` | Empty — holdings parser not built |
+| `benchmark_data` | Nifty 50 NAV series |
+| `computed_metrics` | Per-fund computed scores |
+| `bouquet_cache` | API reads only from here; archetypes: `steady`, `balanced`, `aggressive`, `conviction` |
+| `pipeline_log` | Precomputation run history |
+| `users` | id, email, password_hash, display_name, manager_alert (bool), monthly_digest (bool) |
+| `saved_bouquets` | user_id FK, archetype_id, horizon_years, target_cagr, snapshot JSON |
 
 Quick health check:
 ```bash
 curl http://localhost:8000/api/stats
 ```
 
----
-
-## Populating the Cache
-
-The API only reads from `bouquet_cache`. Run precomputation for each horizon/CAGR combo needed:
+### Populating the cache
 
 ```bash
 cd ~/fundguldasta && source venv/bin/activate
 
-# 5-year horizon
 python3 -c "from engine.precompute import run_precomputation; run_precomputation(horizon_years=5, target_cagr=14)"
-
-# 7-year horizon (already cached)
 python3 -c "from engine.precompute import run_precomputation; run_precomputation(horizon_years=7, target_cagr=16)"
-
-# 10-year horizon
 python3 -c "from engine.precompute import run_precomputation; run_precomputation(horizon_years=10, target_cagr=16)"
 ```
 
 ---
 
-## Verified Scheme Codes (do not change without DB verification)
+## All API Endpoints (current, verified 24/24 operational)
+
+### Public / core
+```
+GET  /health
+GET  /api/stats
+GET  /api/pipeline/status
+POST /api/bouquets/curate                     body: {horizon_years, target_cagr}
+GET  /api/bouquets/{id}/metrics               id = steady|balanced|aggressive|conviction
+GET  /api/bouquets/{id}/confidence
+GET  /api/bouquets/{id}/stress-test
+GET  /api/bouquets/{id}/overlap
+GET  /api/bouquets/{id}/freshness
+POST /api/bouquets/{id}/backtest              body: {monthly_sip, horizon_years, future_years}
+POST /api/bouquets/customize                  body: {archetype_id, replacement_fund_code, horizon_years, target_cagr}
+```
+
+### Fund search & detail
+```
+GET  /api/funds/search?q=<query>&limit=10
+GET  /api/funds/{scheme_code}/detail
+GET  /api/funds/{scheme_code}/score?horizon_years=7&target_cagr=16
+```
+
+### Auth (JWT, 30-day expiry)
+```
+POST /api/auth/register                       body: {email, password, display_name?}
+POST /api/auth/login                          body: {email, password}
+GET  /api/auth/me                             header: Authorization: Bearer <token>
+```
+
+### User
+```
+GET   /api/user/preferences                   header: Authorization: Bearer <token>
+PATCH /api/user/preferences                   body: {manager_alert?, monthly_digest?}
+POST  /api/user/saved-bouquets                saves current bouquet with snapshot
+GET   /api/user/saved-bouquets                list saved bouquets
+DELETE /api/user/saved-bouquets/{id}          delete one
+```
+
+### Portfolio (P16)
+```
+POST /api/portfolio/import-cas                multipart PDF upload (CAMS or KFintech), max 15MB
+POST /api/portfolio/analyse                   body: {holdings: [{scheme_code, units, value}]}
+```
+
+---
+
+## Auth System
+
+`api/auth.py` uses **direct `bcrypt`** — NOT `passlib`. passlib 1.7.4 is incompatible with bcrypt 5.0.0 (bcrypt enforces 72-byte limit, passlib's detection probe exceeds it).
+
+```python
+import bcrypt
+hash_password(password)   → bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode()
+verify_password(plain, h) → bcrypt.checkpw(plain.encode(), h.encode())
+create_token(user_id, email) → jwt.encode({sub, email, exp}, _SECRET, HS256)
+decode_token(token)       → jwt.decode(token, _SECRET, algorithms=["HS256"])
+```
+
+JWT secret lives in `config/.env` as `JWT_SECRET_KEY`. Default fallback only for local dev.
+
+All protected endpoints use `_Header(default=None)` + `_get_user_from_token(authorization)` — NOT query params.
+
+---
+
+## Security Rules (non-negotiable)
+
+1. `config/.env` is gitignored. **Never commit it.**
+2. No API keys, DB passwords, or JWT secrets in any committed file.
+3. Old Anthropic key `sk-ant-api03-rapmaiZYPmaQ85...` is compromised — never reference or use.
+4. Timescale Cloud production credentials are in Claude memory only, never in git.
+5. Do not add any environment variables or credentials to `CLAUDE.md`.
+
+---
+
+## Frontend Design System
+
+Dark gold-on-black aesthetic (intentional — financial gravitas).
+
+- Fonts: Cormorant Garamond (headings), Outfit (body), JetBrains Mono (numbers)
+- Color palette: `const G` object at top of `App.js`
+- Single-file SPA: `frontend/fundguldasta-ui/src/App.js`
+- Build: `npm run build` inside `fundguldasta-ui/` — must pass with zero ESLint errors
+
+**ESLint no-shadow rule is enforced.** The translation helper is `const tr = (en, hi) => ...` — never rename it to `t` (shadows `.map(t => ...)` parameter and causes build failure).
+
+**Hindi/English toggle:** `const [lang, setLang] = useState('en')` — translation via `tr(en, hi)` calls.
+
+---
+
+## Computation Engine (5 layers)
+
+1. **Eligibility Filter** — Direct plan, AUM ≥ ₹500Cr, expense ratio ≤ 1.5%, tier by NAV history
+2. **Fund Scorer** — Return Consistency 25%, Risk-Adjusted Quality 20%, Downside Behaviour 20%, Manager Stability 15%, Portfolio Quality 10%, Forward Context 10%
+3. **Bouquet Builder** — Correlation matrix, category diversity constraint, weighted metrics, benchmark comparisons
+4. **Confidence Scorer** — Rolling Consistency 30%, Downside Protection 20%, Manager Stability 20%, Category Tailwind 15%, Cost Efficiency 15%
+5. **Precompute** — Writes to `bouquet_cache`; API never triggers live computation
+
+---
+
+## CAS Parser (P16)
+
+`engine/cas_parser.py` — parses Consolidated Account Statements from CAMS and KFintech.
+
+- Format detection: looks for "computer age management" or "cams" (CAMS); "kfin" or "karvy" (KFintech)
+- Strategy: anchor-based backward lookup — finds "Closing Balance" lines, scans back for fund name
+- Fuzzy matching: `rapidfuzz.fuzz.token_sort_ratio` via `process.extractOne` — handles name variants
+- Returns: `{format, holdings: [{fund_name_raw, scheme_code, matched_name, units, nav, value, allocation_pct, confidence}], total_value, fund_count, parse_errors}`
+- Public API: `parse_cas_pdf(pdf_bytes, fund_list=None)` and `parse_cas_text(text, fund_list=None)`
+
+---
+
+## CAGR Realism Bands (P7.1)
+
+`engine/cagr_advisor.py` — `assess_realism(target_cagr, horizon_years)` returns `{category, message, realistic_range}`.
+
+```
+3-year:   8–14% realistic  | 15–18% aggressive  | 19%+ unrealistic
+5-year:  10–15% realistic  | 16–19% aggressive  | 20%+ unrealistic
+7-year:  12–16% realistic  | 17–20% aggressive  | 21%+ unrealistic
+10-year: 13–17% realistic  | 18–21% aggressive  | 22%+ unrealistic
+15-year: 13–18% realistic  | 19–22% aggressive  | 23%+ unrealistic
+```
+
+Frontend shows amber advisory banner for aggressive/unrealistic — user can always proceed.
+
+---
+
+## Archetype IDs (cache keys — exact strings required)
+
+| Cache ID | Display Name | CAGR Target | Funds |
+|---|---|---|---|
+| `steady` | Steady Compounder | 14–16% | 118825(25%), 122639(25%), 120152(20%), 149134(15%), 118955(15%) |
+| `balanced` | Balanced Growther | 15–17% | 118825(20%), 122639(20%), 120505(25%), 118778(20%), 145552(15%) |
+| `aggressive` | Aggressive Achiever | 16–19% | 118989(25%), 118778(20%), 119071(20%), 120505(20%), 120828(15%) |
+| `conviction` | High Conviction | 18–22% | 118778(30%), 118989(25%), 120828(20%), 118834(15%), 135800(10%) |
+
+---
+
+## Verified Scheme Codes
 
 | Code | Fund | Tier |
 |---|---|---|
@@ -153,132 +285,73 @@ python3 -c "from engine.precompute import run_precomputation; run_precomputation
 | 145552 | Motilal Oswal Nasdaq 100 FOF | 2 |
 | 135800 | Tata Digital India Fund | 2 |
 
-Critical corrections: 119553 is a debt IDCW fund (not HDFC Flexi Cap). 118988 is IDCW (not HDFC Mid Cap Growth). "Kotak Equity Opportunities" scheme code doesn't exist — use 120152.
+**Do not change without DB verification.**  
+Critical: 119553 = debt IDCW (not HDFC Flexi Cap). 118988 = IDCW (not HDFC Mid Cap Growth). "Kotak Equity Opportunities" does not exist — use 120152.
 
 ---
 
 ## Indian MF Correlation Reality
 
-Indian equity funds correlate at **0.85–0.98** with each other. This is structural, not a bug. Genuine diversifiers:
-- Motilal Nasdaq vs Indian equity: 0.33–0.37
-- Tata Digital vs Indian equity: 0.59–0.66
-
-Thresholds in `config/thresholds.py`: HARD_REJECT=0.95, WARNING=0.85. **Category diversity** is the primary bouquet construction constraint, not correlation.
-
----
-
-## Frontend Design System
-
-Dark gold-on-black aesthetic (intentional — financial gravitas). Fonts: Cormorant Garamond (headings), Outfit (body), JetBrains Mono (numbers). Color palette in `const G` at top of `App.js`. All UI is a single-file React SPA.
+Indian equity funds correlate at **0.85–0.98** with each other. Structural, not a bug.  
+Genuine diversifiers: Motilal Nasdaq (0.33–0.37 vs Indian equity), Tata Digital (0.59–0.66).  
+Thresholds: HARD_REJECT=0.95, WARNING=0.85. Category diversity is the primary constraint.
 
 ---
 
 ## Python Environment
 
-- Python 3.14 in `~/fundguldasta/venv/`
-- Key packages: `pandas numpy sqlalchemy psycopg2-binary requests pdfplumber fastapi uvicorn httpx pytest python-dotenv anthropic mftool yfinance`
-- `engine/` and `data/` both have `__init__.py` (required for module imports)
+- Python 3.14, venv at `~/fundguldasta/venv/`
+- Key packages: `pandas numpy sqlalchemy psycopg2-binary requests pdfplumber fastapi uvicorn httpx pytest python-dotenv anthropic mftool yfinance bcrypt PyJWT rapidfuzz python-multipart`
+- `engine/` and `data/` have `__init__.py` (required for module imports)
+- `passlib` is installed but must NOT be used for bcrypt — incompatible with bcrypt 5.0.0
 
 ---
 
-## Priority 7 — Holistic Refinements (build before deployment)
+## Testing
 
-Execute in order. Test each before moving to next.
-
-### 7.1 — Flexible Horizon and CAGR Support
-
-**Problem:** Platform only supports cached horizons and fails for any other value.
-
-**Goal:** Accept ANY horizon (3–20 years) and ANY CAGR. Show advisory if unrealistic, but still compute — user has agency.
-
-**Realistic CAGR bands (Indian equity MF historical data):**
-```
-3-year:   8-14% realistic   | 15-18% aggressive   | 19%+ unrealistic
-5-year:   10-15% realistic  | 16-19% aggressive   | 20%+ unrealistic
-7-year:   12-16% realistic  | 17-20% aggressive   | 21%+ unrealistic
-10-year:  13-17% realistic  | 18-21% aggressive   | 22%+ unrealistic
-15-year:  13-18% realistic  | 19-22% aggressive   | 23%+ unrealistic
+```bash
+cd ~/fundguldasta && source venv/bin/activate
+python3 -m pytest tests/ -v
 ```
 
-**New file:** `engine/cagr_advisor.py`
-- Function: `assess_realism(target_cagr, horizon_years)`
-- Returns: `{'category': 'realistic|aggressive|unrealistic', 'message': '...', 'realistic_range': [low, high]}`
+**Current state: 119/119 passing.** Pre-push hook runs full suite before every push.
 
-**`engine/precompute.py` changes:**
-- Pre-cache horizons 3, 5, 7, 10, 15 on startup with default CAGR 16%
-- Add on-demand computation path for non-cached horizons (cache result after first request)
+Test files:
+- `tests/test_priority15_17.py` — manager alerts, digest, DB schema, Hindi translation logic
+- `tests/test_priority16.py` — CAS parser (format detection, CAMS, KFintech, fuzzy match, gap analysis)
+- (earlier test files for engine layers)
 
-**`api/main.py` changes:**
-- `POST /api/bouquets/curate` accepts any horizon — return from cache or trigger on-demand (2-3s)
-- Add `realisticAssessment` field to curate response
-
-**Frontend changes:**
-- Advisory banner (amber background) when CAGR is outside realistic range
-- "Proceed anyway" option — never block the user
-
-### 7.2 — Brand Prominence on Hero
-
-**Specific changes to App.js hero section:**
-- Brand mark: 46px → 72px, gold glow effect
-- Brand name: 26px → 42px Cormorant Garamond
-- Tagline "Mutual Fund Research. Unfiltered." → 18px italic gold, prominent below brand name
-- Secondary tagline above headline: "India's First Honest-by-Design Mutual Fund Research Platform"
-- Headline: `clamp(48px, 8vw, 84px)`
-- Decorative element below tagline (thin gold line or three dots)
-
-### 7.3 — Reorder Metrics Table Columns
-
-**Current order:** Bouquet CAGR → Real CAGR → Post-Tax → Nifty → FD
-
-**Required order:** Period → Bouquet CAGR → Post-Tax CAGR → Real CAGR → Nifty 50 → FD Rate → FD Real
-
-Modify `<table className="mt">` in App.js only — backend already computes all values.
-
-### 7.4 — User Fund Preference and Customization
-
-**New file:** `engine/fund_replacement.py`
-- Smart slot replacement: same-category first, else lowest-scoring fund
-- Side-by-side comparison: composite score, rolling CAGR, Sortino, manager tenure, expense ratio, rolling consistency
-- Impact calculation: recomputed CAGR, confidence score, corpus difference on ₹10L, correlation check
-
-**New API endpoints in `api/main.py`:**
-```
-GET  /api/funds/search?q=<query>&limit=10        ← autocomplete by name/AMC/code
-GET  /api/funds/{scheme_code}/score?horizon_years=7&target_cagr=16
-POST /api/bouquets/customize                      ← body: {original_archetype, replacement_fund_code}
-```
-
-**New frontend section** (between Box 3 Composition and Box 4 Metrics):
-- "Customize Bouquet" toggle → fund search input with dropdown
-- Comparison view (all metrics side by side)
-- Accept / Reject buttons
-- "Customized" badge visible if substitution active
-
-**Constraints:** Replacement must pass eligibility filter. Show Tier 3 warning. Recompute correlations and stress test for modified bouquet.
+Operational audit script: `/tmp/test_correct_ids.py` — verifies all 24 live endpoints.
 
 ---
 
-## Deferred Work
+## What Is Deferred (known gaps)
 
-- `portfolio_holdings` table is empty — holdings parser not built; overlap shows 0%
-- `fund_managers` has placeholder data — SID parser designed but not built; manager scores default to 40–45
-
----
-
-## Roadmap After Priority 7
-
-- **Priority 8 — Cloud Deployment:** Frontend → Vercel, Backend → Railway/Render, DB → Supabase; DNS for fundguldasta.com
-- **Priority 9 — Monitoring:** UptimeRobot health checks, email alerts for pipeline failures, manager change detection
-- **Priority 10 — User Features:** Accounts (email + password), saved bouquets, existing portfolio analyser, email alerts
-- **Priority 11 — SEO Content:** Algorithm transparency, rolling returns explainer, survivorship bias, confidence score guide, why direct plans matter
-
----
-
-## 4 Bouquet Archetypes
-
-| Archetype | CAGR Target | Funds |
+| Gap | Impact | Fix |
 |---|---|---|
-| Steady Compounder | 14–16% | 118825(25%), 122639(25%), 120152(20%), 149134(15%), 118955(15%) |
-| Balanced Growther | 15–17% | 118825(20%), 122639(20%), 120505(25%), 118778(20%), 145552(15%) |
-| Aggressive Achiever | 16–19% | 118989(25%), 118778(20%), 119071(20%), 120505(20%), 120828(15%) |
-| High Conviction | 18–22% | 118778(30%), 118989(25%), 120828(20%), 118834(15%), 135800(10%) |
+| `portfolio_holdings` empty — holdings parser not built | overlap shows 0% | Build SID/AMFI holdings importer |
+| `fund_managers` has placeholder data | Manager stability scores default to 40–45 | Build SID PDF parser |
+| Email sending for alerts/digest | Alerts computed but not sent (no SMTP key) | Add SendGrid/SES config to `config/.env` |
+
+---
+
+## Roadmap (Priority 18 onward)
+
+| Priority | What |
+|---|---|
+| **18 — Cloud Deployment** | Frontend → Vercel, Backend → Railway/Render, DB → Timescale Cloud (already provisioned, Mumbai); DNS for fundguldasta.com |
+| **19 — Monitoring** | UptimeRobot health checks, email alerts for pipeline failures, manager change detection pipeline |
+| **20 — SEO Content** | Algorithm transparency, rolling returns explainer, survivorship bias, confidence score guide, why direct plans |
+| **21 — Holdings Parser** | Build portfolio_holdings importer from AMFI/SID data to enable real overlap analysis |
+| **22 — Manager SID Parser** | Parse SEBI SID PDFs for real fund_managers data |
+
+---
+
+## Commit Message Convention
+
+```
+Priority X: <what changed and why>
+Fix: <bug description>
+```
+
+Use present tense. Keep under 72 chars for the subject line.
