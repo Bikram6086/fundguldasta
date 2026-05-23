@@ -295,6 +295,12 @@ def run_precomputation(horizon_years=7, target_cagr=DEFAULT_TARGET_CAGR):
     print(f"{'='*60}")
 
     log_precompute_run('success', len(results))
+
+    try:
+        run_alternative_precomputation(horizon_years, target_cagr)
+    except Exception as e:
+        print(f"  Alternative precompute skipped: {e}")
+
     return results
 
 def log_precompute_run(status, count, error=None):
@@ -337,11 +343,97 @@ if __name__ == "__main__":
         raise
 
 
+def run_alternative_precomputation(horizon_years=7, target_cagr=16.0):
+    """
+    Pre-compute round 2 alternative bouquets (excludes all Round 1 fund codes).
+    Stores in bouquet_cache with archetype_ids like 'steady_r2'.
+    """
+    from engine.alternative_bouquet import build_alternative_round
+
+    excluded = [str(code) for codes in ARCHETYPE_FUNDS.values() for code, _ in codes]
+    excluded = list(set(excluded))
+
+    print(f"\n{'='*60}")
+    print(f"ALTERNATIVE PRECOMPUTE (Round 2)")
+    print(f"Horizon: {horizon_years}yr | Target: {target_cagr}% | Excluding {len(excluded)} Round-1 funds")
+    print(f"{'='*60}")
+
+    try:
+        result = build_alternative_round(
+            horizon_years=horizon_years,
+            target_cagr=target_cagr,
+            excluded_codes=excluded,
+            round_number=2,
+        )
+    except Exception as e:
+        print(f"  build_alternative_round failed: {e}")
+        return {}
+
+    if not result.get('archetypes'):
+        print("  No alternative archetypes generated")
+        return {}
+
+    conn = psycopg2.connect(**DB_CONFIG)
+    cursor = conn.cursor()
+    saved = {}
+
+    for arch in result['archetypes']:
+        arch_id_r2 = f"{arch['id']}_r2"
+        try:
+            funds_json = arch.get('funds', [])
+            metrics_obj = arch.get('metrics', {})
+            periods = metrics_obj.get('periods', metrics_obj) if isinstance(metrics_obj, dict) else {}
+            cursor.execute("""
+                INSERT INTO bouquet_cache (
+                    archetype_id, horizon_years, target_cagr, computation_date,
+                    funds_json, metrics_json, confidence_json, stress_test_json,
+                    overlap_json, methodology_json, devils_json, comparator_json,
+                    is_active
+                ) VALUES (%s, %s, %s, CURRENT_DATE, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
+                ON CONFLICT (archetype_id, horizon_years, computation_date)
+                DO UPDATE SET
+                    funds_json       = EXCLUDED.funds_json,
+                    metrics_json     = EXCLUDED.metrics_json,
+                    confidence_json  = EXCLUDED.confidence_json,
+                    stress_test_json = EXCLUDED.stress_test_json,
+                    overlap_json     = EXCLUDED.overlap_json,
+                    methodology_json = EXCLUDED.methodology_json,
+                    devils_json      = EXCLUDED.devils_json,
+                    comparator_json  = EXCLUDED.comparator_json,
+                    is_active        = TRUE
+            """, (
+                arch_id_r2, horizon_years, target_cagr,
+                json.dumps(funds_json),
+                json.dumps({'periods': periods}),
+                json.dumps(arch.get('confidence', {})),
+                json.dumps(arch.get('stressTest', {})),
+                json.dumps(arch.get('overlap', {})),
+                json.dumps(arch.get('methodology', [])),
+                json.dumps(arch.get('devils', [])),
+                json.dumps(arch.get('comparator', {})),
+            ))
+            conn.commit()
+            saved[arch_id_r2] = True
+            print(f"  ✅ {arch_id_r2} cached")
+        except Exception as e:
+            print(f"  ❌ {arch_id_r2} FAILED: {e}")
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
+    cursor.close()
+    conn.close()
+    print(f"Alternative precompute done: {len(saved)} cached")
+    return saved
+
+
 def run_all_horizons(target_cagr: float = 16.0):
     """Pre-warm cache for all common horizons. Called at API startup in a background thread."""
     horizons = [3, 5, 7, 10, 15]
     for h in horizons:
         try:
             run_precomputation(horizon_years=h, target_cagr=target_cagr)
+            run_alternative_precomputation(horizon_years=h, target_cagr=target_cagr)
         except Exception as e:
             print(f"  run_all_horizons: skipped {h}yr — {e}")

@@ -161,7 +161,7 @@ def fetch_eligible_pool(excluded_codes: list) -> list:
     return pool
 
 
-def _score_pool(pool: list, horizon_years: int, target_cagr: float, max_funds: int = 80) -> list:
+def _score_pool(pool: list, horizon_years: int, target_cagr: float, max_funds: int = 30) -> list:
     """Score candidate funds. Caps at max_funds by NAV count to manage time."""
     from engine.fund_scorer import compute_composite_score
 

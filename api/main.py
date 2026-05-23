@@ -1148,12 +1148,80 @@ class GenerateMoreRequest(BaseModel):
     roundNumber: int = 2
 
 
+def _load_alt_from_cache(horizon_years: int, target_cagr: float) -> list | None:
+    """Try to load pre-cached round-2 alternative archetypes from bouquet_cache."""
+    arch_ids = ['steady_r2', 'balanced_r2', 'aggressive_r2', 'conviction_r2']
+    closest = min([3, 5, 7, 10, 15], key=lambda h: abs(h - horizon_years))
+    try:
+        conn, cur = None, None
+        conn = _get_pool().getconn()
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT archetype_id, funds_json, metrics_json, confidence_json,
+                   stress_test_json, overlap_json, methodology_json, devils_json, comparator_json
+            FROM bouquet_cache
+            WHERE archetype_id = ANY(%s) AND horizon_years = %s AND is_active = TRUE
+            ORDER BY computation_date DESC
+        """, (arch_ids, closest))
+        rows = cur.fetchall()
+        cur.close()
+        _get_pool().putconn(conn)
+        if len(rows) < 2:
+            return None
+
+        LABELS = {'steady_r2': 'Steady Compounder', 'balanced_r2': 'Balanced Growther',
+                  'aggressive_r2': 'Aggressive Achiever', 'conviction_r2': 'High Conviction'}
+        COLORS = {'steady_r2': '#4A8FE0', 'balanced_r2': '#27AE78',
+                  'aggressive_r2': '#F0A500', 'conviction_r2': '#E05555'}
+        RISK = {'steady_r2': 'Low-Medium', 'balanced_r2': 'Medium',
+                'aggressive_r2': 'Medium-High', 'conviction_r2': 'High'}
+        CAGR = {'steady_r2': '14-16%', 'balanced_r2': '15-17%',
+                'aggressive_r2': '16-19%', 'conviction_r2': '18-22%'}
+        ICONS = {'steady_r2': 'B', 'balanced_r2': 'G', 'aggressive_r2': 'Y', 'conviction_r2': 'R'}
+
+        archetypes = []
+        seen = set()
+        for row in rows:
+            aid = row[0]
+            if aid in seen:
+                continue
+            seen.add(aid)
+            base_id = aid.replace('_r2', '')
+            metrics_obj = json.loads(row[2])
+            archetypes.append({
+                'id': base_id,
+                'icon': ICONS.get(aid, 'G'),
+                'label': LABELS.get(aid, aid),
+                'cagrRange': CAGR.get(aid, '14-18%'),
+                'risk': RISK.get(aid, 'Medium'),
+                'color': COLORS.get(aid, '#27AE78'),
+                'rgb': '',
+                'funds': json.loads(row[1]),
+                'metrics': metrics_obj,
+                'confidence': json.loads(row[3]),
+                'stressTest': json.loads(row[4]),
+                'overlap': json.loads(row[5]),
+                'methodology': json.loads(row[6]),
+                'devils': json.loads(row[7]),
+                'comparator': json.loads(row[8]),
+                'roundNumber': 2,
+            })
+        return archetypes if archetypes else None
+    except Exception as e:
+        print(f"  _load_alt_from_cache error: {e}")
+        if conn:
+            try:
+                _get_pool().putconn(conn)
+            except Exception:
+                pass
+        return None
+
+
 @app.post("/api/bouquets/generate-more")
 def generate_more_bouquets(request: GenerateMoreRequest):
     """
-    Generate an alternative round of bouquets using the broader fund universe,
-    excluding funds already shown in previous rounds.
-    This endpoint triggers live computation (~2-4 minutes).
+    Generate alternative bouquets. Round 2 is served from pre-computed cache
+    (< 100ms). Rounds 3+ trigger live computation with reduced pool.
     """
     from engine.alternative_bouquet import build_alternative_round
     from engine.cagr_advisor import assess_realism
@@ -1163,6 +1231,31 @@ def generate_more_bouquets(request: GenerateMoreRequest):
 
     try:
         advisory = assess_realism(request.targetCAGR, request.horizonYears)
+
+        # Round 2: serve from pre-computed cache (no timeout risk)
+        if request.roundNumber == 2:
+            cached = _load_alt_from_cache(int(request.horizonYears), float(request.targetCAGR))
+            if cached:
+                for arch in cached:
+                    dist, label = _archetype_relevance(arch["id"], request.targetCAGR)
+                    arch["relevanceScore"] = round(dist, 1)
+                    arch["matchLabel"] = label
+                    arch["realisticAssessment"] = advisory
+                cached.sort(key=lambda x: x["relevanceScore"])
+                if cached and cached[0]["matchLabel"] != "Best Match":
+                    cached[0]["matchLabel"] = "Closest Match"
+                return {
+                    "impliedCAGR": request.targetCAGR,
+                    "archetypes": cached,
+                    "roundNumber": 2,
+                    "poolSize": 0,
+                    "poolExhausted": False,
+                    "computedAt": datetime.now().isoformat(),
+                    "horizonUsed": int(request.horizonYears),
+                    "fromCache": True,
+                }
+
+        # Rounds 3+ (or cache miss): live computation with reduced pool
         result = build_alternative_round(
             horizon_years=int(request.horizonYears),
             target_cagr=float(request.targetCAGR),
@@ -1176,8 +1269,6 @@ def generate_more_bouquets(request: GenerateMoreRequest):
                 detail=f"Fund pool exhausted — only {result['pool_size']} eligible funds remain after exclusions. No further unique bouquets can be generated."
             )
 
-        # Add relevance scoring and advisory to each archetype
-        from api.main import _archetype_relevance
         archetypes = result["archetypes"]
         for arch in archetypes:
             dist, label = _archetype_relevance(arch["id"], request.targetCAGR)
