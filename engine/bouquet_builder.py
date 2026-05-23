@@ -84,7 +84,7 @@ def build_correlation_matrix(scheme_codes, years=5):
 def compute_holding_overlap(scheme_code_1, scheme_code_2):
     """
     Compute stock holding overlap between two funds.
-    Returns fraction of overlap (0.0 to 1.0).
+    Returns fraction of overlap (0.0 to 1.0), or None if either fund has no holdings data.
     Uses latest available disclosure for each fund.
     """
     conn = psycopg2.connect(**DB_CONFIG)
@@ -110,13 +110,13 @@ def compute_holding_overlap(scheme_code_1, scheme_code_2):
     conn.close()
 
     if not holdings1 or not holdings2:
-        return 0.0
+        return None  # Missing data — caller must handle
 
     common_isins = set(holdings1.keys()) & set(holdings2.keys())
     if not common_isins:
         return 0.0
 
-    # Overlap = average weight of common stocks
+    # Overlap = sum of minimum weights of common stocks
     overlap = sum(
         min(holdings1[isin], holdings2[isin])
         for isin in common_isins
@@ -274,14 +274,24 @@ def build_bouquet(archetype_id, horizon_years=7, target_cagr=16):
     # Compute bouquet-level confidence score
     avg_fund_score = float(np.mean([f['composite_score'] for f in fund_scores]))
 
-    # Compute overlap
+    # Compute overlap — only average pairs where BOTH funds have holdings data
+    # compute_holding_overlap returns None when data is missing (not 0.0)
     overlap_scores = []
+    pairs_with_data = 0
+    total_pairs = 0
     for i in range(len(scheme_codes)):
         for j in range(i+1, len(scheme_codes)):
+            total_pairs += 1
             ov = compute_holding_overlap(scheme_codes[i], scheme_codes[j])
-            overlap_scores.append(ov)
+            if ov is not None:
+                overlap_scores.append(ov)
+                pairs_with_data += 1
 
-    avg_overlap = round(float(np.mean(overlap_scores)) * 100, 1) if overlap_scores else 12
+    if overlap_scores:
+        avg_overlap = round(float(np.mean(overlap_scores)) * 100, 1)
+    else:
+        avg_overlap = None  # No real data — frontend will show N/A
+    holdings_coverage_pct = round(pairs_with_data / total_pairs * 100) if total_pairs else 0
 
     bouquet = {
         'archetype_id': archetype_id,
@@ -291,6 +301,7 @@ def build_bouquet(archetype_id, horizon_years=7, target_cagr=16):
         'metrics': metrics,
         'avg_correlation': avg_correlation,
         'avg_overlap_pct': avg_overlap,
+        'holdings_coverage_pct': holdings_coverage_pct,
         'avg_fund_score': round(avg_fund_score, 2),
         'high_correlation_pairs': high_corr_pairs,
         'computed_at': datetime.now().isoformat(),
@@ -315,6 +326,7 @@ def save_to_cache(bouquet, archetype_data):
             funds_json = EXCLUDED.funds_json,
             metrics_json = EXCLUDED.metrics_json,
             confidence_json = EXCLUDED.confidence_json,
+            overlap_json = EXCLUDED.overlap_json,
             is_active = TRUE
     """, (
         bouquet['archetype_id'],
@@ -324,7 +336,8 @@ def save_to_cache(bouquet, archetype_data):
         json.dumps(bouquet['metrics']),
         json.dumps(archetype_data.get('confidence', {})),
         json.dumps(archetype_data.get('stress_test', {})),
-        json.dumps({'avgOverlapPct': bouquet['avg_overlap_pct']}),
+        json.dumps({'avgOverlapPct': bouquet['avg_overlap_pct'],
+                    'holdingsCoveragePct': bouquet['holdings_coverage_pct']}),
         json.dumps(archetype_data.get('methodology', [])),
         json.dumps(archetype_data.get('devils', [])),
         json.dumps(archetype_data.get('comparator', {})),
@@ -352,7 +365,9 @@ if __name__ == "__main__":
             print(f"{'='*50}")
             print(f"Average fund score:    {bouquet['avg_fund_score']:.1f}/100")
             print(f"Average correlation:   {bouquet['avg_correlation']:.3f}")
-            print(f"Average overlap:       {bouquet['avg_overlap_pct']:.1f}%")
+            ov = bouquet['avg_overlap_pct']
+            ov_str = f"{ov:.1f}%" if ov is not None else "N/A"
+            print(f"Average overlap:       {ov_str} (coverage: {bouquet['holdings_coverage_pct']}%)")
 
             print(f"\nFunds in bouquet:")
             for f in bouquet['funds']:

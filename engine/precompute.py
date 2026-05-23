@@ -270,6 +270,7 @@ def run_precomputation(horizon_years=7, target_cagr=DEFAULT_TARGET_CAGR):
                 json.dumps(confidence),
                 json.dumps(stress_test),
                 json.dumps({"avgOverlapPct": bouquet["avg_overlap_pct"],
+                             "holdingsCoveragePct": bouquet.get("holdings_coverage_pct", 0),
                              "avgCorrelation": bouquet["avg_correlation"]}),
                 json.dumps(arch_meta["methodology"]),
                 json.dumps(arch_meta["devils"]),

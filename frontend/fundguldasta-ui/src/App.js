@@ -2759,7 +2759,7 @@ useEffect(() => {
               ["02", "No false assurance", "Where historical data is complete, we show history. Where it is partial, we say so. Uncertainty is never hidden in footnotes."],
               ["03", "Algorithm, not opinion", "Every bouquet is constructed by a 5-layer quantitative engine: eligibility filter, fund scorer, bouquet builder, confidence scorer, and pre-computation. No human bias in fund selection."],
               ["04", "User agency above all", "Research advisories never block you. CAGR warnings, horizon cautions, and risk assessments are always dismissible. You have full agency over your decisions."],
-              ["05", "Honest about limits", "Manager stability scores use available data. Stock-level overlap is not yet computed. We tell you this directly, on every screen where it matters."],
+              ["05", "Honest about limits", "Manager stability scores use available data. Stock-level overlap is computed for funds where AMC discloses monthly holdings; others show pending. We tell you the coverage directly, on every screen where it matters."],
             ].map(([num, title, body]) => (
               aboutOpen.principles && <div key={num} className="about-principle">
                 <div className="about-principle-num">{num}</div>
@@ -4061,26 +4061,29 @@ useEffect(() => {
 
               {/* BOX 7 — OVERLAP */}
               <div className="card" id="sec-correlation">
-                <div className="ch" onClick={() => toggleSec('correlation')} style={{cursor:'pointer',userSelect:'none'}}><span className="ct">Portfolio Analysis</span><span className="badge bg-g">Correlation Data</span><span style={{marginLeft:'auto',color:G.mist,fontSize:11}}>{secCollapsed.correlation?'▶':'▼'}</span></div>
+                <div className="ch" onClick={() => toggleSec('correlation')} style={{cursor:'pointer',userSelect:'none'}}><span className="ct">Portfolio Analysis</span><span className="badge bg-g">Correlation &amp; Overlap</span><span style={{marginLeft:'auto',color:G.mist,fontSize:11}}>{secCollapsed.correlation?'▶':'▼'}</span></div>
                 {!secCollapsed.correlation && <div className="cb">
-                  <div style={{ fontSize: 14, color: G.fog, marginBottom: 14 }}>
-                    <strong style={{ color: G.white }}>Return Correlation</strong> — computed from daily NAV data
-                  </div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap" }}>
-                    <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 52, fontWeight: 500, color: G.em, lineHeight: 1 }}>
-                      {a.overlap?.avgCorrelation ?? "—"}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 200 }}>
-                      <div style={{ fontSize: 13, color: G.mist, lineHeight: 1.7 }}>
-                        Average inter-fund return correlation across the bouquet. Indian equity funds typically correlate at <strong style={{ color: G.fog }}>0.85–0.95</strong> due to similar large-cap holdings — this is structural, not a flaw.
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, flexWrap: "wrap" }}>
+                    <div>
+                      <div style={{ fontSize: 12, color: G.mist, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>Return Correlation</div>
+                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 44, fontWeight: 500, color: G.em, lineHeight: 1 }}>
+                        {a.overlap?.avgCorrelation != null ? a.overlap.avgCorrelation.toFixed(2) : "—"}
                       </div>
-                      <div style={{ fontSize: 13, color: G.mist, lineHeight: 1.7, marginTop: 6 }}>
-                        The Nasdaq 100 allocation provides genuine diversification at correlation ~<strong style={{ color: G.fog }}>0.37</strong> with Indian equity.
+                      <div style={{ fontSize: 11, color: G.mist, marginTop: 6, lineHeight: 1.6 }}>
+                        Average inter-fund return correlation. Indian equity funds typically correlate at <strong style={{ color: G.fog }}>0.85–0.95</strong> — structural, not a flaw. International funds (Nasdaq 100) provide genuine diversification at ~<strong style={{ color: G.fog }}>0.37</strong>.
                       </div>
                     </div>
-                  </div>
-                  <div style={{ marginTop: 14, fontSize: 11, color: G.mist, padding: "8px 12px", background: "rgba(255,255,255,0.02)", borderRadius: 6, lineHeight: 1.6, borderLeft: "3px solid rgba(255,255,255,0.08)" }}>
-                    Stock-level overlap (shared holdings) requires individual fund factsheet parsing — that feature is under development. Return correlation above is accurate and computed from 7+ years of daily NAV data.
+                    <div>
+                      <div style={{ fontSize: 12, color: G.mist, marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.05em" }}>Stock-Level Overlap</div>
+                      <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 44, fontWeight: 500, color: G.em, lineHeight: 1 }}>
+                        {a.overlap?.avgOverlapPct != null ? `${a.overlap.avgOverlapPct.toFixed(1)}%` : "—"}
+                      </div>
+                      <div style={{ fontSize: 11, color: G.mist, marginTop: 6, lineHeight: 1.6 }}>
+                        {a.overlap?.holdingsCoveragePct > 0
+                          ? `Average shared holdings weight across fund pairs with disclosure data. Based on ${a.overlap.holdingsCoveragePct}% of fund pairs (${Math.round(a.overlap.holdingsCoveragePct / 10)} of 10 pairs).`
+                          : "Holdings disclosure data being ingested for these funds. Overlap will populate as monthly portfolio filings are parsed from AMC sources."}
+                      </div>
+                    </div>
                   </div>
                 </div>}
               </div>
@@ -4260,7 +4263,7 @@ useEffect(() => {
                   <div style={{ marginTop: 16, padding: '12px 14px', background: 'rgba(240,165,0,0.05)', border: '1px solid rgba(240,165,0,0.15)', borderRadius: 8, fontSize: 11, color: G.mist, lineHeight: 1.7 }}>
                     <strong style={{ color: '#F0A500', display: 'block', marginBottom: 4 }}>Data Transparency â Known Limitations</strong>
                     â¢ <strong>Manager Stability score (15% weight)</strong>: Fund-specific manager data is used for all 13 verified funds — sourced from SIDs and manually verified. Lead manager (earliest appointment = longest tenure) is the primary scoring input; co-manager data is cross-referenced.<br />
-                    â¢ <strong>Stock-level portfolio overlap</strong>: Requires parsing AMFI monthly disclosure PDFs. Return correlation (20yr NAV data) is the proxy and is accurate.<br />
+                    &bull; <strong>Stock-level portfolio overlap</strong>: Computed from monthly AMC portfolio disclosures (Excel) for 3 of 13 funds currently. Where unavailable, coverage % is shown in the Correlation section.<br />
                     â¢ <strong>Expense ratio</strong>: Direct plan TER sourced from AMFI; verify current rates at amfiindia.com before investing.
                   </div>
                 </div>}
