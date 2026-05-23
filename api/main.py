@@ -270,16 +270,16 @@ def _auto_heal(component_state: dict):
 
     # Heal stale cache — run precompute in background thread
     if cache.get("status") == "degraded":
-        _log_remediation("Cache stale — auto-triggering precompute for horizons [5,7,10]")
+        _log_remediation("Cache stale — auto-triggering precompute for all horizons [5,7,10,15,20,30]")
         age_h = cache.get("age_hours") or 0
         if age_h > 48:
             from api.alerts import send_cache_stale_alert
             threading.Thread(target=send_cache_stale_alert, args=(age_h,), daemon=True).start()
         def _bg_precompute():
             try:
-                for h, c in [(7, 16), (5, 14), (10, 16)]:
+                for h, c in [(5, 14), (7, 16), (10, 16), (15, 16), (20, 16), (30, 16)]:
                     run_precomputation(horizon_years=h, target_cagr=c)
-                _log_remediation("Auto-precompute complete")
+                _log_remediation("Auto-precompute complete — all 6 horizons refreshed")
             except Exception as e:
                 _log_remediation(f"Auto-precompute failed: {e}")
         threading.Thread(target=_bg_precompute, daemon=True).start()
@@ -296,9 +296,9 @@ def _auto_heal(component_state: dict):
                 log_pipeline("success", inserted)
                 _log_remediation(f"Auto NAV ingestion: {inserted} new, {skipped} skipped")
                 # Re-run precompute so bouquet cache stays fresh
-                for h, c in [(7, 16), (5, 14), (10, 16)]:
+                for h, c in [(5, 14), (7, 16), (10, 16), (15, 16), (20, 16), (30, 16)]:
                     run_precomputation(horizon_years=h, target_cagr=c)
-                _log_remediation("Auto precompute after NAV refresh: complete")
+                _log_remediation("Auto precompute after NAV refresh: all 6 horizons complete")
             except Exception as e:
                 _log_remediation(f"Auto NAV ingestion failed: {e}")
         threading.Thread(target=_bg_nav, daemon=True).start()
