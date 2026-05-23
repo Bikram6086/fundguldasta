@@ -8,7 +8,7 @@ The API reads from this cache — never triggers live
 computation per user request. This keeps API response
 times under 100ms regardless of computation complexity.
 
-Computes: 4 archetypes × 5 horizons = 20 combinations
+Computes: 4 archetypes × 6 horizons (5, 7, 10, 15, 20, 30yr) = 24 combinations
 """
 
 import psycopg2
@@ -118,7 +118,7 @@ ARCHETYPES = {
     },
 }
 
-HORIZONS = [5, 7, 10]
+HORIZONS = [5, 7, 10, 15, 20, 30]
 DEFAULT_TARGET_CAGR = 16
 
 def compute_bouquet_stress_test(fund_weights):
@@ -439,7 +439,7 @@ def run_alternative_precomputation(horizon_years=7, target_cagr=16.0):
 
 def run_all_horizons(target_cagr: float = 16.0):
     """Pre-warm cache for all common horizons. Called at API startup in a background thread."""
-    horizons = [3, 5, 7, 10, 15]
+    horizons = [5, 7, 10, 15, 20, 30]
     for h in horizons:
         try:
             run_precomputation(horizon_years=h, target_cagr=target_cagr)

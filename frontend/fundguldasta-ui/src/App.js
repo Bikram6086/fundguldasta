@@ -2137,6 +2137,14 @@ useEffect(() => {
                 <div className="iw"><input className="inp" type="text" inputMode="numeric" placeholder="16" value={cagr} onChange={e => setCAGR(e.target.value)} /><span className="sfx">% CAGR</span></div>
                 <div className="iw"><input className="inp" type="text" inputMode="numeric" placeholder="7" value={yrs} onChange={e => setYrs(e.target.value)} /><span className="sfx">Years</span></div>
               </div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                {[5, 7, 10, 15, 20, 30].map(y => (
+                  <button key={y} onClick={() => setYrs(String(y))}
+                    style={{ fontSize: 11, padding: "3px 10px", borderRadius: 12, border: `1px solid ${yrs === String(y) ? "rgba(212,175,55,0.6)" : "rgba(255,255,255,0.1)"}`, background: yrs === String(y) ? "rgba(212,175,55,0.12)" : "transparent", color: yrs === String(y) ? G.gold : G.mist, cursor: "pointer", fontFamily: "Outfit,sans-serif" }}>
+                    {y}yr
+                  </button>
+                ))}
+              </div>
               {cagr && yrs && (() => {
                 const c = parseFloat(cagr), y = parseFloat(yrs);
                 if (!c || !y) return null;
@@ -2609,7 +2617,7 @@ useEffect(() => {
             ["Layer 2 — Six-Dimension Scoring", "Each surviving fund is scored across six dimensions: Return Consistency (25%) — what percentage of rolling periods beat the target CAGR; Risk-Adjusted Quality (20%) — Sortino and Sharpe ratios that penalise downside volatility more than upside; Downside Behaviour (20%) — max drawdown, recovery speed, and capture ratios; Manager Stability (15%) — tenure, historical track record, and absence of recent manager changes; Portfolio Quality (10%) — concentration, style consistency; Forward Context (10%) — category tailwinds and benchmark relative performance."],
             ["Layer 3 — Bouquet Construction", "Funds are assembled into a 4–6 fund bouquet using category diversity as the primary constraint. We do not allow two funds from the same SEBI category unless the category is large enough to warrant it (e.g., Flexi Cap + Large Cap). A correlation check is run as a secondary filter — Indian equity funds typically correlate at 0.85–0.98, so we focus on category diversity rather than raw correlation numbers. International and sectoral funds are added only when their category diversification benefit justifies inclusion."],
             ["Layer 4 — Confidence Scoring", "Every bouquet gets an honest confidence score (0–100) based on five factors: Rolling Consistency (30%) — what fraction of 3-year rolling windows would have achieved the target; Downside Protection (20%) — behaviour during 2008, 2011, 2015, 2020 drawdowns; Manager Stability (20%) — no recent manager change flag; Category Tailwind (15%) — SEBI category performance context; Cost Efficiency (15%) — composite expense ratio vs category average. A score below 60 triggers a warning."],
-            ["Layer 5 — Pre-computation", "Results are pre-computed nightly for all supported horizons (5, 7, 10, 15 years) and stored in a database cache. The API never triggers live computation during user requests — this guarantees sub-100ms response times regardless of traffic. Cache freshness is monitored; if data is older than 48 hours, an alert fires automatically."],
+            ["Layer 5 — Pre-computation", "Results are pre-computed nightly for all supported horizons (5, 7, 10, 15, 20, 30 years) and stored in a database cache. The API never triggers live computation during user requests — this guarantees sub-100ms response times regardless of traffic. Cache freshness is monitored; if data is older than 48 hours, an alert fires automatically."],
           ].map(([title, body], i) => (
             <div key={i} style={{ display:"flex", gap:16, padding:"20px 24px", borderRadius:12, background:"rgba(255,255,255,0.025)", border:`1px solid rgba(255,255,255,0.05)`, marginBottom:12 }}>
               <div style={{ fontFamily:"JetBrains Mono,monospace", fontSize:11, color:G.gold, fontWeight:700, flexShrink:0, marginTop:2, minWidth:28 }}>0{i+1}</div>

@@ -25,6 +25,7 @@ REALISTIC_BANDS = {
     15: (13, 18, 19, 22),
     20: (13, 18, 19, 22),
     25: (13, 18, 19, 22),
+    30: (13, 18, 19, 22),
 }
 
 # level: unsuitable | caution | acceptable | good | ideal
@@ -60,6 +61,8 @@ HORIZON_SUITABILITY = {
          "20-year horizon: Excellent. 20-year equity investors in India have never experienced negative real returns. Volatility becomes irrelevant."),
     25: ('ideal',
          "25-year horizon: Maximum compounding territory. Discipline and low cost matter more than timing at this scale."),
+    30: ('ideal',
+         "30-year horizon: Exceptional compounding horizon. Note: Indian equity MF data covers ~25 years — 30-year projections are forward extrapolations. Expense ratios and rebalancing discipline matter more than fund selection at this scale."),
 }
 
 # Approximate historical probability (%) of achieving ≥ given CAGR over that horizon
@@ -72,6 +75,7 @@ ACHIEVEMENT_PROB = {
     15: {7: 100, 8: 100, 10: 99, 12: 96, 14: 85, 16: 63, 18: 38, 20: 19, 22: 9, 25: 3},
     20: {7: 100, 8: 100, 10: 100, 12: 98, 14: 90, 16: 70, 18: 46, 20: 24, 22: 11, 25: 4},
     25: {7: 100, 8: 100, 10: 100, 12: 99, 14: 93, 16: 75, 18: 52, 20: 28, 22: 13, 25: 5},
+    30: {7: 100, 8: 100, 10: 100, 12: 99, 14: 94, 16: 77, 18: 54, 20: 30, 22: 14, 25: 6},
 }
 
 
