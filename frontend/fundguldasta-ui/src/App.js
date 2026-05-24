@@ -500,6 +500,11 @@ export default function App() {
   const [pfError, setPfError] = useState(null);
   const [pfAiReview, setPfAiReview] = useState('');
   const [pfAiReviewLoading, setPfAiReviewLoading] = useState(false);
+  const [fiSearch, setFiSearch] = useState('');
+  const [fiResults, setFiResults] = useState([]);
+  const [fiLoading, setFiLoading] = useState(false);
+  const [fiAnalysis, setFiAnalysis] = useState(null);
+  const [fiError, setFiError] = useState('');
   const [casLoading, setCasLoading] = useState(false);
   const [casResult, setCasResult] = useState(null);
   const [casSelected, setCasSelected] = useState(new Set());
@@ -2399,6 +2404,7 @@ useEffect(() => {
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.06)" }} onClick={() => { setCalcPreFill(null); setCalcTab('sip'); setScreen("calculators"); }}>{tr("📐 SIP & Tax Calculators", HI_HERO.btnCalc)}</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.04)" }} onClick={() => { handleQuizReset(); setQuizModal(true); }}>{tr("🎯 Find My Risk Profile", HI_HERO.btnRisk)}</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.08)", border:"1px solid rgba(212,175,55,0.25)" }} onClick={() => { setAdvisorMessages([]); setAdvisorInput(""); setScreen("advisor"); }}>💬 Guldasta Advisor — Ask anything about Indian MF</button>
+          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(99,179,237,0.06)", border:"1px solid rgba(99,179,237,0.3)", color:"#63B3ED" }} onClick={() => { setFiSearch(''); setFiResults([]); setFiAnalysis(null); setFiError(''); setScreen("fund_intel"); }}>🔬 Fund Intelligence — Deep-analyse any mutual fund</button>
           <p className="note">{lang === 'hi' ? HI_HERO.note : "Research & education only · Not investment advice · Past performance does not guarantee future returns\nAll fund data sourced from AMFI · No commission earned on any recommendation · fundguldasta.com"}</p>
         </div>
       </div>
@@ -3472,6 +3478,275 @@ useEffect(() => {
       </div>
     </>
   );
+
+  if (screen === "fund_intel") {
+    const FI_BLUE = '#63B3ED';
+    const scoreColor = (s) => s >= 80 ? '#27AE78' : s >= 65 ? '#F0A500' : '#E05555';
+    const handleFiSearch = async (q) => {
+      setFiSearch(q); setFiAnalysis(null); setFiError('');
+      if (q.length < 2) { setFiResults([]); return; }
+      try {
+        const r = await fetch(`${API_BASE}/api/funds/search?q=${encodeURIComponent(q)}&limit=10`);
+        if (r.ok) { const d = await r.json(); setFiResults(d.results || []); }
+      } catch (_) { setFiResults([]); }
+    };
+    const handleFiSelect = async (fund) => {
+      setFiSearch(fund.name); setFiResults([]);
+      setFiLoading(true); setFiAnalysis(null); setFiError('');
+      try {
+        const r = await fetch(`${API_BASE}/api/funds/${fund.scheme_code}/full-analysis`);
+        if (r.ok) { setFiAnalysis(await r.json()); }
+        else { setFiError('Analysis failed — this fund may have insufficient data.'); }
+      } catch (_) { setFiError('Could not connect to analysis engine. Please try again.'); }
+      setFiLoading(false);
+    };
+    const fmtPct = (v) => v != null ? `${v > 0 ? '+' : ''}${v.toFixed(1)}%` : '—';
+    const fmtN   = (v, d=2) => v != null ? v.toFixed(d) : '—';
+    const a = fiAnalysis;
+    return (
+      <>
+        <style>{css}</style>
+        <div style={{ minHeight:"100vh", background:G.bg, fontFamily:"Outfit,sans-serif" }}>
+          {/* Header */}
+          <div style={{ background:"rgba(9,12,17,0.96)", backdropFilter:"blur(16px)", borderBottom:`1px solid ${G.bord}`, padding:"14px 28px", display:"flex", alignItems:"center", gap:16, position:"sticky", top:0, zIndex:100 }}>
+            <button onClick={() => setScreen("hero")} style={{ background:"none", border:"none", color:G.mist, fontSize:13, cursor:"pointer", fontFamily:"Outfit,sans-serif", display:"flex", alignItems:"center", gap:6 }}>← Back</button>
+            <span style={{ fontSize:16 }}>🔬</span>
+            <div style={{ fontFamily:"Cormorant Garamond,serif", fontSize:20, fontWeight:700, color:FI_BLUE }}>Fund Intelligence Engine</div>
+          </div>
+
+          <div style={{ maxWidth:860, margin:"0 auto", padding:"32px 24px 80px" }}>
+            {/* Intro */}
+            <p style={{ color:G.mist, fontSize:13, lineHeight:1.8, marginBottom:28, marginTop:0 }}>
+              Enter any mutual fund. Our engine analyses 30+ parameters across 7 dimensions — structural quality, downside protection, risk profile, consistency, cost efficiency, category opportunity, and investor suitability — to give you a probability-adjusted decision-quality score.
+              <span style={{ display:"block", marginTop:8, color:G.slate, fontSize:11, fontStyle:"italic" }}>Research tool only. Not investment advice. Past data does not guarantee future returns.</span>
+            </p>
+
+            {/* Search */}
+            <div style={{ position:"relative", marginBottom:28 }}>
+              <input
+                value={fiSearch}
+                onChange={e => handleFiSearch(e.target.value)}
+                placeholder="Search any mutual fund — e.g. Mirae Asset Large Cap, HDFC Mid Cap…"
+                style={{ width:"100%", background:G.elv, border:`1px solid ${fiSearch ? FI_BLUE+'55' : G.bord}`, borderRadius:10, padding:"14px 18px", color:G.white, fontFamily:"Outfit,sans-serif", fontSize:14, outline:"none", boxSizing:"border-box", transition:"border .2s" }}
+              />
+              {fiResults.length > 0 && (
+                <div style={{ position:"absolute", top:"calc(100% + 4px)", left:0, right:0, background:G.sur, border:`1px solid ${G.bord}`, borderRadius:10, zIndex:50, boxShadow:"0 12px 40px rgba(0,0,0,0.5)", overflow:"hidden" }}>
+                  {fiResults.map(f => (
+                    <div key={f.scheme_code} onClick={() => handleFiSelect(f)}
+                      style={{ padding:"12px 18px", cursor:"pointer", borderBottom:`1px solid rgba(255,255,255,0.04)`, transition:"background .12s" }}
+                      onMouseEnter={e => e.currentTarget.style.background="rgba(99,179,237,0.07)"}
+                      onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+                      <div style={{ fontSize:13, color:G.white }}>{f.name}</div>
+                      <div style={{ fontSize:11, color:G.mist, marginTop:2 }}>{f.category} · {f.amc}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Loading */}
+            {fiLoading && (
+              <div style={{ textAlign:"center", padding:"60px 0", color:G.mist }}>
+                <div style={{ width:48, height:48, border:"2px solid rgba(99,179,237,0.15)", borderTopColor:"rgba(99,179,237,0.7)", borderRadius:"50%", animation:"spin 1s linear infinite", margin:"0 auto 20px" }} />
+                <div style={{ fontSize:14, color:G.slate }}>Analysing fund across 7 dimensions…</div>
+                <div style={{ fontSize:11, color:G.mist, marginTop:6 }}>Computing 30+ metrics from NAV history · typically 3-6 seconds</div>
+              </div>
+            )}
+
+            {/* Error */}
+            {fiError && !fiLoading && (
+              <div style={{ background:"rgba(224,85,85,0.08)", border:"1px solid rgba(224,85,85,0.25)", borderRadius:12, padding:"16px 20px", color:"#E05555", fontSize:13 }}>
+                {fiError}
+              </div>
+            )}
+
+            {/* Results */}
+            {a && !fiLoading && (() => {
+              const dims = Object.values(a.dimensions);
+              const rm = a.raw_metrics || {};
+              const rs = a.rolling_stats || {};
+              const suit = a.suitability || {};
+              return (
+                <div>
+                  {/* Fund header */}
+                  <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:16, padding:"24px 28px", marginBottom:20 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", flexWrap:"wrap", gap:16 }}>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontFamily:"Cormorant Garamond,serif", fontSize:22, color:G.white, fontWeight:700, lineHeight:1.3 }}>{a.scheme_name}</div>
+                        <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginTop:8 }}>
+                          {[a.amc_name, a.sebi_category, a.plan_type].filter(Boolean).map(t => (
+                            <span key={t} style={{ fontSize:11, color:G.mist, background:G.elv, padding:"3px 10px", borderRadius:4 }}>{t}</span>
+                          ))}
+                          {a.data_from && <span style={{ fontSize:11, color:G.mist }}>Data: {a.data_from} → {a.data_to}</span>}
+                        </div>
+                      </div>
+                      {/* Composite score circle */}
+                      <div style={{ textAlign:"center", flexShrink:0 }}>
+                        <div style={{ width:90, height:90, borderRadius:"50%", background:`conic-gradient(${scoreColor(a.composite_score)} 0% ${a.composite_score}%, rgba(255,255,255,0.06) ${a.composite_score}%)`, display:"flex", alignItems:"center", justifyContent:"center", margin:"0 auto 8px", position:"relative" }}>
+                          <div style={{ width:72, height:72, borderRadius:"50%", background:G.sur, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center" }}>
+                            <div style={{ fontSize:24, fontWeight:800, color:scoreColor(a.composite_score), fontFamily:"JetBrains Mono,monospace", lineHeight:1 }}>{a.composite_score}</div>
+                            <div style={{ fontSize:9, color:G.mist, letterSpacing:".05em" }}>/ 100</div>
+                          </div>
+                        </div>
+                        <div style={{ fontSize:10, color:G.mist, letterSpacing:".08em", textTransform:"uppercase" }}>Composite</div>
+                        <div style={{ fontSize:10, color:G.slate, marginTop:3 }}>Confidence: {a.confidence}</div>
+                      </div>
+                    </div>
+                    {/* Verdict */}
+                    <div style={{ marginTop:16, padding:"12px 16px", background:G.elv, borderRadius:10, fontSize:13, color:G.fog, lineHeight:1.7, borderLeft:`3px solid ${scoreColor(a.composite_score)}` }}>
+                      {a.verdict}
+                    </div>
+                  </div>
+
+                  {/* 7 Dimension bars */}
+                  <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:16, padding:"24px 28px", marginBottom:20 }}>
+                    <div style={{ fontSize:11, letterSpacing:".1em", textTransform:"uppercase", color:G.mist, fontWeight:600, marginBottom:18 }}>7-Dimension Analysis</div>
+                    <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
+                      {dims.map(d => (
+                        <div key={d.label}>
+                          <div style={{ display:"flex", justifyContent:"space-between", marginBottom:5 }}>
+                            <span style={{ fontSize:13, color:G.fog }}>{d.label} <span style={{ fontSize:10, color:G.mist }}>({d.weight}% weight)</span></span>
+                            <span style={{ fontSize:13, fontWeight:700, color:scoreColor(d.score), fontFamily:"JetBrains Mono,monospace" }}>{d.score}/100</span>
+                          </div>
+                          <div style={{ height:6, background:"rgba(255,255,255,0.06)", borderRadius:3, overflow:"hidden" }}>
+                            <div style={{ height:"100%", width:`${d.score}%`, background:scoreColor(d.score), borderRadius:3, transition:"width .6s ease" }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Strengths & Warnings */}
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:20 }}>
+                    <div style={{ background:G.sur, border:"1px solid rgba(39,174,120,0.2)", borderRadius:16, padding:"20px 22px" }}>
+                      <div style={{ fontSize:11, letterSpacing:".1em", textTransform:"uppercase", color:"#27AE78", fontWeight:600, marginBottom:14 }}>✓ Strengths ({a.strengths?.length || 0})</div>
+                      {(a.strengths || []).length === 0
+                        ? <div style={{ color:G.slate, fontSize:12 }}>No outstanding strengths identified.</div>
+                        : (a.strengths || []).map((s, i) => (
+                          <div key={i} style={{ fontSize:12, color:G.fog, lineHeight:1.7, marginBottom:10, paddingLeft:14, position:"relative" }}>
+                            <span style={{ position:"absolute", left:0, top:5, width:5, height:5, borderRadius:"50%", background:"#27AE78", display:"block" }} />
+                            {s}
+                          </div>
+                        ))
+                      }
+                    </div>
+                    <div style={{ background:G.sur, border:"1px solid rgba(240,165,0,0.2)", borderRadius:16, padding:"20px 22px" }}>
+                      <div style={{ fontSize:11, letterSpacing:".1em", textTransform:"uppercase", color:"#F0A500", fontWeight:600, marginBottom:14 }}>⚠ Risk Flags ({a.warnings?.length || 0})</div>
+                      {(a.warnings || []).length === 0
+                        ? <div style={{ fontSize:12, color:"#27AE78" }}>No major risk flags detected.</div>
+                        : (a.warnings || []).map((w, i) => (
+                          <div key={i} style={{ fontSize:12, color:G.fog, lineHeight:1.7, marginBottom:10, paddingLeft:14, position:"relative" }}>
+                            <span style={{ position:"absolute", left:0, top:5, width:5, height:5, borderRadius:"50%", background:"#F0A500", display:"block" }} />
+                            {w}
+                          </div>
+                        ))
+                      }
+                    </div>
+                  </div>
+
+                  {/* Raw metrics */}
+                  <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:16, padding:"24px 28px", marginBottom:20 }}>
+                    <div style={{ fontSize:11, letterSpacing:".1em", textTransform:"uppercase", color:G.mist, fontWeight:600, marginBottom:18 }}>Key Metrics</div>
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(190px,1fr))", gap:12 }}>
+                      {[
+                        ["CAGR 1yr", fmtPct(rm.cagr_1yr), rm.cagr_1yr >= 0 ? "#27AE78" : "#E05555"],
+                        ["CAGR 3yr", fmtPct(rm.cagr_3yr), "#63B3ED"],
+                        ["CAGR 5yr", fmtPct(rm.cagr_5yr), "#63B3ED"],
+                        ["CAGR 7yr", fmtPct(rm.cagr_7yr), "#63B3ED"],
+                        ["CAGR 10yr", fmtPct(rm.cagr_10yr), "#63B3ED"],
+                        ["Sharpe (5yr)", fmtN(rm.sharpe_5yr), rm.sharpe_5yr >= 1 ? "#27AE78" : rm.sharpe_5yr >= 0.5 ? "#F0A500" : "#E05555"],
+                        ["Sortino (5yr)", fmtN(rm.sortino_5yr), rm.sortino_5yr >= 1.2 ? "#27AE78" : "#F0A500"],
+                        ["Beta", fmtN(rm.beta), rm.beta <= 1.0 ? "#27AE78" : rm.beta <= 1.3 ? "#F0A500" : "#E05555"],
+                        ["Alpha (ann.)", fmtPct(rm.alpha), rm.alpha >= 2 ? "#27AE78" : rm.alpha >= 0 ? "#F0A500" : "#E05555"],
+                        ["Volatility (ann.)", rm.volatility_annual != null ? rm.volatility_annual.toFixed(1)+"%" : "—", rm.volatility_annual <= 16 ? "#27AE78" : "#F0A500"],
+                        ["Max Drawdown", rm.max_drawdown_pct != null ? rm.max_drawdown_pct.toFixed(1)+"%" : "—", rm.max_drawdown_pct >= -30 ? "#27AE78" : rm.max_drawdown_pct >= -45 ? "#F0A500" : "#E05555"],
+                        ["Upside Capture", rm.upside_capture != null ? rm.upside_capture.toFixed(0)+"%" : "—", "#63B3ED"],
+                        ["Downside Capture", rm.downside_capture != null ? rm.downside_capture.toFixed(0)+"%" : "—", rm.downside_capture <= 80 ? "#27AE78" : "#F0A500"],
+                        ["Expense Ratio", rm.expense_ratio != null ? rm.expense_ratio.toFixed(2)+"%" : "—", rm.expense_ratio <= 0.8 ? "#27AE78" : rm.expense_ratio <= 1.2 ? "#F0A500" : "#E05555"],
+                        ["AUM", rm.aum_crores != null ? `₹${Math.round(rm.aum_crores).toLocaleString('en-IN')} Cr` : "—", "#63B3ED"],
+                        ["Fund Age", rm.fund_age_years != null ? rm.fund_age_years.toFixed(1)+" yr" : "—", "#63B3ED"],
+                      ].map(([lbl, val, col]) => (
+                        <div key={lbl} style={{ background:G.elv, borderRadius:10, padding:"12px 14px" }}>
+                          <div style={{ fontSize:10, color:G.mist, letterSpacing:".06em", textTransform:"uppercase", marginBottom:6 }}>{lbl}</div>
+                          <div style={{ fontSize:17, fontWeight:700, color:col, fontFamily:"JetBrains Mono,monospace" }}>{val}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Rolling stats */}
+                  {(rs['3yr']?.total_periods > 0 || rs['5yr']?.total_periods > 0) && (
+                    <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:16, padding:"24px 28px", marginBottom:20 }}>
+                      <div style={{ fontSize:11, letterSpacing:".1em", textTransform:"uppercase", color:G.mist, fontWeight:600, marginBottom:16 }}>Rolling Return Analysis</div>
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+                        {[['3yr', rs['3yr']], ['5yr', rs['5yr']]].filter(([,d]) => d?.total_periods > 0).map(([w, d]) => (
+                          <div key={w} style={{ background:G.elv, borderRadius:12, padding:"16px 18px" }}>
+                            <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:12 }}>{w} Rolling CAGR <span style={{ fontSize:10, color:G.mist }}>({d.total_periods} periods)</span></div>
+                            {[
+                              ["Median CAGR", fmtPct(d.median)],
+                              ["Avg CAGR", fmtPct(d.mean)],
+                              ["Win Rate (>0%)", d.win_rate != null ? d.win_rate.toFixed(0)+"%" : "—"],
+                              ["Beat 7% (FD+)", d.consistency_7 != null ? d.consistency_7.toFixed(0)+"%" : "—"],
+                              ["Beat 10%", d.consistency_10 != null ? d.consistency_10.toFixed(0)+"%" : "—"],
+                              ["Consistency (σ)", d.std != null ? d.std.toFixed(1)+"%" : "—"],
+                            ].map(([l, v]) => (
+                              <div key={l} style={{ display:"flex", justifyContent:"space-between", marginBottom:6, fontSize:12 }}>
+                                <span style={{ color:G.mist }}>{l}</span>
+                                <span style={{ color:G.white, fontFamily:"JetBrains Mono,monospace" }}>{v}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Suitability */}
+                  <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:16, padding:"24px 28px", marginBottom:20 }}>
+                    <div style={{ fontSize:11, letterSpacing:".1em", textTransform:"uppercase", color:G.mist, fontWeight:600, marginBottom:16 }}>Investor Suitability</div>
+                    <div style={{ display:"flex", flexWrap:"wrap", gap:10, marginBottom:14 }}>
+                      {[
+                        ["Conservative", suit.conservative],
+                        ["Moderate", suit.moderate],
+                        ["Aggressive", suit.aggressive],
+                      ].map(([lbl, ok]) => (
+                        <span key={lbl} style={{ padding:"5px 14px", borderRadius:20, fontSize:12, fontWeight:600, background: ok ? "rgba(39,174,120,0.12)" : "rgba(224,85,85,0.08)", border: `1px solid ${ok ? "rgba(39,174,120,0.3)" : "rgba(224,85,85,0.2)"}`, color: ok ? "#27AE78" : "#E05555" }}>
+                          {ok ? "✓" : "✗"} {lbl}
+                        </span>
+                      ))}
+                      <span style={{ padding:"5px 14px", borderRadius:20, fontSize:12, background:"rgba(99,179,237,0.1)", border:"1px solid rgba(99,179,237,0.25)", color:FI_BLUE }}>
+                        {suit.sip_recommended ? "✓ SIP Suitable" : "✗ SIP Not Ideal"}
+                      </span>
+                      <span style={{ padding:"5px 14px", borderRadius:20, fontSize:12, background:suit.lumpsum_suitable ? "rgba(99,179,237,0.1)" : "rgba(240,165,0,0.08)", border:`1px solid ${suit.lumpsum_suitable ? "rgba(99,179,237,0.25)" : "rgba(240,165,0,0.25)"}`, color:suit.lumpsum_suitable ? FI_BLUE : "#F0A500" }}>
+                        {suit.lumpsum_suitable ? "✓" : "⚠"} Lump Sum
+                      </span>
+                    </div>
+                    <div style={{ fontSize:12, color:G.mist }}>
+                      Minimum recommended horizon: <span style={{ color:G.white, fontWeight:600 }}>{suit.min_horizon_years} years</span>
+                      {" · "}Ideal holding period: <span style={{ color:G.gold, fontWeight:600 }}>{suit.recommended_horizon}</span>
+                    </div>
+                  </div>
+
+                  {/* Category context */}
+                  {a.category_profile && (
+                    <div style={{ background:"rgba(99,179,237,0.04)", border:"1px solid rgba(99,179,237,0.15)", borderRadius:12, padding:"14px 18px", fontSize:12, color:G.slate, lineHeight:1.7 }}>
+                      <span style={{ color:FI_BLUE, fontWeight:600 }}>Category context ({a.sebi_category}):</span>
+                      {" "}Typical 5yr CAGR ≈ {a.category_profile.peer_cagr_5yr}% · Typical max drawdown ≈ {a.category_profile.typical_max_drawdown}% · Typical volatility ≈ {a.category_profile.typical_volatility}% · Risk level {a.category_profile.risk_level}/5
+                      <span style={{ display:"block", marginTop:6, fontSize:11, fontStyle:"italic" }}>Scores are benchmarked against these category norms, not against all equity funds.</span>
+                    </div>
+                  )}
+
+                  <div style={{ marginTop:20, fontSize:11, color:G.mist, lineHeight:1.7, fontStyle:"italic" }}>
+                    This analysis is based on historical NAV data. Past performance does not guarantee future results. Scores reflect mathematical analysis only — not personalised financial advice. Always consider your specific financial goals, risk tolerance, and consult a registered financial advisor before investing.
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      </>
+    );
+  }
 
   if (screen === "advisor") return (
     <>

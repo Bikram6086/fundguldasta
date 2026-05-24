@@ -621,6 +621,39 @@ def trigger_diagnostic():
     threading.Thread(target=_run_diagnostics, daemon=True).start()
     return {"status": "triggered", "message": "Diagnostic running — check /api/health/full in 10s"}
 
+@app.get("/api/funds/{scheme_code}/full-analysis")
+def fund_full_analysis(scheme_code: str):
+    """
+    Comprehensive multi-dimensional intelligence analysis of any mutual fund.
+    Computes 30+ parameters across 7 dimensions: structural quality, downside
+    protection, risk profile, consistency, cost efficiency, category opportunity,
+    and investor suitability.
+    Response time: ~3-6 seconds (real-time computation from NAV history).
+    """
+    import json, math
+    from engine.fund_analyst import analyse_fund
+
+    def _jsonify(obj):
+        """Recursively convert numpy/non-serialisable types to native Python."""
+        if obj is None:
+            return None
+        if isinstance(obj, dict):
+            return {k: _jsonify(v) for k, v in obj.items()}
+        if isinstance(obj, (list, tuple)):
+            return [_jsonify(i) for i in obj]
+        if hasattr(obj, 'item'):           # numpy scalar
+            v = obj.item()
+            return None if (isinstance(v, float) and math.isnan(v)) else v
+        if isinstance(obj, float) and math.isnan(obj):
+            return None
+        return obj
+
+    result = analyse_fund(scheme_code)
+    if 'error' in result:
+        raise HTTPException(status_code=404, detail=result['error'])
+    return _jsonify(result)
+
+
 @app.get("/api/calibration/achievement-probs")
 def get_calibration_probs(horizon: int = 7, refresh: bool = False):
     """
