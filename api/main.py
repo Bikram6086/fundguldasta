@@ -2139,7 +2139,7 @@ class BacktestRequest(BaseModel):
 @app.post("/api/bouquets/{archetype_id}/backtest")
 async def bouquet_backtest(archetype_id: str, body: BacktestRequest):
     import random
-    horizon_years = max(1, min(15, body.horizon_years))
+    horizon_years = max(1, min(30, body.horizon_years))
     future_years = max(1, min(10, body.future_years))
 
     # ── Fetch archetype fund weights from cache ────────────────────────────────

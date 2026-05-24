@@ -1743,7 +1743,7 @@ useEffect(() => {
               <span style={{ fontSize:12, color:G.mist, whiteSpace:"nowrap" }}>History</span>
               <select value={btHorizon} onChange={e => setBtHorizon(Number(e.target.value))}
                 style={{ background:G.elv, border:`1px solid rgba(255,255,255,0.1)`, borderRadius:8, padding:"6px 10px", color:G.white, fontFamily:"Outfit,sans-serif", fontSize:13, outline:"none" }}>
-                {[3,5,7,10,12].map(y => <option key={y} value={y}>{y} years</option>)}
+                {[3,5,7,10,12,15,20,25,30].map(y => <option key={y} value={y}>{y} years</option>)}
               </select>
             </div>
             <button onClick={() => handleBacktest(btArchetype)}
