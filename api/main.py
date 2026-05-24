@@ -390,6 +390,20 @@ def _nightly_scheduler():
         run_ts = datetime.utcnow().isoformat()
         print(f"[NIGHTLY] Starting scheduled precomputation — {run_ts}")
         try:
+            # Refresh portfolio holdings first (monthly disclosures) — overlap depends on this
+            try:
+                from data.portfolio_fetcher import fetch_all_configured, last_month_end
+                from config.db import get_db_config
+                _db = get_db_config()
+                # psycopg2 uses 'dbname' key; portfolio_fetcher uses 'database'
+                _pf_cfg = {k if k != 'dbname' else 'database': v for k, v in _db.items()}
+                _as_of = last_month_end()
+                print(f"[NIGHTLY] Refreshing portfolio holdings as of {_as_of}")
+                fetch_all_configured(as_of=_as_of, db_config=_pf_cfg)
+                print("[NIGHTLY] Portfolio holdings refresh complete")
+            except Exception as _pf_err:
+                print(f"[NIGHTLY] Portfolio holdings refresh failed (non-fatal): {_pf_err}")
+
             from engine.precompute import run_all_horizons
             run_all_horizons(target_cagr=16.0)
             print(f"[NIGHTLY] Precomputation complete — {datetime.utcnow().isoformat()}")
