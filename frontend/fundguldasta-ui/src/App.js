@@ -421,7 +421,7 @@ export default function App() {
   const [advisorLoading, setAdvisorLoading] = useState(false);
   const advisorEndRef = useRef(null);
   // Collapsible result sections (true = collapsed)
-  const DEFAULT_COLLAPSED = { dvr:true, metrics:false, confidence:true, stress:true, correlation:true, strengths:false, methodology:true, comparator:true, rebal:true, freshness:true };
+  const DEFAULT_COLLAPSED = { dvr:true, metrics:true, confidence:true, stress:true, correlation:true, strengths:true, methodology:true, comparator:true, rebal:true, freshness:true };
   const [secCollapsed, setSecCollapsed] = useState({ ...DEFAULT_COLLAPSED });
   const toggleSec = (id) => setSecCollapsed(s => ({ ...s, [id]: !s[id] }));
   // Custom builder
@@ -473,11 +473,13 @@ export default function App() {
   const [lang, setLang] = useState('en');
   const [userPrefs, setUserPrefs] = useState({ manager_alert: false, monthly_digest: false });
   const [prefsSaving, setPrefsSaving] = useState(false);
+  const [prevScreen, setPrevScreen] = useState('hero');
   const [calcTab, setCalcTab] = useState('sip');
   const [calcPreFill, setCalcPreFill] = useState(null);
   const [sipMode, setSipMode] = useState('to-corpus');
   const [sipCalcSip, setSipCalcSip] = useState('');
   const [sipCalcCorpus, setSipCalcCorpus] = useState('');
+  const [sipCalcLump, setSipCalcLump] = useState('');
   const [sipCalcYears, setSipCalcYears] = useState('');
   const [sipCalcCagr, setSipCalcCagr] = useState('');
   const [taxCalcInvested, setTaxCalcInvested] = useState('');
@@ -2414,7 +2416,7 @@ useEffect(() => {
           <button className="btn-p" disabled={!isValid} onClick={handleFind}>{tr("Curate My Bouquets →","मेरे गुलदस्ता तैयार करें →")}</button>
           <button className="byob-entry" style={{ marginTop: 8 }} onClick={() => setScreen("custom_builder")}>{tr("✎ Build Your Own Bouquet", HI_HERO.btnBYOB)}</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.08)" }} onClick={() => setScreen("portfolio")}>{tr("📊 Analyse My Portfolio", HI_HERO.btnPortfolio)}</button>
-          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.06)" }} onClick={() => { setCalcPreFill(null); setCalcTab('sip'); setScreen("calculators"); }}>{tr("📐 SIP & Tax Calculators", HI_HERO.btnCalc)}</button>
+          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.06)" }} onClick={() => { setPrevScreen(screen); setCalcPreFill(null); setCalcTab('sip'); setScreen("calculators"); }}>{tr("📐 SIP & Tax Calculators", HI_HERO.btnCalc)}</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.04)" }} onClick={() => { handleQuizReset(); setQuizModal(true); }}>{tr("🎯 Find My Risk Profile", HI_HERO.btnRisk)}</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.08)", border:"1px solid rgba(212,175,55,0.25)" }} onClick={() => { setAdvisorMessages([]); setAdvisorInput(""); setScreen("advisor"); }}>💬 Guldasta Advisor — Ask anything about Indian MF</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(99,179,237,0.06)", border:"1px solid rgba(99,179,237,0.3)", color:"#63B3ED" }} onClick={() => { setFiSearch(''); setFiResults([]); setFiAnalysis(null); setFiError(''); setScreen("fund_intel"); }}>🔬 Fund Intelligence — Deep-analyse any mutual fund</button>
@@ -2453,6 +2455,10 @@ useEffect(() => {
       const sip = r === 0 ? FV/n : (FV * r) / ((Math.pow(1+r,n)-1) * (1+r));
       const invested = sip * n;
       sipResult = { corpus: FV, invested, gain: FV-invested, sip, mult: FV/invested };
+    } else if (sipMode === 'lump-sum' && sipCalcLump && sipYrsN && sipCagrN) {
+      const PV = parseFloat(sipCalcLump);
+      const corpus = PV * Math.pow(1 + sipCagrN/100, sipYrsN);
+      sipResult = { corpus, invested: PV, gain: corpus-PV, mult: corpus/PV, isLump: true };
     }
 
     // ── Tax maths ──
@@ -2492,7 +2498,7 @@ useEffect(() => {
           {/* Header */}
           <div style={{ padding:"20px 24px 0", maxWidth:820, margin:"0 auto" }}>
             <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:28 }}>
-              <button onClick={() => setScreen("hero")} style={{ background:"none", border:`1px solid ${G.bord}`, borderRadius:8, padding:"5px 14px", color:G.slate, fontSize:12, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>← Back</button>
+              <button onClick={() => setScreen(prevScreen)} style={{ background:"none", border:`1px solid ${G.bord}`, borderRadius:8, padding:"5px 14px", color:G.slate, fontSize:12, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>← Back</button>
               <span style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:26, fontWeight:700 }}>Investment Calculators</span>
               {calcPreFill && <span style={{ fontSize:11, color:G.mist, background:G.elv, padding:"3px 10px", borderRadius:6 }}>Pre-filled: {calcPreFill.label} · {calcPreFill.cagr}% CAGR</span>}
             </div>
@@ -2511,8 +2517,8 @@ useEffect(() => {
             {calcTab === 'sip' && (
               <div>
                 {/* Mode toggle */}
-                <div style={{ display:"flex", gap:10, marginBottom:20 }}>
-                  {[['to-corpus','SIP → Final Corpus'],['to-sip','Target Corpus → SIP Needed']].map(([m,l]) => (
+                <div style={{ display:"flex", gap:10, marginBottom:20, flexWrap:"wrap" }}>
+                  {[['to-corpus','SIP → Final Corpus'],['to-sip','Target Corpus → SIP Needed'],['lump-sum','Lump Sum → Final Corpus']].map(([m,l]) => (
                     <button key={m} onClick={() => setSipMode(m)} style={{
                       padding:"8px 18px", borderRadius:8, border:`1px solid ${sipMode===m ? G.bordG : G.bord}`,
                       background: sipMode===m ? "rgba(212,175,55,0.12)" : G.sur,
@@ -2527,7 +2533,9 @@ useEffect(() => {
                     <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:4 }}>Inputs</div>
                     {sipMode === 'to-corpus'
                       ? <CalcInputRow label="Monthly SIP (₹)" value={sipCalcSip} setter={setSipCalcSip} placeholder="10000" suffix="₹/mo" />
-                      : <CalcInputRow label="Target Corpus (₹)" value={sipCalcCorpus} setter={setSipCalcCorpus} placeholder="10000000" suffix="₹" />
+                      : sipMode === 'to-sip'
+                      ? <CalcInputRow label="Target Corpus (₹)" value={sipCalcCorpus} setter={setSipCalcCorpus} placeholder="10000000" suffix="₹" />
+                      : <CalcInputRow label="Lump Sum Investment (₹)" value={sipCalcLump} setter={setSipCalcLump} placeholder="500000" suffix="₹" />
                     }
                     <CalcInputRow label="Investment Horizon (years)" value={sipCalcYears} setter={setSipCalcYears} placeholder="7" suffix="yrs" />
                     <CalcInputRow label="Expected CAGR (%)" value={sipCalcCagr} setter={setSipCalcCagr} placeholder={calcPreFill ? String(calcPreFill.cagr) : "14"} suffix="%" />
@@ -2555,8 +2563,8 @@ useEffect(() => {
                     ) : (
                       <>
                         {sipMode === 'to-sip' && <CalcResultRow label="Required monthly SIP" value={fmtINR(sipResult.sip)} color={G.gold} big={true} />}
-                        <CalcResultRow label="Final corpus" value={fmtCr(sipResult.corpus)} color="#27AE78" big={sipMode==='to-corpus'} />
-                        <CalcResultRow label="Total invested" value={fmtCr(sipResult.invested)} color={G.fog} />
+                        <CalcResultRow label="Final corpus" value={fmtCr(sipResult.corpus)} color="#27AE78" big={sipMode==='to-corpus'||sipMode==='lump-sum'} />
+                        <CalcResultRow label={sipMode==='lump-sum' ? "Lump sum invested" : "Total invested"} value={fmtCr(sipResult.invested)} color={G.fog} />
                         <CalcResultRow label="Wealth gain" value={fmtCr(sipResult.gain)} color="#27AE78" />
                         <CalcResultRow label="Wealth multiplier" value={sipResult.mult.toFixed(2)+'x'} color={G.gold} border={false} />
                         {/* Visual bar */}
@@ -2579,7 +2587,7 @@ useEffect(() => {
                 </div>
 
                 {/* Comparison table at different CAGRs */}
-                {sipYrsN > 0 && (sipMode==='to-corpus' ? !!sipCalcSip : !!sipCalcCorpus) && (
+                {sipYrsN > 0 && (sipMode==='to-corpus' ? !!sipCalcSip : sipMode==='to-sip' ? !!sipCalcCorpus : !!sipCalcLump) && (
                   <div style={{ marginTop:20, background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20 }}>
                     <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:14 }}>CAGR Sensitivity — how much does it matter?</div>
                     <div style={{ overflowX:"auto" }}>
@@ -2593,14 +2601,18 @@ useEffect(() => {
                           {[10,12,14,15,16,18].map(c => {
                             const rr = c/100/12;
                             const nn = sipYrsN*12;
-                            let corp, inv, sipp;
+                            let corp, inv;
                             if (sipMode==='to-corpus') {
                               const P = parseFloat(sipCalcSip);
                               corp = rr===0 ? P*nn : P*((Math.pow(1+rr,nn)-1)/rr)*(1+rr);
-                              inv = P*nn; sipp = P;
+                              inv = P*nn;
+                            } else if (sipMode==='lump-sum') {
+                              const PV = parseFloat(sipCalcLump);
+                              corp = PV * Math.pow(1 + c/100, sipYrsN);
+                              inv = PV;
                             } else {
                               const FV = parseFloat(sipCalcCorpus);
-                              sipp = rr===0 ? FV/nn : (FV*rr)/((Math.pow(1+rr,nn)-1)*(1+rr));
+                              const sipp = rr===0 ? FV/nn : (FV*rr)/((Math.pow(1+rr,nn)-1)*(1+rr));
                               inv = sipp*nn; corp = FV;
                             }
                             const highlight = Math.abs(c - (parseFloat(sipCalcCagr)||0)) < 0.5;
@@ -3166,7 +3178,7 @@ useEffect(() => {
               </div>
               <div className="footer-links" style={{ marginTop:8 }}>
                 <span style={{ fontSize:10, color:G.mist, marginRight:4, letterSpacing:".06em", textTransform:"uppercase" }}>Learn:</span>
-                <button className="footer-link" onClick={() => { setCalcPreFill(null); setCalcTab('sip'); setScreen("calculators"); }}>📐 Calculators</button>
+                <button className="footer-link" onClick={() => { setPrevScreen(screen); setCalcPreFill(null); setCalcTab('sip'); setScreen("calculators"); }}>📐 Calculators</button>
                 <button className="footer-link" onClick={() => setScreen("learn-algorithm")}>How It Works</button>
                 <button className="footer-link" onClick={() => setScreen("learn-rolling-returns")}>Rolling Returns</button>
                 <button className="footer-link" onClick={() => setScreen("learn-survivorship")}>Survivorship Bias</button>
@@ -3536,12 +3548,17 @@ useEffect(() => {
 
             {/* Search */}
             <div style={{ position:"relative", marginBottom:28 }}>
-              <input
-                value={fiSearch}
-                onChange={e => handleFiSearch(e.target.value)}
-                placeholder="Search any mutual fund — e.g. Mirae Asset Large Cap, HDFC Mid Cap…"
-                style={{ width:"100%", background:G.elv, border:`1px solid ${fiSearch ? FI_BLUE+'55' : G.bord}`, borderRadius:10, padding:"14px 18px", color:G.white, fontFamily:"Outfit,sans-serif", fontSize:14, outline:"none", boxSizing:"border-box", transition:"border .2s" }}
-              />
+              <div style={{ display:"flex", gap:10, alignItems:"center" }}>
+                <input
+                  value={fiSearch}
+                  onChange={e => handleFiSearch(e.target.value)}
+                  placeholder="Search any mutual fund — e.g. Mirae Asset Large Cap, HDFC Mid Cap…"
+                  style={{ flex:1, background:G.elv, border:`1px solid ${fiSearch ? FI_BLUE+'55' : G.bord}`, borderRadius:10, padding:"14px 18px", color:G.white, fontFamily:"Outfit,sans-serif", fontSize:14, outline:"none", boxSizing:"border-box", transition:"border .2s" }}
+                />
+                {(fiSearch || fiAnalysis) && (
+                  <button onClick={() => { setFiSearch(''); setFiResults([]); setFiAnalysis(null); setFiError(''); }} style={{ flexShrink:0, background:"rgba(224,85,85,0.1)", border:"1px solid rgba(224,85,85,0.3)", borderRadius:8, padding:"10px 16px", color:"#E05555", fontFamily:"Outfit,sans-serif", fontSize:12, cursor:"pointer", whiteSpace:"nowrap" }}>✕ Clear</button>
+                )}
+              </div>
               {fiResults.length > 0 && (
                 <div style={{ position:"absolute", top:"calc(100% + 4px)", left:0, right:0, background:G.sur, border:`1px solid ${G.bord}`, borderRadius:10, zIndex:50, boxShadow:"0 12px 40px rgba(0,0,0,0.5)", overflow:"hidden" }}>
                   {fiResults.map(f => (
@@ -3906,7 +3923,7 @@ useEffect(() => {
             <button className="bbtn" onClick={reset}>← New Search</button>
             <button className="byob-entry" style={{ marginTop: 0, fontSize: 11, padding: "5px 14px" }} onClick={() => setScreen("custom_builder")}>✎ Build Your Own</button>
             <button className="byob-entry" style={{ marginTop: 0, fontSize: 11, padding: "5px 14px", background:"rgba(212,175,55,0.08)" }} onClick={() => setScreen("portfolio")}>📊 My Portfolio</button>
-            <button className="byob-entry" style={{ marginTop: 0, fontSize: 11, padding: "5px 14px", background:"rgba(212,175,55,0.06)" }} onClick={() => { setCalcPreFill(selectedArch ? { cagr: (selectedArch.metrics?.bouquet_cagr||selectedArch.cagrRange||14), label: selectedArch.label } : null); setCalcTab('sip'); setScreen("calculators"); }}>📐 Calculators</button>
+            <button className="byob-entry" style={{ marginTop: 0, fontSize: 11, padding: "5px 14px", background:"rgba(212,175,55,0.06)" }} onClick={() => { setPrevScreen(screen); setCalcPreFill(selectedArch ? { cagr: (selectedArch.metrics?.bouquet_cagr||selectedArch.cagrRange||14), label: selectedArch.label } : null); setCalcTab('sip'); setScreen("calculators"); }}>📐 Calculators</button>
             <button className="byob-entry" style={{ marginTop: 0, fontSize: 11, padding: "5px 14px", background:"rgba(212,175,55,0.04)" }} onClick={() => { setCmpA("steady"); setCmpB("balanced"); setCmpModal(true); }}>⊟ Compare</button>
             <button className="byob-entry" style={{ marginTop: 0, fontSize: 11, padding: "5px 14px", background:"rgba(212,175,55,0.03)" }} onClick={() => { setWnSearch(''); setWnData(null); setWnSelected(null); setWnResults([]); setWnModal(true); }}>🔍 Fund Explorer</button>
             <button className="byob-entry" style={{ marginTop: 0, fontSize: 11, padding: "5px 14px", background:"rgba(212,175,55,0.08)", border:"1px solid rgba(212,175,55,0.3)" }} onClick={() => { setAdvisorMessages([]); setAdvisorInput(""); setScreen("advisor"); }}>💬 Advisor</button>
