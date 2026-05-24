@@ -566,11 +566,11 @@ export default function App() {
 
   const handleFind = async () => {
     if (impliedCAGR && impliedCAGR > 22) {
-      setInputWarn(`${impliedCAGR}% CAGR over a sustained horizon has never been achieved at scale by any diversified mutual fund portfolio in India — this is a hard historical fact, not a conservative estimate. No active fund with ₹500Cr+ AUM has delivered this consistently across a full market cycle. You may still proceed, but your goal inputs may need revisiting.`);
+      setInputWarn(`${impliedCAGR}% sustained CAGR has no precedent in Indian diversified mutual fund history. For reference: Nippon India Small Cap and Quant Small Cap — among India's top-performing funds — have delivered ~19–21% since inception, but only during exceptional tail-wind periods. No diversified fund with ₹500Cr+ AUM has sustained above 22% across a full market cycle (bull + bear + recovery). A ${impliedCAGR}% target implies nearly doubling the long-run market return. Consider increasing your SIP amount, extending your horizon, or revising your corpus target to something evidence-backed. You may still proceed, but we cannot show bouquets calibrated to this target.`);
       return;
     }
     if (impliedCAGR && impliedCAGR > 20) {
-      setInputWarn(`Your goal implies ~${impliedCAGR}% CAGR — aggressive territory. Historical rolling return data shows this has been achieved only in exceptional bull-run periods, not consistently. You may still proceed.`);
+      setInputWarn(`Your goal implies ~${impliedCAGR}% CAGR — aggressive territory. Historical rolling return data shows this has been achieved only during exceptional bull-run periods (2003–07, 2014–17, 2020–21), not consistently across full market cycles. The best 10-year rolling CAGR for any diversified Indian fund is approximately 20%. You may still proceed.`);
       return;
     }
     setInputWarn("");
@@ -1277,7 +1277,7 @@ useEffect(() => {
           <button onClick={() => setSavedPanel(false)} style={{ background:"none", border:"none", color:G.slate, cursor:"pointer", fontSize:18 }}>&#x2715;</button>
         </div>
         {savedList.length === 0 && (
-          <p style={{ color:G.slate, fontSize:13 }}>No saved bouquets yet. Click the bookmark icon on any archetype to save it.</p>
+          <p style={{ color:G.slate, fontSize:13 }}>{tr("No saved bouquets yet. Click the bookmark icon on any archetype to save it.", "अभी तक कोई गुलदस्ता सहेजा नहीं। किसी भी आर्केटाइप पर बुकमार्क आइकन दबाएं।")}</p>
         )}
         {/* Alert preference toggles */}
         {savedList.length > 0 && (
@@ -2063,7 +2063,7 @@ useEffect(() => {
               <div style={{ display:"flex", gap:12, justifyContent:"center", flexWrap:"wrap" }}>
                 <button onClick={() => handleQuizLaunch(atId)}
                   style={{ padding:"11px 28px", background:`rgba(${at.color === "#4A8FE0" ? "74,143,224" : at.color === "#27AE78" ? "39,174,120" : at.color === "#F0A500" ? "240,165,0" : "224,85,85"},0.15)`, border:`1px solid ${at.color}`, borderRadius:10, color:at.color, fontFamily:"Outfit,sans-serif", fontSize:13, fontWeight:600, cursor:"pointer" }}>
-                  See {at.label} Bouquet →
+                  {tr(`See ${at.label} Bouquet →`, `${at.label} गुलदस्ता देखें →`)}
                 </button>
                 <button onClick={handleQuizReset}
                   style={{ padding:"11px 20px", background:"none", border:`1px solid rgba(255,255,255,0.12)`, borderRadius:10, color:G.mist, fontFamily:"Outfit,sans-serif", fontSize:13, cursor:"pointer" }}>
@@ -3997,8 +3997,11 @@ useEffect(() => {
               <div className="adv-icon">ℹ️</div>
               <div className="adv-body">
                 <div className="adv-cat" style={{ color: "#27AE78" }}>Approximate Results</div>
-                <div className="adv-msg">Showing bouquets for <strong>{approxHorizon.used}-year</strong> horizon. Your {approxHorizon.requested}-year analysis is computing in background — refresh in ~2 minutes for exact results.</div>
-                <button className="adv-dismiss" onClick={() => setApproxHorizon(null)}>Got it</button>
+                <div className="adv-msg">{tr(`Showing bouquets for `, `${approxHorizon.used}-वर्ष के लिए गुलदस्ता दिखाए जा रहे हैं। `)}<strong>{approxHorizon.used}-{tr("year","वर्ष")}</strong>{tr(` horizon. Your ${approxHorizon.requested}-year analysis is computing in background — click Refresh in ~2 minutes for exact results.`,` क्षितिज। आपका ${approxHorizon.requested}-वर्ष का विश्लेषण पृष्ठभूमि में तैयार हो रहा है — सटीक परिणामों के लिए ~2 मिनट बाद Refresh करें।`)}</div>
+                <div style={{ display:'flex', gap:8, marginTop:6 }}>
+                  <button className="adv-dismiss" style={{ background:'rgba(39,174,120,0.15)', border:'1px solid rgba(39,174,120,0.4)', color:'#27AE78' }} onClick={() => { setApproxHorizon(null); handleFind(); }}>↻ {tr("Refresh for exact results","सटीक परिणाम लाएं")}</button>
+                  <button className="adv-dismiss" onClick={() => setApproxHorizon(null)}>{tr("Got it","ठीक है")}</button>
+                </div>
               </div>
             </div>
           )}
@@ -4048,7 +4051,7 @@ useEffect(() => {
                 )}
               </div>
               <div className="adv-proceed">
-                <button className="adv-proceed-btn" onClick={() => setCagrAdvisory(null)}>I understand — show my bouquets →</button>
+                <button className="adv-proceed-btn" onClick={() => setCagrAdvisory(null)}>{tr("I understand — show my bouquets →", "समझ गया — मेरे गुलदस्ता दिखाएं →")}</button>
               </div>
             </div>
           )}
@@ -4125,7 +4128,7 @@ useEffect(() => {
                   <div className="alt-round-header">
                     <div className="alt-round-divider" />
                     <div style={{ textAlign: "center" }}>
-                      <div className="alt-round-label">Alternative Bouquet Set {round.roundNumber}</div>
+                      <div className="alt-round-label">{tr(`Alternative Bouquet Set ${round.roundNumber}`, `वैकल्पिक गुलदस्ता सेट ${round.roundNumber}`)}</div>
                       <div className="alt-round-note">{round.poolSize} eligible funds in universe after previous exclusions</div>
                     </div>
                     <div className="alt-round-divider" style={{ background: "linear-gradient(270deg,rgba(212,175,55,0.2),transparent)" }} />
@@ -4155,7 +4158,7 @@ useEffect(() => {
               {altLoading && (
                 <div className="gen-loading">
                   <div className="gen-spinner" />
-                  <div>Curating alternative bouquets from our eligible universe...</div>
+                  <div>{tr("Curating alternative bouquets from our eligible universe...", "हमारे योग्य ब्रह्मांड से वैकल्पिक गुलदस्ता तैयार किए जा रहे हैं...")}</div>
                   <div style={{ fontSize: 11, color: "rgba(255,255,255,0.2)" }}>Same 6-dimension scoring engine, different fund pool.</div>
                 </div>
               )}
@@ -4163,21 +4166,21 @@ useEffect(() => {
               {/* Pool exhausted */}
               {altPoolExhausted && !altLoading && (
                 <div className="gen-exhausted">
-                  All unique bouquet combinations from our eligible fund universe have been shown. {altRounds.length + 1} rounds of options curated.
+                  {tr(`All unique bouquet combinations from our eligible fund universe have been shown. ${altRounds.length + 1} rounds of options curated.`, `हमारे योग्य फंड ब्रह्मांड से सभी अनूठे गुलदस्ता संयोजन दिखाए जा चुके हैं। ${altRounds.length + 1} राउंड के विकल्प तैयार किए गए।`)}
                 </div>
               )}
 
               {/* Generate More CTA */}
               {!altLoading && !altPoolExhausted && altRounds.length < 3 && (
                 <div className="gen-more-cta">
-                  <div className="gen-more-title">Want another set of bouquets?</div>
+                  <div className="gen-more-title">{tr("Want another set of bouquets?", "एक और गुलदस्ता सेट चाहिए?")}</div>
                   <div className="gen-more-sub">
-                    We will curate another round using different funds from our eligible universe — same scoring engine, no repetition from previous rounds.
-                    {altRounds.length === 0 ? " Pre-curated for speed — typically ready in seconds." : ""}
+                    {tr("We will curate another round using different funds from our eligible universe — same scoring engine, no repetition from previous rounds.", "हम योग्य फंड ब्रह्मांड से अलग फंडों का उपयोग करते हुए एक और गुलदस्ता सेट तैयार करेंगे — वही स्कोरिंग इंजन, पिछले राउंड से कोई दोहराव नहीं।")}
+                    {altRounds.length === 0 ? tr(" Pre-curated for speed — typically ready in seconds.", " गति के लिए पहले से तैयार — आमतौर पर कुछ सेकंड में तैयार।") : ""}
                   </div>
                   {altError && <div style={{ color: "#E05555", fontSize: 12, marginBottom: 12 }}>{altError}</div>}
                   <button className="gen-more-btn" onClick={handleGenerateMore}>
-                    Curate {altRounds.length === 0 ? "Another" : "One More"} Bouquet Set
+                    {tr(`Curate ${altRounds.length === 0 ? "Another" : "One More"} Bouquet Set`, `${altRounds.length === 0 ? "एक और" : "एक और"} गुलदस्ता सेट तैयार करें`)}
                   </button>
                 </div>
               )}
@@ -4520,7 +4523,7 @@ useEffect(() => {
 
               {/* BOX 3 — FUNDS */}
               <div className="card" id="sec-composition">
-                <div className="ch"><span className="ct">Bouquet Composition</span><span className="badge bg-gold">5 Funds · Direct Plans · No Commission</span>{customizeApplied && <span className="cx-applied">✎ Customized</span>}</div>
+                <div className="ch"><span className="ct">{tr("Bouquet Composition","गुलदस्ता संरचना")}</span><span className="badge bg-gold">5 Funds · Direct Plans · No Commission</span>{customizeApplied && <span className="cx-applied">✎ Customized</span>}</div>
                 <div className="cb">
                   <div className="fg">
                     {(() => {
@@ -4571,7 +4574,7 @@ useEffect(() => {
                   </div>
                 </div>
                   <button className="customize-toggle" onClick={() => setCustomizeOpen(o => !o)}>
-                    {customizeOpen ? "▲ Close Customization" : "✎ Customize this bouquet"}
+                    {customizeOpen ? tr("▲ Close Customization","▲ अनुकूलन बंद करें") : tr("✎ Customize this bouquet","✎ यह गुलदस्ता अनुकूलित करें")}
                   </button>
                   {customizeOpen && (
                     <div className="customize-panel">
