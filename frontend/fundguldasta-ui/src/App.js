@@ -3487,7 +3487,7 @@ useEffect(() => {
       if (q.length < 2) { setFiResults([]); return; }
       try {
         const r = await fetch(`${API_BASE}/api/funds/search?q=${encodeURIComponent(q)}&limit=10`);
-        if (r.ok) { const d = await r.json(); setFiResults(d.results || []); }
+        if (r.ok) { const d = await r.json(); setFiResults(Array.isArray(d) ? d : []); }
       } catch (_) { setFiResults([]); }
     };
     const handleFiSelect = async (fund) => {
