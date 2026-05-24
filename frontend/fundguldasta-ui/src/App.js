@@ -512,6 +512,19 @@ export default function App() {
 
   const tr = (en, hi) => lang === 'hi' ? hi : en;
 
+  const renderMarkdown = (text) => {
+    if (!text) return '';
+    const escaped = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return escaped
+      .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.+?)\*/g, '<em>$1</em>')
+      .replace(/^#{1,3}\s+(.+)$/gm, '<div style="font-weight:700;color:#E8D5A3;margin:10px 0 4px">$1</div>')
+      .replace(/^[-•]\s+(.+)$/gm, '<div style="padding-left:14px;margin:2px 0">• $1</div>')
+      .replace(/^\d+\.\s+(.+)$/gm, '<div style="padding-left:14px;margin:2px 0">$1</div>')
+      .replace(/\n\n/g, '<br/><br/>')
+      .replace(/\n/g, '<br/>');
+  };
+
   const HI_HERO = {
     tagline: "म्यूचुअल फंड रिसर्च। बेबाक।",
     secTag: "ईमानदारी से डिज़ाइन किया गया म्यूचुअल फंड रिसर्च",
@@ -3796,12 +3809,32 @@ useEffect(() => {
                 maxWidth: "80%", padding: "12px 16px", borderRadius: msg.role === "user" ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
                 background: msg.role === "user" ? "rgba(212,175,55,0.12)" : G.sur,
                 border: msg.role === "user" ? "1px solid rgba(212,175,55,0.3)" : `1px solid ${G.bord}`,
-                fontSize: 13, color: G.fog, lineHeight: 1.75, whiteSpace: "pre-wrap",
+                fontSize: 13, color: G.fog, lineHeight: 1.75,
               }}>
-                {msg.content || (advisorLoading && idx === advisorMessages.length - 1 ? <span style={{ color: G.mist }}>●●●</span> : "")}
+                {advisorLoading && idx === advisorMessages.length - 1 && !msg.content
+                  ? <span style={{ color: G.mist }}>●●●</span>
+                  : msg.role === "assistant"
+                    ? <span dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
+                    : msg.content}
               </div>
             </div>
           ))}
+          {/* Follow-up suggestions after last assistant message */}
+          {!advisorLoading && advisorMessages.length > 0 && advisorMessages[advisorMessages.length-1].role === "assistant" && (
+            <div style={{ display:"flex", flexWrap:"wrap", gap:6, paddingLeft:4, paddingBottom:8 }}>
+              {[
+                "What does this mean for my SIP?",
+                "How does LTCG tax apply here?",
+                "What should I watch out for?",
+                "Can you give a concrete example?",
+              ].map((q, i) => (
+                <button key={i} onClick={() => handleAdvisorSend(q)}
+                  style={{ fontSize:11, padding:"5px 11px", borderRadius:16, border:"1px solid rgba(255,255,255,0.1)", background:"rgba(255,255,255,0.03)", color:G.mist, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                  {q}
+                </button>
+              ))}
+            </div>
+          )}
           <div ref={advisorEndRef} />
         </div>
 
