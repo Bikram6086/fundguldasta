@@ -66,17 +66,72 @@ FUND_SOURCES = {
             "Monthly%20HDFC%20Mid%20Cap%20Fund%20-%20{day}%20{month_full}%20{year}.xlsx"
         ),
     },
-    # ── Stubs — add url_template when confirmed ────────────────────────────
-    "118825": {"name": "Mirae Asset Large Cap Fund",        "amc": "mirae",   "url_template": None},
-    "120152": {"name": "Kotak Large Cap Fund",              "amc": "kotak",   "url_template": None},
-    "118834": {"name": "Mirae Asset Large & Mid Cap Fund",  "amc": "mirae",   "url_template": None},
-    "120505": {"name": "Axis Mid Cap Fund",                 "amc": "axis",    "url_template": None},
-    "119071": {"name": "DSP Midcap Fund",                   "amc": "dsp",     "url_template": None},
-    "118778": {"name": "Nippon India Small Cap Fund",       "amc": "nippon",  "url_template": None},
-    "120828": {"name": "Quant Small Cap Fund",              "amc": "quant",   "url_template": None},
-    "149134": {"name": "SBI Balanced Advantage Fund",       "amc": "sbi",     "url_template": None},
-    "145552": {"name": "Motilal Oswal Nasdaq 100 FOF",      "amc": "motilal", "url_template": None},
-    "135800": {"name": "Tata Digital India Fund",           "amc": "tata",    "url_template": None},
+    # ── Axis — consolidated all-schemes file, sheet lookup by code ─────────
+    "120505": {
+        "name": "Axis Midcap Fund",
+        "amc": "axis",
+        "url_template": (
+            "https://transact.axismf.com/cms/sites/default/files/Statutory/"
+            "Monthly%20Portfolio-{day}%20{month_num_2d}%20{year_2d}.xlsx"
+        ),
+        "sheet": "AXISMCF",
+    },
+    # ── Quant — consolidated all-schemes file ───────────────────────────────
+    "120828": {
+        "name": "Quant Small Cap Fund",
+        "amc": "quant",
+        "url_template": (
+            "https://quantmutual.com/Admin/disclouser/Monthly_Portfolio_{day}{month_num_2d}{year}.xlsx"
+        ),
+        "sheet": "qSCF",
+    },
+    # ── SBI — consolidated all-schemes file ────────────────────────────────
+    "149134": {
+        "name": "SBI Balanced Advantage Fund",
+        "amc": "sbi",
+        "url_template": (
+            "https://www.sbimf.com/docs/default-source/scheme-portfolios/"
+            "all-schemes-monthly-portfolio---as-on-{day}th-{month_lower}-{year}.xlsx"
+        ),
+        "sheet": "SBAF",
+    },
+    # ── Nippon — consolidated all-schemes xlsx (despite .xls extension) ────
+    "118778": {
+        "name": "Nippon India Small Cap Fund",
+        "amc": "nippon",
+        "url_template": (
+            "https://mf.nipponindiaim.com/InvestorServices/FactsheetsDocuments/"
+            "NIMF-MONTHLY-PORTFOLIO-{day}-{month_full}-{year_2d}.xls"
+        ),
+        "sheet": "SC",
+    },
+    # ── Tata — consolidated all-schemes file ───────────────────────────────
+    "135800": {
+        "name": "Tata Digital India Fund",
+        "amc": "tata",
+        "url_template": (
+            "https://betacms.tatamutualfund.com/system/files/{pub_year}-{pub_month_num_2d}/"
+            "Monthly%20Portfolio%20as%20on%20{day}th%20{month_full}%20{year}%20%281%29.xlsx"
+        ),
+        "sheet": "TDIF",
+    },
+    # ── Motilal — consolidated all-schemes file ─────────────────────────────
+    # Note: Nasdaq 100 FOF holds ETF units only (FOF), not individual stocks.
+    # Overlap for this fund will be near 0 by design. Sheet included for completeness.
+    "145552": {
+        "name": "Motilal Oswal Nasdaq 100 FOF",
+        "amc": "motilal",
+        "url_template": (
+            "https://www.motilaloswalmf.com/content/dam/motilal-mf/downloads/mf/"
+            "month-end-portfolio/{year}/{pub_month_lower}/Motilal%20Portfolio%20{day}%20{month_full}%20{year}%20-%20Final.xlsx"
+        ),
+        "sheet": "YO13",
+    },
+    # ── Stubs — URL patterns not yet confirmed ──────────────────────────────
+    "118825": {"name": "Mirae Asset Large Cap Fund",       "amc": "mirae",   "url_template": None},
+    "120152": {"name": "Kotak Large Cap Fund",             "amc": "kotak",   "url_template": None},
+    "118834": {"name": "Mirae Asset Large & Mid Cap Fund", "amc": "mirae",   "url_template": None},
+    "119071": {"name": "DSP Midcap Fund",                  "amc": "dsp",     "url_template": None},
 }
 
 _ISIN_RE = re.compile(r'^[A-Z]{2}[A-Z0-9]{10}$')
@@ -97,14 +152,20 @@ def _build_url(cfg: dict, as_of: date) -> Optional[str]:
     # Publication month = disclosure month + 1 (for AMCs that publish in the following month)
     pub_m = m % 12 + 1
     pub_y = as_of.year + (1 if m == 12 else 0)
+    pub_month_lower = month_fulls[pub_m - 1].lower()
     return tmpl.format(
         year=as_of.year,
+        year_2d=str(as_of.year)[-2:],
         month_num=m,
+        month_num_2d=f"{m:02d}",
         month_abbr=month_abbrs[m - 1],
         month_full=month_fulls[m - 1],
+        month_lower=month_fulls[m - 1].lower(),
         day=as_of.day,
         pub_year=pub_y,
         pub_month_num=pub_m,
+        pub_month_num_2d=f"{pub_m:02d}",
+        pub_month_lower=pub_month_lower,
     )
 
 
@@ -150,7 +211,7 @@ def _parse_xlsx(content: bytes, sheet_name: Optional[str] = None) -> list:
     header_row = None
     for i, row in enumerate(rows):
         cells = [str(c).strip().lower() if c is not None else "" for c in row]
-        if "isin" in cells:
+        if any("isin" in c for c in cells):
             header_row_idx = i
             header_row = [str(c).strip() if c is not None else "" for c in row]
             break
