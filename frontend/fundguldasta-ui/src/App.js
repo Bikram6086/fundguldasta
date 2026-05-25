@@ -2947,9 +2947,6 @@ useEffect(() => {
                 ? corpusGap / Math.pow(1 + retAccumCagrN / 100, accumYears)
                 : 0;
 
-              // Milestone ages for corpus depletion preview
-              const milestones = [60, 65, 70, 75, 80, 85, 90].filter(a => a >= retRetireAgeN);
-
               return (
                 <div>
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:24 }}>
