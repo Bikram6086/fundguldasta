@@ -551,7 +551,7 @@ export default function App() {
     btnCurate: "मेरे गुलदस्ता तैयार करें →",
     btnBYOB: "✎ अपना गुलदस्ता बनाएं",
     btnPortfolio: "📊 पोर्टफोलियो विश्लेषण",
-    btnCalc: "📐 SIP और टैक्स कैलकुलेटर",
+    btnCalc: "📐 इन्वेस्टमेंट कैलकुलेटर",
     btnRisk: "🎯 मेरी जोखिम प्रोफाइल",
     note: "केवल शोध और शिक्षा · निवेश सलाह नहीं · पिछला प्रदर्शन भविष्य की गारंटी नहीं · सभी डेटा AMFI से · कोई कमीशन नहीं · fundguldasta.com",
     signIn: "साइन इन",
@@ -2424,7 +2424,7 @@ useEffect(() => {
           <button className="btn-p" disabled={!isValid} onClick={handleFind}>{tr("Curate My Bouquets →","मेरे गुलदस्ता तैयार करें →")}</button>
           <button className="byob-entry" style={{ marginTop: 8 }} onClick={() => setScreen("custom_builder")}>{tr("✎ Build Your Own Bouquet", HI_HERO.btnBYOB)}</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.08)" }} onClick={() => setScreen("portfolio")}>{tr("📊 Analyse My Portfolio", HI_HERO.btnPortfolio)}</button>
-          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.06)" }} onClick={() => { setPrevScreen(screen); setCalcPreFill(null); setCalcTab('sip'); setScreen("calculators"); }}>{tr("📐 SIP & Tax Calculators", HI_HERO.btnCalc)}</button>
+          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.06)" }} onClick={() => { setPrevScreen(screen); setCalcPreFill(null); setCalcTab('sip'); setScreen("calculators"); }}>{tr("📐 Investment Calculators", HI_HERO.btnCalc)}</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.04)" }} onClick={() => { handleQuizReset(); setQuizModal(true); }}>{tr("🎯 Find My Risk Profile", HI_HERO.btnRisk)}</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.08)", border:"1px solid rgba(212,175,55,0.25)" }} onClick={() => { setAdvisorMessages([]); setAdvisorInput(""); setScreen("advisor"); }}>💬 Guldasta Advisor — Ask anything about Indian MF</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(99,179,237,0.06)", border:"1px solid rgba(99,179,237,0.3)", color:"#63B3ED" }} onClick={() => { setFiSearch(''); setFiResults([]); setFiAnalysis(null); setFiError(''); setScreen("fund_intel"); }}>🔬 Fund Intelligence — Deep-analyse any mutual fund</button>
@@ -2437,7 +2437,7 @@ useEffect(() => {
 
   // ── CALCULATORS SCREEN (Priority 12) ────────────────────────────────────────
   if (screen === "calculators") {
-    document.title = "Calculators — FundGuldasta";
+    document.title = "Investment Calculators — FundGuldasta";
 
     const fmtINR = (n) => isNaN(n) ? '—' : '₹' + Math.round(n).toLocaleString('en-IN');
     const fmtCr = (n) => {
