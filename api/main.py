@@ -22,7 +22,7 @@ from dotenv import load_dotenv
 from engine.cagr_advisor import assess_realism
 from engine.precompute import run_precomputation, run_all_horizons
 from engine.fund_replacement import (
-    search_eligible_funds, find_replacement_slot,
+    search_eligible_funds, search_funds_broad, find_replacement_slot,
     score_single_fund, compute_replacement_impact,
 )
 
@@ -665,6 +665,26 @@ def fund_full_analysis(scheme_code: str):
     result = analyse_fund(scheme_code)
     if 'error' in result:
         raise HTTPException(status_code=404, detail=result['error'])
+
+    # Augment with nav_count and plan_type so frontend can show data quality warnings
+    try:
+        _ac = get_db()
+        _c = _ac.cursor()
+        _c.execute(
+            "SELECT fm.plan_type, COUNT(nd.nav_date) FROM fund_metadata fm "
+            "LEFT JOIN nav_data nd ON fm.scheme_code=nd.scheme_code "
+            "WHERE fm.scheme_code=%s GROUP BY fm.plan_type",
+            (scheme_code,)
+        )
+        _row = _c.fetchone()
+        if _row:
+            result['plan_type'] = _row[0]
+            result['nav_count'] = int(_row[1])
+        _c.close()
+        _ac.close()
+    except Exception:
+        pass
+
     return _jsonify(result)
 
 
@@ -1202,15 +1222,15 @@ def trigger_alt_precompute():
 # ── FUND CUSTOMIZATION ENDPOINTS ─────────────────────────────
 
 @app.get("/api/funds/search")
-def fund_search(q: str = Query(default="", min_length=1), limit: int = Query(default=10, le=20)):
+def fund_search(q: str = Query(default="", min_length=1), limit: int = Query(default=15, le=30)):
     """
-    Search eligible fund universe by name or AMC.
-    Returns up to `limit` funds matching the query.
+    Search all active funds by name or AMC — broad universe, returns quality flags.
+    Excludes IDCW/dividend variants and pure debt/liquid/overnight/gilt/arbitrage.
     """
     if not q.strip():
         return []
     try:
-        results = search_eligible_funds(q.strip(), limit)
+        results = search_funds_broad(q.strip(), limit)
         return results
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

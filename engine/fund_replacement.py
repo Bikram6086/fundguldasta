@@ -96,6 +96,82 @@ def search_eligible_funds(query: str, limit: int = 10) -> list:
     return results
 
 
+def search_funds_broad(query: str, limit: int = 15) -> list:
+    """
+    Broad search across all active funds — no plan_type, no NAV-count gate.
+    Excludes IDCW/dividend variants and pure debt/liquid/overnight/gilt/arbitrage.
+    Returns data quality flags so callers can warn users.
+    """
+    conn = _get_db()
+    cursor = conn.cursor()
+    q = f"%{query.strip()}%"
+    cursor.execute("""
+        SELECT
+            fm.scheme_code,
+            fm.scheme_name,
+            fm.amc_name,
+            fm.sebi_category,
+            fm.expense_ratio,
+            fm.aum_crores,
+            fm.plan_type,
+            COUNT(nd.nav_date) AS nav_count
+        FROM fund_metadata fm
+        LEFT JOIN nav_data nd ON fm.scheme_code = nd.scheme_code
+        WHERE fm.is_active = TRUE
+        AND fm.scheme_name NOT ILIKE '%%idcw%%'
+        AND fm.scheme_name NOT ILIKE '%%dividend%%'
+        AND fm.scheme_name NOT ILIKE '%%liquid%%'
+        AND fm.scheme_name NOT ILIKE '%%overnight%%'
+        AND fm.scheme_name NOT ILIKE '%%gilt%%'
+        AND fm.scheme_name NOT ILIKE '%%arbitrage%%'
+        AND fm.scheme_name NOT ILIKE '%%debt%%'
+        AND (fm.scheme_name ILIKE %s OR fm.amc_name ILIKE %s OR fm.scheme_code::text = %s)
+        GROUP BY
+            fm.scheme_code, fm.scheme_name, fm.amc_name,
+            fm.sebi_category, fm.expense_ratio, fm.aum_crores, fm.plan_type
+        ORDER BY
+            CASE WHEN fm.plan_type = 'Direct' THEN 0 ELSE 1 END,
+            COUNT(nd.nav_date) DESC
+        LIMIT %s
+    """, (q, q, query.strip(), limit))
+
+    rows = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    results = []
+    for row in rows:
+        nav_count = int(row[7])
+        plan_type = row[6] or 'Regular'
+        name_lower = (row[1] or '').lower()
+        is_direct = plan_type == 'Direct' or 'direct' in name_lower
+        is_growth = 'growth' in name_lower
+
+        if nav_count >= 750:
+            data_quality = 'full'
+        elif nav_count >= 100:
+            data_quality = 'partial'
+        else:
+            data_quality = 'limited'
+
+        results.append({
+            'scheme_code': str(row[0]),
+            'name': row[1],
+            'amc': row[2],
+            'category': row[3] or '',
+            'expense_ratio': float(row[4]) if row[4] else None,
+            'aum_crores': float(row[5]) if row[5] else None,
+            'plan_type': plan_type,
+            'is_direct': is_direct,
+            'is_growth': is_growth,
+            'nav_count': nav_count,
+            'data_quality': data_quality,
+            'tier': _get_tier(nav_count) if nav_count >= 750 else None,
+        })
+
+    return results
+
+
 def find_replacement_slot(archetype_id: str, user_fund_code: str) -> dict:
     """
     Determine which fund in the archetype to replace with the user's choice.

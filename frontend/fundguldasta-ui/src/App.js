@@ -3566,8 +3566,13 @@ useEffect(() => {
                       style={{ padding:"12px 18px", cursor:"pointer", borderBottom:`1px solid rgba(255,255,255,0.04)`, transition:"background .12s" }}
                       onMouseEnter={e => e.currentTarget.style.background="rgba(99,179,237,0.07)"}
                       onMouseLeave={e => e.currentTarget.style.background="transparent"}>
-                      <div style={{ fontSize:13, color:G.white }}>{f.name}</div>
-                      <div style={{ fontSize:11, color:G.mist, marginTop:2 }}>{f.category} · {f.amc}</div>
+                      <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
+                        <span style={{ fontSize:13, color:G.white }}>{f.name}</span>
+                        {!f.is_direct && <span style={{ fontSize:9, fontWeight:700, letterSpacing:".06em", textTransform:"uppercase", background:"rgba(240,165,0,0.15)", border:"1px solid rgba(240,165,0,0.3)", borderRadius:4, padding:"1px 6px", color:"#F0A500" }}>REGULAR</span>}
+                        {f.data_quality === 'limited' && <span style={{ fontSize:9, fontWeight:700, letterSpacing:".06em", textTransform:"uppercase", background:"rgba(224,85,85,0.12)", border:"1px solid rgba(224,85,85,0.25)", borderRadius:4, padding:"1px 6px", color:"#E05555" }}>LIMITED DATA</span>}
+                        {f.data_quality === 'partial' && <span style={{ fontSize:9, fontWeight:700, letterSpacing:".06em", textTransform:"uppercase", background:"rgba(240,165,0,0.1)", border:"1px solid rgba(240,165,0,0.2)", borderRadius:4, padding:"1px 6px", color:"#F0A500" }}>PARTIAL DATA</span>}
+                      </div>
+                      <div style={{ fontSize:11, color:G.mist, marginTop:3 }}>{f.category || 'Uncategorised'} · {f.amc}</div>
                     </div>
                   ))}
                 </div>
@@ -3603,12 +3608,18 @@ useEffect(() => {
                     <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", flexWrap:"wrap", gap:16 }}>
                       <div style={{ flex:1, minWidth:0 }}>
                         <div style={{ fontFamily:"Cormorant Garamond,serif", fontSize:22, color:G.white, fontWeight:700, lineHeight:1.3 }}>{a.scheme_name}</div>
-                        <div style={{ display:"flex", gap:10, flexWrap:"wrap", marginTop:8 }}>
-                          {[a.amc_name, a.sebi_category, a.plan_type].filter(Boolean).map(t => (
+                        <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginTop:8 }}>
+                          {[a.amc_name, a.sebi_category].filter(Boolean).map(t => (
                             <span key={t} style={{ fontSize:11, color:G.mist, background:G.elv, padding:"3px 10px", borderRadius:4 }}>{t}</span>
                           ))}
+                          {a.plan_type && <span style={{ fontSize:11, fontWeight:700, background: a.plan_type==='Direct' ? "rgba(39,174,120,0.12)" : "rgba(240,165,0,0.12)", border: `1px solid ${a.plan_type==='Direct' ? "rgba(39,174,120,0.3)" : "rgba(240,165,0,0.3)"}`, color: a.plan_type==='Direct' ? "#27AE78" : "#F0A500", padding:"3px 10px", borderRadius:4 }}>{a.plan_type} Plan</span>}
                           {a.data_from && <span style={{ fontSize:11, color:G.mist }}>Data: {a.data_from} → {a.data_to}</span>}
                         </div>
+                        {a.nav_count != null && a.nav_count < 750 && (
+                          <div style={{ marginTop:10, padding:"8px 12px", background:"rgba(240,165,0,0.08)", border:"1px solid rgba(240,165,0,0.2)", borderRadius:8, fontSize:12, color:"#F0A500", lineHeight:1.6 }}>
+                            ⚠ {a.nav_count < 100 ? "Very limited" : "Partial"} price history ({a.nav_count} records). Scores computed from available data — treat with caution. A fund with 3+ years of data gives more reliable signals.
+                          </div>
+                        )}
                       </div>
                       {/* Composite score circle */}
                       <div style={{ textAlign:"center", flexShrink:0 }}>
