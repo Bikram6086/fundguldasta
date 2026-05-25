@@ -482,6 +482,14 @@ export default function App() {
   const [sipCalcLump, setSipCalcLump] = useState('');
   const [sipCalcYears, setSipCalcYears] = useState('');
   const [sipCalcCagr, setSipCalcCagr] = useState('');
+  // Retirement calculator state
+  const [retCurrentAge, setRetCurrentAge] = useState('30');
+  const [retRetireAge, setRetRetireAge] = useState('60');
+  const [retCurrentExp, setRetCurrentExp] = useState('');
+  const [retInflation, setRetInflation] = useState('6');
+  const [retAccumCagr, setRetAccumCagr] = useState('12');
+  const [retDrawCagr, setRetDrawCagr] = useState('7');
+  const [retExistingSav, setRetExistingSav] = useState('');
   const [taxCalcInvested, setTaxCalcInvested] = useState('');
   const [taxCalcCurrent, setTaxCalcCurrent] = useState('');
   const [taxCalcMonths, setTaxCalcMonths] = useState('');
@@ -2508,6 +2516,7 @@ useEffect(() => {
               <TabBtn id="sip" label="📈 SIP Calculator" />
               <TabBtn id="goals" label="🎯 Goal Planner" />
               <TabBtn id="tax" label="🧾 Tax Calculator" />
+              <TabBtn id="retirement" label="🏖️ Retirement" />
             </div>
           </div>
 
@@ -2890,6 +2899,263 @@ useEffect(() => {
                 </div>
               </div>
             )}
+
+            {/* ── RETIREMENT CALCULATOR TAB ── */}
+            {calcTab === 'retirement' && (() => {
+              const retCurrentAgeN = Math.max(18, Math.min(70, parseInt(retCurrentAge) || 30));
+              const retRetireAgeN  = Math.max(retCurrentAgeN + 1, Math.min(80, parseInt(retRetireAge) || 60));
+              const retCurrentExpN = parseFloat(retCurrentExp) || 0;
+              const retInflationN  = parseFloat(retInflation) || 6;
+              const retAccumCagrN  = parseFloat(retAccumCagr) || 12;
+              const retDrawCagrN   = parseFloat(retDrawCagr) || 7;
+              const retExistingSavN = parseFloat(retExistingSav) || 0;
+
+              const accumYears    = retRetireAgeN - retCurrentAgeN;
+              const drawdownYears = 90 - retRetireAgeN;
+
+              // Annual expense at retirement, inflation-adjusted
+              const expAtRetire = retCurrentExpN * Math.pow(1 + retInflationN / 100, accumYears);
+
+              // Corpus needed: PV of inflation-growing annuity over drawdown period
+              // PV = W × [1 − ((1+g)/(1+r))^n] / (r − g)  — real return formula
+              let corpusNeeded = 0;
+              const isValid = retCurrentExpN > 0 && accumYears > 0 && drawdownYears > 0;
+              if (isValid) {
+                const r = retDrawCagrN / 100;
+                const g = retInflationN / 100;
+                if (Math.abs(r - g) < 0.0001) {
+                  corpusNeeded = expAtRetire * drawdownYears;
+                } else {
+                  corpusNeeded = expAtRetire * (1 - Math.pow((1 + g) / (1 + r), drawdownYears)) / (r - g);
+                }
+              }
+
+              // Existing savings future value at retirement
+              const savingsFV  = retExistingSavN * Math.pow(1 + retAccumCagrN / 100, accumYears);
+              const corpusGap  = Math.max(0, corpusNeeded - savingsFV);
+              const alreadyCovered = retExistingSavN > 0 && savingsFV >= corpusNeeded;
+
+              // SIP needed to cover gap
+              const rm = retAccumCagrN / 100 / 12;
+              const nm = accumYears * 12;
+              const sipNeeded = (corpusGap > 0 && accumYears > 0)
+                ? (rm === 0 ? corpusGap / nm : corpusGap * rm / ((Math.pow(1 + rm, nm) - 1) * (1 + rm)))
+                : 0;
+
+              // Lump sum today to cover gap
+              const lumpSumNeeded = (corpusGap > 0 && accumYears > 0)
+                ? corpusGap / Math.pow(1 + retAccumCagrN / 100, accumYears)
+                : 0;
+
+              // Milestone ages for corpus depletion preview
+              const milestones = [60, 65, 70, 75, 80, 85, 90].filter(a => a >= retRetireAgeN);
+
+              return (
+                <div>
+                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:24 }}>
+
+                    {/* ─ LEFT: Inputs ─ */}
+                    <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+                      <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:24, display:"flex", flexDirection:"column", gap:14 }}>
+                        <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:2 }}>Your Profile</div>
+                        <CalcInputRow label="Current age" value={retCurrentAge} setter={setRetCurrentAge} placeholder="30" suffix="yrs" />
+                        <CalcInputRow label="Retirement age" value={retRetireAge} setter={setRetRetireAge} placeholder="60" suffix="yrs" />
+                        <CalcInputRow label="Annual expenses today (₹)" value={retCurrentExp} setter={setRetCurrentExp} placeholder="600000" suffix="₹/yr" />
+                        <div>
+                          <div style={{ fontSize:11, color:G.slate, marginBottom:7 }}>Annual inflation rate</div>
+                          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                            {[4,5,6,7,8].map(v => (
+                              <button key={v} onClick={() => setRetInflation(String(v))} style={{
+                                padding:"4px 11px", borderRadius:6, fontSize:11, cursor:"pointer", fontFamily:"Outfit,sans-serif",
+                                border:`1px solid ${parseFloat(retInflation)===v ? G.bordG : G.bord}`,
+                                background: parseFloat(retInflation)===v ? "rgba(212,175,55,0.12)" : "transparent",
+                                color: parseFloat(retInflation)===v ? G.gold : G.mist
+                              }}>{v}%</button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:24, display:"flex", flexDirection:"column", gap:14 }}>
+                        <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:2 }}>Existing Savings (optional)</div>
+                        <CalcInputRow label="Current investments (₹)" value={retExistingSav} setter={setRetExistingSav} placeholder="0" suffix="₹" />
+                        <div style={{ fontSize:11, color:G.mist, lineHeight:1.6 }}>
+                          Any PF, FD, mutual fund corpus you already have. We deduct its future value from the target so you only need to build the gap.
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* ─ RIGHT: Retirement Reality ─ */}
+                    <div style={{ background:G.sur, border:`1px solid ${isValid ? G.bordG : G.bord}`, borderRadius:12, padding:24 }}>
+                      <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:16 }}>Retirement Reality</div>
+                      {!isValid ? (
+                        <div style={{ color:G.mist, fontSize:12, marginTop:32, textAlign:"center" }}>
+                          Enter your profile on the left to see projections
+                        </div>
+                      ) : (
+                        <>
+                          {/* Timeline bar */}
+                          <div style={{ padding:"12px 14px", background:G.elv, borderRadius:8, marginBottom:16 }}>
+                            <div style={{ display:"flex", height:10, borderRadius:5, overflow:"hidden", marginBottom:7 }}>
+                              <div style={{ width:`${accumYears/(accumYears+drawdownYears)*100}%`, background:"rgba(212,175,55,0.65)", transition:"width .5s" }} />
+                              <div style={{ flex:1, background:"rgba(39,174,120,0.5)" }} />
+                            </div>
+                            <div style={{ display:"flex", justifyContent:"space-between", fontSize:10, color:G.mist }}>
+                              <span>Age {retCurrentAgeN}—{retRetireAgeN}: <strong style={{ color:G.gold }}>{accumYears} yrs building</strong></span>
+                              <span>Age {retRetireAgeN}—90: <strong style={{ color:"#27AE78" }}>{drawdownYears} yrs drawing</strong></span>
+                            </div>
+                          </div>
+
+                          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+                            <CalcResultRow label="Monthly expenses at retirement" value={fmtINR(expAtRetire/12)} color={G.fog} />
+                            <CalcResultRow label="Annual expenses at retirement" value={fmtCr(expAtRetire)} color={G.gold} />
+                            {retExistingSavN > 0 && <CalcResultRow label={`Existing savings → grows to (${retAccumCagrN}% CAGR)`} value={fmtCr(savingsFV)} color="#27AE78" />}
+
+                            {/* Big corpus number */}
+                            <div style={{ padding:"16px 18px", background:"rgba(212,175,55,0.05)", border:`2px solid ${G.bordG}`, borderRadius:12, marginTop:4 }}>
+                              <div style={{ fontSize:10, letterSpacing:".14em", textTransform:"uppercase", color:G.mist, marginBottom:8 }}>Corpus needed at retirement</div>
+                              <div style={{ fontFamily:"JetBrains Mono,monospace", fontSize:34, fontWeight:800, color:G.gold, lineHeight:1 }}>{fmtCr(corpusNeeded)}</div>
+                              <div style={{ fontSize:11, color:G.mist, marginTop:8, lineHeight:1.6 }}>
+                                Inflation-indexed · funds {drawdownYears} years (age {retRetireAgeN}→90) · assumes {retDrawCagrN}% post-retirement return
+                              </div>
+                            </div>
+
+                            {retExistingSavN > 0 && !alreadyCovered && (
+                              <div style={{ padding:"10px 14px", background:"rgba(224,85,85,0.07)", border:"1px solid rgba(224,85,85,0.2)", borderRadius:8, fontSize:12, color:"#E05555" }}>
+                                Gap to cover: <strong>{fmtCr(corpusGap)}</strong> — the additional corpus you need to build through SIP or lump sum.
+                              </div>
+                            )}
+                            {alreadyCovered && (
+                              <div style={{ padding:"10px 14px", background:"rgba(39,174,120,0.08)", border:"1px solid rgba(39,174,120,0.25)", borderRadius:8, fontSize:12, color:"#27AE78" }}>
+                                ✓ Your existing savings, if grown at {retAccumCagrN}% CAGR, cover the full retirement corpus. Stay invested.
+                              </div>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ─ HOW TO BUILD IT ─ */}
+                  {isValid && !alreadyCovered && corpusGap > 0 && (
+                    <div style={{ marginTop:24 }}>
+                      <div style={{ fontSize:11, letterSpacing:".1em", textTransform:"uppercase", color:G.mist, fontWeight:600, marginBottom:16 }}>How to Build the {retExistingSavN > 0 ? "Remaining" : ""} Corpus</div>
+
+                      {/* CAGR controls */}
+                      <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20, marginBottom:16 }}>
+                        <div style={{ display:"flex", gap:32, flexWrap:"wrap" }}>
+                          <div>
+                            <div style={{ fontSize:11, color:G.slate, marginBottom:8 }}>Accumulation CAGR (equity MF)</div>
+                            <div style={{ display:"flex", gap:6 }}>
+                              {[10,12,14,16].map(v => (
+                                <button key={v} onClick={() => setRetAccumCagr(String(v))} style={{
+                                  padding:"5px 13px", borderRadius:6, fontSize:12, cursor:"pointer", fontFamily:"Outfit,sans-serif",
+                                  border:`1px solid ${parseFloat(retAccumCagr)===v ? G.bordG : G.bord}`,
+                                  background: parseFloat(retAccumCagr)===v ? "rgba(212,175,55,0.12)" : "transparent",
+                                  color: parseFloat(retAccumCagr)===v ? G.gold : G.mist
+                                }}>{v}%</button>
+                              ))}
+                            </div>
+                          </div>
+                          <div>
+                            <div style={{ fontSize:11, color:G.slate, marginBottom:8 }}>Post-retirement return (balanced)</div>
+                            <div style={{ display:"flex", gap:6 }}>
+                              {[5,6,7,8].map(v => (
+                                <button key={v} onClick={() => setRetDrawCagr(String(v))} style={{
+                                  padding:"5px 13px", borderRadius:6, fontSize:12, cursor:"pointer", fontFamily:"Outfit,sans-serif",
+                                  border:`1px solid ${parseFloat(retDrawCagr)===v ? G.bordG : G.bord}`,
+                                  background: parseFloat(retDrawCagr)===v ? "rgba(212,175,55,0.12)" : "transparent",
+                                  color: parseFloat(retDrawCagr)===v ? G.gold : G.mist
+                                }}>{v}%</button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:16 }}>
+                        {/* SIP Route */}
+                        <div style={{ background:G.sur, border:"1px solid rgba(212,175,55,0.35)", borderRadius:14, padding:"24px 22px" }}>
+                          <div style={{ fontSize:10, letterSpacing:".12em", textTransform:"uppercase", color:G.gold, fontWeight:700, marginBottom:12 }}>📈 Monthly SIP Route</div>
+                          <div style={{ fontFamily:"JetBrains Mono,monospace", fontSize:32, fontWeight:800, color:G.gold, lineHeight:1, marginBottom:8 }}>
+                            {fmtINR(sipNeeded)}<span style={{ fontSize:12, fontWeight:400, color:G.mist }}>/month</span>
+                          </div>
+                          <div style={{ fontSize:12, color:G.fog, lineHeight:1.8, marginTop:10 }}>
+                            Invest <strong>{fmtINR(sipNeeded)}/mo</strong> for {accumYears} years at {retAccumCagrN}% CAGR.
+                          </div>
+                          <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:4 }}>
+                            <div style={{ fontSize:11, color:G.mist }}>Total you invest: <span style={{ color:G.fog, fontFamily:"JetBrains Mono,monospace" }}>{fmtCr(sipNeeded * 12 * accumYears)}</span></div>
+                            <div style={{ fontSize:11, color:G.mist }}>Corpus at retirement: <span style={{ color:"#27AE78", fontFamily:"JetBrains Mono,monospace" }}>{fmtCr(corpusGap)}</span></div>
+                            <div style={{ fontSize:11, color:G.mist }}>Wealth created: <span style={{ color:G.gold, fontFamily:"JetBrains Mono,monospace" }}>{fmtCr(corpusGap - sipNeeded * 12 * accumYears)}</span></div>
+                          </div>
+                        </div>
+
+                        {/* Lump Sum Route */}
+                        <div style={{ background:G.sur, border:"1px solid rgba(99,179,237,0.35)", borderRadius:14, padding:"24px 22px" }}>
+                          <div style={{ fontSize:10, letterSpacing:".12em", textTransform:"uppercase", color:"#63B3ED", fontWeight:700, marginBottom:12 }}>💰 One-Time Lump Sum</div>
+                          <div style={{ fontFamily:"JetBrains Mono,monospace", fontSize:32, fontWeight:800, color:"#63B3ED", lineHeight:1, marginBottom:8 }}>
+                            {fmtCr(lumpSumNeeded)}
+                          </div>
+                          <div style={{ fontSize:12, color:G.fog, lineHeight:1.8, marginTop:10 }}>
+                            Invest <strong>{fmtCr(lumpSumNeeded)}</strong> today at {retAccumCagrN}% CAGR for {accumYears} years.
+                          </div>
+                          <div style={{ marginTop:10, display:"flex", flexDirection:"column", gap:4 }}>
+                            <div style={{ fontSize:11, color:G.mist }}>Amount invested today: <span style={{ color:G.fog, fontFamily:"JetBrains Mono,monospace" }}>{fmtCr(lumpSumNeeded)}</span></div>
+                            <div style={{ fontSize:11, color:G.mist }}>Corpus at retirement: <span style={{ color:"#27AE78", fontFamily:"JetBrains Mono,monospace" }}>{fmtCr(corpusGap)}</span></div>
+                            <div style={{ fontSize:11, color:G.mist }}>Wealth created: <span style={{ color:"#63B3ED", fontFamily:"JetBrains Mono,monospace" }}>{fmtCr(corpusGap - lumpSumNeeded)}</span></div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* CAGR Sensitivity Table */}
+                      <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20 }}>
+                        <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:14 }}>SIP Sensitivity — does the CAGR assumption matter?</div>
+                        <div style={{ overflowX:"auto" }}>
+                          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                            <thead>
+                              <tr>{["CAGR","Monthly SIP","Lump Sum Today","Total SIP Invested","Wealth Created"].map(h => (
+                                <th key={h} style={{ padding:"8px 12px", textAlign:"right", color:G.mist, fontWeight:600, borderBottom:`1px solid ${G.bord}`, whiteSpace:"nowrap" }}>{h}</th>
+                              ))}</tr>
+                            </thead>
+                            <tbody>
+                              {[8,10,12,14,16].map(c => {
+                                const rmm = c/100/12;
+                                const nmm = accumYears*12;
+                                const sip = rmm===0 ? corpusGap/nmm : corpusGap*rmm/((Math.pow(1+rmm,nmm)-1)*(1+rmm));
+                                const ls = corpusGap/Math.pow(1+c/100,accumYears);
+                                const totalInv = sip*12*accumYears;
+                                const hl = Math.abs(c - retAccumCagrN) < 0.5;
+                                return (
+                                  <tr key={c} style={{ background: hl ? "rgba(212,175,55,0.06)" : "transparent" }}>
+                                    <td style={{ padding:"8px 12px", textAlign:"right", color:hl?G.gold:G.mist, fontWeight:hl?700:400, fontFamily:"JetBrains Mono,monospace" }}>{c}%</td>
+                                    <td style={{ padding:"8px 12px", textAlign:"right", color:G.gold, fontFamily:"JetBrains Mono,monospace" }}>{fmtINR(sip)}/mo</td>
+                                    <td style={{ padding:"8px 12px", textAlign:"right", color:"#63B3ED", fontFamily:"JetBrains Mono,monospace" }}>{fmtCr(ls)}</td>
+                                    <td style={{ padding:"8px 12px", textAlign:"right", color:G.fog, fontFamily:"JetBrains Mono,monospace" }}>{fmtCr(totalInv)}</td>
+                                    <td style={{ padding:"8px 12px", textAlign:"right", color:"#27AE78", fontFamily:"JetBrains Mono,monospace" }}>{fmtCr(corpusGap-totalInv)}</td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* ─ How the corpus math works ─ */}
+                  {isValid && (
+                    <div style={{ marginTop:16, padding:"14px 18px", background:"rgba(255,255,255,0.025)", border:`1px solid ${G.bord}`, borderRadius:10, fontSize:12, color:G.mist, lineHeight:1.7 }}>
+                      <strong style={{ color:G.fog }}>How this is calculated:</strong> Your ₹{fmtCr(retCurrentExpN)}/yr today becomes {fmtCr(expAtRetire)}/yr at retirement after {retInflationN}% annual inflation over {accumYears} years.
+                      That corpus of {fmtCr(corpusNeeded)} then funds {drawdownYears} years of inflation-growing withdrawals while earning {retDrawCagrN}% returns — computed using an inflation-indexed annuity formula (not a simple multiplication).
+                      <span style={{ display:"block", marginTop:6, fontSize:11, color:G.slate, fontStyle:"italic" }}>
+                        Add a 15–20% safety buffer for healthcare costs, longevity beyond 90, and sequence-of-returns risk in early retirement years. Post-retirement returns assumed at a conservative {retDrawCagrN}% (balanced/hybrid allocation — not 100% equity).
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
           </div>
         </div>
       </>
