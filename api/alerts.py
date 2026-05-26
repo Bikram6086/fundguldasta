@@ -2,7 +2,7 @@ import os
 import resend
 
 ADMIN_EMAIL = os.getenv("ALERT_EMAIL", "bikram6086@gmail.com")
-FROM_ADDRESS = "alerts@vedicanalytics.ai"
+FROM_ADDRESS = "alerts@fundguldasta.com"
 
 
 def _client():
