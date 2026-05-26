@@ -6,9 +6,8 @@ Data source: AMFI portal SSD XLS files
   - Scheme list: GET https://www.amfiindia.com/api/populate-scheme?MF_ID={id}
   - SSD file:    GET https://portal.amfiindia.com/spages/SSD_{scheme_id}.xls
 
-Run manually when you suspect manager changes:
-    cd ~/fundguldasta && source venv/bin/activate
-    python3 data/manager_ingestion.py
+Run manually when you suspect manager changes (from fundguldasta project root):
+    source venv/bin/activate && python3 data/manager_ingestion.py
 
 Or check a specific fund:
     python3 -c "from data.manager_ingestion import fetch_managers_for_scheme; print(fetch_managers_for_scheme('118989'))"
