@@ -59,11 +59,29 @@ async function apiAnalysePortfolio(funds, horizonYears = 7) {
   return res.json();
 }
 
-async function apiImportCas(file) {
+async function apiImportCas(file, token) {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch(`${API_BASE}/api/portfolio/import-cas`, { method: "POST", body: form });
+  const headers = token ? { "Authorization": `Bearer ${token}` } : {};
+  const res = await fetch(`${API_BASE}/api/portfolio/import-cas`, { method: "POST", body: form, headers });
   if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "CAS import failed"); }
+  return res.json();
+}
+
+async function apiGetMyHoldings(token) {
+  const res = await fetch(`${API_BASE}/api/portfolio/my-holdings`, {
+    headers: { "Authorization": `Bearer ${token}` },
+  });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "Failed to load portfolio"); }
+  return res.json();
+}
+
+async function apiResetPortfolio(token) {
+  const res = await fetch(`${API_BASE}/api/portfolio/reset`, {
+    method: "DELETE",
+    headers: { "Authorization": `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Reset failed");
   return res.json();
 }
 
@@ -519,6 +537,13 @@ export default function App() {
   const [casResult, setCasResult] = useState(null);
   const [casSelected, setCasSelected] = useState(new Set());
   const [casError, setCasError] = useState(null);
+  const [myPortfolioTab, setMyPortfolioTab] = useState('dashboard');
+  const [mpHoldings, setMpHoldings] = useState(null);
+  const [mpLoading, setMpLoading] = useState(false);
+  const [mpError, setMpError] = useState(null);
+  const [mpImporting, setMpImporting] = useState(false);
+  const [mpImportResult, setMpImportResult] = useState(null);
+  const [mpImportError, setMpImportError] = useState(null);
 
   const tr = (en, hi) => lang === 'hi' ? hi : en;
 
@@ -839,6 +864,7 @@ useEffect(() => {
       setUser(u);
       apiListSaved(token).then(setSavedList).catch(() => {});
       apiGetPreferences(token).then(p => p && setUserPrefs(p)).catch(() => {});
+      apiGetMyHoldings(token).then(d => setMpHoldings(d)).catch(() => {});
     }).catch(() => {
       localStorage.removeItem("fg_token");
     });
@@ -1165,12 +1191,49 @@ useEffect(() => {
     setAuthLoading(false);
   };
 
+  const loadMyHoldings = async () => {
+    const token = localStorage.getItem("fg_token");
+    if (!token) return;
+    setMpLoading(true); setMpError(null);
+    try {
+      const data = await apiGetMyHoldings(token);
+      setMpHoldings(data);
+    } catch(e) { setMpError(e.message); }
+    finally { setMpLoading(false); }
+  };
+
+  const handleMpCasUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const token = localStorage.getItem("fg_token");
+    setMpImporting(true); setMpImportError(null); setMpImportResult(null);
+    try {
+      const result = await apiImportCas(file, token);
+      setMpImportResult(result);
+      if (result.saved_to_portfolio > 0) {
+        await loadMyHoldings();
+      }
+    } catch(e) { setMpImportError(e.message); }
+    finally { setMpImporting(false); e.target.value = ""; }
+  };
+
+  const handleMpReset = async () => {
+    const token = localStorage.getItem("fg_token");
+    if (!token) return;
+    try {
+      await apiResetPortfolio(token);
+      setMpHoldings(null);
+      setMpImportResult(null);
+    } catch(e) { setMpError(e.message); }
+  };
+
   const handleCasUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     setCasLoading(true); setCasError(null); setCasResult(null); setCasSelected(new Set());
     try {
-      const result = await apiImportCas(file);
+      const token = localStorage.getItem("fg_token");
+      const result = await apiImportCas(file, token);
       setCasResult(result);
       // Pre-select all holdings with confidence ≥ 70
       const preselected = new Set(
@@ -1345,17 +1408,260 @@ useEffect(() => {
   };
 
   if (screen === "portfolio") {
+    document.title = "My Portfolio — FundGuldasta";
     const total = pfFunds.reduce((s, f) => s + (f.allocation_pct || 0), 0);
     const totalOk = total >= 95 && total <= 105;
+    const holdings = mpHoldings?.holdings || [];
+    const mpSummary = mpHoldings?.summary || null;
+    const catAlloc = mpHoldings?.category_allocation || {};
+    const hasHoldings = holdings.length > 0;
+    const effectiveTab = (!user && myPortfolioTab === 'dashboard') ? 'import' : myPortfolioTab;
+    const mpTabs = user
+      ? [['dashboard','📊 Dashboard'],['import','📤 Import'],['analyser','🔍 Analyser']]
+      : [['import','📤 Import'],['analyser','🔍 Analyser']];
+
     return (
       <>
         <style>{css}</style>
         <div style={{ minHeight:"100vh", background:G.bg, fontFamily:"Outfit,sans-serif", padding:24 }}>
-          <div style={{ maxWidth:800, margin:"0 auto" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:28 }}>
+          <div style={{ maxWidth:900, margin:"0 auto" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:20, flexWrap:"wrap" }}>
               <button onClick={() => { setScreen("hero"); setPfAnalysis(null); setPfError(null); }} style={{ background:"none", border:`1px solid ${G.bord}`, borderRadius:8, padding:"5px 14px", color:G.slate, fontSize:12, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>← Back</button>
-              <span style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:26, fontWeight:700 }}>My Portfolio Analyser</span>
+              <span style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:26, fontWeight:700 }}>My Portfolio</span>
+              {user && hasHoldings && (
+                <button onClick={handleMpReset} style={{ marginLeft:"auto", background:"none", border:"1px solid rgba(224,85,85,0.35)", borderRadius:8, padding:"5px 14px", color:"#E05555", fontSize:11, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>✕ Clear Portfolio</button>
+              )}
             </div>
+
+            {!user && (
+              <div style={{ background:"rgba(212,175,55,0.06)", border:"1px solid rgba(212,175,55,0.2)", borderRadius:10, padding:"12px 16px", marginBottom:20, display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:10 }}>
+                <span style={{ color:G.fog, fontSize:12 }}>🔒 Log in to save your portfolio and track performance over time.</span>
+                <button onClick={() => { setAuthTab("login"); setAuthModal(true); }} style={{ background:"rgba(212,175,55,0.15)", border:`1px solid ${G.bordG}`, borderRadius:8, padding:"5px 16px", color:G.gold, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>Log In</button>
+              </div>
+            )}
+
+            {/* Tab bar */}
+            <div style={{ display:"flex", borderBottom:`1px solid ${G.bord}`, marginBottom:24 }}>
+              {mpTabs.map(([id, label]) => (
+                <button key={id} onClick={() => setMyPortfolioTab(id)}
+                  style={{ padding:"10px 18px", background:"none", border:"none", borderBottom: effectiveTab===id ? `2px solid ${G.gold}` : "2px solid transparent", color: effectiveTab===id ? G.gold : G.slate, fontSize:13, fontWeight: effectiveTab===id ? 600 : 400, cursor:"pointer", fontFamily:"Outfit,sans-serif", marginBottom:"-1px" }}>
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {/* ── DASHBOARD TAB ── */}
+            {effectiveTab === 'dashboard' && (
+              <>
+                {mpLoading && <div style={{ color:G.slate, textAlign:"center", padding:40, fontSize:13 }}>Loading portfolio...</div>}
+                {mpError && <div style={{ background:"rgba(255,107,107,0.08)", border:"1px solid rgba(255,107,107,0.25)", borderRadius:8, padding:"12px 16px", color:"#FF6B6B", fontSize:12, marginBottom:16 }}>{mpError}</div>}
+                {!mpLoading && !hasHoldings && (
+                  <div style={{ textAlign:"center", padding:"60px 20px" }}>
+                    <div style={{ fontSize:36, marginBottom:14 }}>📂</div>
+                    <div style={{ color:G.white, fontSize:14, fontWeight:600, marginBottom:8 }}>No portfolio imported yet</div>
+                    <div style={{ color:G.slate, fontSize:12, marginBottom:20 }}>Import your CAS PDF to see your live portfolio dashboard.</div>
+                    <button onClick={() => setMyPortfolioTab('import')} style={{ background:"linear-gradient(135deg,rgba(212,175,55,0.2),rgba(212,175,55,0.08))", border:`1px solid ${G.bordG}`, borderRadius:10, padding:"10px 28px", color:G.gold, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                      Import CAS PDF →
+                    </button>
+                  </div>
+                )}
+                {!mpLoading && hasHoldings && (
+                  <>
+                    {/* Summary cards */}
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(175px,1fr))", gap:12, marginBottom:20 }}>
+                      {[
+                        ["Portfolio Value", `₹${(mpSummary.total_current_value||0).toLocaleString("en-IN",{maximumFractionDigits:0})}`, G.gold, null],
+                        ["Value at Import", `₹${(mpSummary.total_value_at_import||0).toLocaleString("en-IN",{maximumFractionDigits:0})}`, G.white, null],
+                        [(mpSummary.total_pnl_abs||0)>=0?"Total Gain":"Total Loss", `${(mpSummary.total_pnl_abs||0)>=0?"+":""}₹${Math.abs(mpSummary.total_pnl_abs||0).toLocaleString("en-IN",{maximumFractionDigits:0})}`, (mpSummary.total_pnl_abs||0)>=0?"#27AE78":"#E05555", `${(mpSummary.total_pnl_pct||0)>=0?"+":""}${(mpSummary.total_pnl_pct||0).toFixed(2)}% since import`],
+                        ["Funds", mpSummary.fund_count, G.white, null],
+                      ].map(([lbl, val, col, sub]) => (
+                        <div key={lbl} style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:"14px 16px" }}>
+                          <div style={{ color:G.slate, fontSize:10, marginBottom:6, letterSpacing:".06em", textTransform:"uppercase" }}>{lbl}</div>
+                          <div style={{ color:col, fontSize:20, fontWeight:700, fontFamily:"JetBrains Mono,monospace" }}>{val}</div>
+                          {sub && <div style={{ color:col, fontSize:11, marginTop:4 }}>{sub}</div>}
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Category allocation */}
+                    {Object.keys(catAlloc).length > 0 && (
+                      <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20, marginBottom:20 }}>
+                        <div style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:16, fontWeight:700, marginBottom:14 }}>Asset Allocation</div>
+                        {Object.entries(catAlloc).map(([cat, pct]) => (
+                          <div key={cat} style={{ marginBottom:10 }}>
+                            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                              <span style={{ color:G.white, fontSize:12 }}>{cat}</span>
+                              <span style={{ color:G.gold, fontSize:12, fontWeight:600 }}>{pct}%</span>
+                            </div>
+                            <div style={{ background:G.elv, borderRadius:4, height:6 }}>
+                              <div style={{ background:`linear-gradient(90deg,${G.gold},rgba(212,175,55,0.4))`, width:`${pct}%`, height:"100%", borderRadius:4 }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Holdings table */}
+                    <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20, marginBottom:20 }}>
+                      <div style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:16, fontWeight:700, marginBottom:14 }}>Holdings</div>
+                      <div style={{ overflowX:"auto" }}>
+                        <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                          <thead>
+                            <tr>
+                              {["Fund","Units","NAV at Import","Current NAV","Current Value","P&L","Today"].map(h => (
+                                <th key={h} style={{ textAlign:"left", color:G.slate, fontSize:10, fontWeight:600, padding:"4px 8px", whiteSpace:"nowrap", letterSpacing:".05em", textTransform:"uppercase", borderBottom:`1px solid ${G.bord}` }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {holdings.map(h => (
+                              <tr key={h.scheme_code}>
+                                <td style={{ padding:"10px 8px", maxWidth:220 }}>
+                                  <div style={{ color:G.white, fontSize:12, fontWeight:600, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{h.fund_name}</div>
+                                  <div style={{ color:G.mist, fontSize:10, marginTop:1 }}>{h.amc_name}</div>
+                                </td>
+                                <td style={{ padding:"10px 8px", color:G.fog, fontFamily:"JetBrains Mono,monospace", fontSize:11, whiteSpace:"nowrap" }}>{h.units.toLocaleString("en-IN",{maximumFractionDigits:3})}</td>
+                                <td style={{ padding:"10px 8px", color:G.slate, fontFamily:"JetBrains Mono,monospace", fontSize:11 }}>{h.nav_at_import > 0 ? `₹${h.nav_at_import.toFixed(2)}` : "—"}</td>
+                                <td style={{ padding:"10px 8px", color:G.white, fontFamily:"JetBrains Mono,monospace", fontSize:11, fontWeight:600 }}>{h.current_nav > 0 ? `₹${h.current_nav.toFixed(2)}` : "—"}</td>
+                                <td style={{ padding:"10px 8px", color:G.gold, fontFamily:"JetBrains Mono,monospace", fontSize:12, fontWeight:700 }}>₹{h.current_value.toLocaleString("en-IN",{maximumFractionDigits:0})}</td>
+                                <td style={{ padding:"10px 8px", whiteSpace:"nowrap" }}>
+                                  <div style={{ color:h.pnl_abs>=0?"#27AE78":"#E05555", fontFamily:"JetBrains Mono,monospace", fontSize:11, fontWeight:600 }}>
+                                    {h.pnl_abs>=0?"+":""}₹{Math.abs(h.pnl_abs).toLocaleString("en-IN",{maximumFractionDigits:0})}
+                                  </div>
+                                  <div style={{ color:h.pnl_pct>=0?"#27AE78":"#E05555", fontSize:10 }}>{h.pnl_pct>=0?"+":""}{h.pnl_pct.toFixed(1)}%</div>
+                                </td>
+                                <td style={{ padding:"10px 8px" }}>
+                                  <div style={{ color:h.day_change_pct>=0?"#27AE78":"#E05555", fontSize:11, fontFamily:"JetBrains Mono,monospace" }}>
+                                    {h.day_change_pct>=0?"+":""}{h.day_change_pct.toFixed(2)}%
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                      {holdings[0]?.nav_date && (
+                        <div style={{ color:G.mist, fontSize:10, marginTop:10 }}>NAV as of {holdings[0].nav_date} · P&L vs value at CAS import date</div>
+                      )}
+                    </div>
+
+                    <div style={{ textAlign:"center", marginBottom:20 }}>
+                      <button onClick={() => {
+                        const tval = mpSummary.total_current_value || 1;
+                        setPfFunds(holdings.filter(h => h.scheme_code).map(h => ({ scheme_code: h.scheme_code, name: h.fund_name, allocation_pct: Math.round(h.current_value / tval * 100) })));
+                        setPfAnalysis(null); setPfAiReview(''); setMyPortfolioTab('analyser');
+                      }} style={{ background:"linear-gradient(135deg,rgba(212,175,55,0.2),rgba(212,175,55,0.08))", border:`1px solid ${G.bordG}`, borderRadius:10, padding:"10px 28px", color:G.gold, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                        🔍 Run Portfolio Analysis →
+                      </button>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+
+            {/* ── IMPORT TAB ── */}
+            {effectiveTab === 'import' && (
+              <>
+                {user ? (
+                  <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20, marginBottom:20 }}>
+                    <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:4 }}>📤 Import from CAS PDF</div>
+                    <div style={{ color:G.slate, fontSize:11, lineHeight:1.7, marginBottom:16 }}>
+                      Upload your Consolidated Account Statement. Holdings are saved to your account and appear in the Dashboard with live NAV and P&L.
+                      <br/><span style={{ color:G.mist }}>To get CAS: Log in to <strong style={{color:G.fog}}>mycams.camsonline.com</strong> or <strong style={{color:G.fog}}>kfintech.com</strong> → Statements → Consolidated Account Statement → Download PDF.</span>
+                    </div>
+                    <label style={{ background:"rgba(212,175,55,0.1)", border:`1px solid rgba(212,175,55,0.35)`, borderRadius:8, padding:"7px 18px", color:G.gold, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif", display:"inline-block" }}>
+                      {mpImporting ? "Parsing & Saving..." : "Choose CAS PDF"}
+                      <input type="file" accept=".pdf" style={{ display:"none" }} onChange={handleMpCasUpload} disabled={mpImporting} />
+                    </label>
+                    {mpImportError && <div style={{ color:"#FF6B6B", fontSize:12, marginTop:12 }}>{mpImportError}</div>}
+                    {mpImportResult && (
+                      <div style={{ marginTop:16 }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10, flexWrap:"wrap" }}>
+                          <span style={{ color:"#27AE78", fontSize:12, fontWeight:600 }}>✓ {mpImportResult.fund_count} funds · ₹{mpImportResult.total_value.toLocaleString("en-IN",{maximumFractionDigits:0})}</span>
+                          {mpImportResult.saved_to_portfolio > 0 && <span style={{ color:G.gold, fontSize:11, fontWeight:600 }}>✓ {mpImportResult.saved_to_portfolio} holdings saved</span>}
+                          {mpImportResult.parse_errors?.length > 0 && <span style={{ color:G.am, fontSize:11 }}>⚠ {mpImportResult.parse_errors[0]}</span>}
+                        </div>
+                        <div style={{ border:`1px solid ${G.bord}`, borderRadius:8, overflow:"hidden", maxHeight:280, overflowY:"auto", marginBottom:12 }}>
+                          {mpImportResult.holdings.map((h, i) => (
+                            <div key={i} style={{ display:"flex", justifyContent:"space-between", alignItems:"center", padding:"8px 14px", borderBottom: i < mpImportResult.holdings.length-1 ? `1px solid ${G.bord}` : "none" }}>
+                              <div>
+                                <div style={{ color:G.white, fontSize:12, fontWeight:600 }}>{h.matched_name || h.fund_name_raw}</div>
+                                <div style={{ color: h.confidence >= 85 ? "#27AE78" : h.confidence >= 70 ? G.am : "#E05555", fontSize:10 }}>
+                                  {h.scheme_code ? `✓ Matched (${h.confidence}%)` : `? No match`}
+                                </div>
+                              </div>
+                              <div style={{ textAlign:"right" }}>
+                                <div style={{ color:G.gold, fontSize:12, fontWeight:700 }}>₹{h.value.toLocaleString("en-IN",{maximumFractionDigits:0})}</div>
+                                <div style={{ color:G.slate, fontSize:10 }}>{h.units.toLocaleString("en-IN",{maximumFractionDigits:3})} units</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {mpImportResult.saved_to_portfolio > 0 && (
+                          <button onClick={() => setMyPortfolioTab('dashboard')} style={{ background:"linear-gradient(135deg,rgba(212,175,55,0.2),rgba(212,175,55,0.08))", border:`1px solid ${G.bordG}`, borderRadius:8, padding:"8px 20px", color:G.gold, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                            View Dashboard →
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20, marginBottom:20 }}>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:10 }}>
+                      <div>
+                        <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:3 }}>📤 Import from CAS PDF</div>
+                        <div style={{ color:G.slate, fontSize:11, lineHeight:1.6 }}>Upload a CAMS or KFintech CAS to auto-populate the analyser. <strong style={{color:G.fog}}>Log in to save your portfolio.</strong></div>
+                      </div>
+                      <label style={{ background:"rgba(212,175,55,0.1)", border:`1px solid rgba(212,175,55,0.35)`, borderRadius:8, padding:"7px 18px", color:G.gold, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif", flexShrink:0, display:"inline-block" }}>
+                        {casLoading ? "Parsing..." : "Choose CAS PDF"}
+                        <input type="file" accept=".pdf" style={{ display:"none" }} onChange={handleCasUpload} disabled={casLoading} />
+                      </label>
+                    </div>
+                    {casError && <div style={{ color:"#FF6B6B", fontSize:12, marginTop:12 }}>{casError}</div>}
+                    {casResult && (
+                      <div style={{ marginTop:16 }}>
+                        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+                          <div style={{ color:G.gold, fontSize:12, fontWeight:600 }}>Found {casResult.fund_count} fund{casResult.fund_count !== 1 ? "s" : ""} · ₹{casResult.total_value.toLocaleString("en-IN", { maximumFractionDigits:0 })} <span style={{ color:G.slate, fontWeight:400 }}>({casResult.format.toUpperCase()})</span></div>
+                          <div style={{ display:"flex", gap:8 }}>
+                            <button onClick={() => setCasSelected(new Set(casResult.holdings.map((_,i)=>i)))} style={{ background:"none", border:`1px solid ${G.bord}`, borderRadius:6, padding:"3px 10px", color:G.slate, fontSize:11, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>All</button>
+                            <button onClick={() => setCasSelected(new Set())} style={{ background:"none", border:`1px solid ${G.bord}`, borderRadius:6, padding:"3px 10px", color:G.slate, fontSize:11, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>None</button>
+                          </div>
+                        </div>
+                        {casResult.parse_errors.length > 0 && <div style={{ color:G.am, fontSize:11, marginBottom:10 }}>⚠ {casResult.parse_errors[0]}</div>}
+                        <div style={{ border:`1px solid ${G.bord}`, borderRadius:8, overflow:"hidden", marginBottom:12 }}>
+                          {casResult.holdings.map((h, i) => (
+                            <div key={i} onClick={() => setCasSelected(prev => { const s = new Set(prev); s.has(i) ? s.delete(i) : s.add(i); return s; })}
+                              style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 14px", borderBottom: i < casResult.holdings.length-1 ? `1px solid ${G.bord}` : "none", background: casSelected.has(i) ? "rgba(212,175,55,0.05)" : "transparent", cursor:"pointer" }}>
+                              <div style={{ width:16, height:16, borderRadius:4, border:`1.5px solid ${casSelected.has(i) ? G.gold : G.bord}`, background: casSelected.has(i) ? "rgba(212,175,55,0.2)" : "transparent", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", fontSize:10, color:G.gold }}>{casSelected.has(i) ? "✓" : ""}</div>
+                              <div style={{ flex:1, minWidth:0 }}>
+                                <div style={{ color:G.white, fontSize:12, fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{h.matched_name || h.fund_name_raw}</div>
+                                {h.matched_name && h.matched_name !== h.fund_name_raw && <div style={{ color:G.mist, fontSize:10, marginTop:1 }}>CAS: {h.fund_name_raw.slice(0,55)}</div>}
+                              </div>
+                              <div style={{ textAlign:"right", flexShrink:0 }}>
+                                <div style={{ color:G.gold, fontSize:12, fontWeight:700, fontFamily:"JetBrains Mono,monospace" }}>{h.allocation_pct}%</div>
+                                <div style={{ color:G.slate, fontSize:10 }}>₹{h.value.toLocaleString("en-IN", { maximumFractionDigits:0 })} · {h.units.toLocaleString("en-IN", { maximumFractionDigits:3 })} units</div>
+                                <div style={{ fontSize:9, color: h.confidence >= 85 ? "#27AE78" : h.confidence >= 70 ? G.am : "#E05555", marginTop:1 }}>{h.confidence >= 85 ? "✓ Matched" : h.confidence >= 70 ? "~ Likely" : "? Low"} ({h.confidence}%)</div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ display:"flex", gap:10 }}>
+                          <button onClick={() => { handleCasImport(); setMyPortfolioTab('analyser'); }} disabled={casSelected.size === 0}
+                            style={{ flex:1, padding:"10px 0", background:casSelected.size > 0 ? "rgba(212,175,55,0.15)" : G.elv, border:`1px solid ${casSelected.size > 0 ? "rgba(212,175,55,0.4)" : G.bord}`, borderRadius:8, color: casSelected.size > 0 ? G.gold : G.slate, fontSize:13, fontWeight:600, cursor: casSelected.size > 0 ? "pointer" : "not-allowed", fontFamily:"Outfit,sans-serif" }}>
+                            Import {casSelected.size} Fund{casSelected.size !== 1 ? "s" : ""} to Analyser →
+                          </button>
+                          <button onClick={() => { setCasResult(null); setCasSelected(new Set()); }} style={{ padding:"10px 18px", background:"none", border:`1px solid ${G.bord}`, borderRadius:8, color:G.slate, fontSize:13, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>Dismiss</button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* ── ANALYSER TAB ── */}
+            {effectiveTab === 'analyser' && (
+              <div>
 
             {/* CAS Import */}
             <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20, marginBottom:20 }}>
@@ -1707,12 +2013,14 @@ useEffect(() => {
               </div>
             )}
 
-            {pfFunds.length === 0 && !pfAnalysis && !casResult && (
+            {pfFunds.length === 0 && !pfAnalysis && (
               <div style={{ textAlign:"center", padding:"60px 20px", color:G.slate, fontSize:13 }}>
                 <div style={{ fontSize:32, marginBottom:12 }}>📊</div>
-                <div>Upload a CAS PDF above to auto-import your holdings, or search funds manually.</div>
+                <div>Search funds above and add them to your portfolio, or use <strong style={{color:G.fog}}>Import</strong> to load from a CAS PDF.</div>
                 <div style={{ marginTop:8, fontSize:12 }}>Then click "Analyse Portfolio" to compare against our bouquet archetypes.</div>
               </div>
+            )}
+          </div>
             )}
           </div>
         </div>

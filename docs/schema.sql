@@ -139,11 +139,25 @@ CREATE TABLE IF NOT EXISTS pipeline_log (
     created_at TIMESTAMP DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS user_portfolios (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    scheme_code VARCHAR(20) NOT NULL,
+    fund_name_raw TEXT,
+    units DECIMAL(15,4) NOT NULL,
+    nav_at_import DECIMAL(15,4),
+    value_at_import DECIMAL(15,2),
+    cas_date DATE,
+    imported_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(user_id, scheme_code)
+);
+
 CREATE INDEX IF NOT EXISTS idx_nav_scheme ON nav_data(scheme_code);
 CREATE INDEX IF NOT EXISTS idx_nav_date ON nav_data(nav_date DESC);
 CREATE INDEX IF NOT EXISTS idx_holdings_scheme_date ON portfolio_holdings(scheme_code, disclosure_date);
 CREATE INDEX IF NOT EXISTS idx_metrics_scheme ON computed_metrics(scheme_code);
 CREATE INDEX IF NOT EXISTS idx_cache_archetype ON bouquet_cache(archetype_id);
 CREATE INDEX IF NOT EXISTS idx_pipeline_name ON pipeline_log(pipeline_name);
+CREATE INDEX IF NOT EXISTS idx_up_user ON user_portfolios(user_id);
 
 SELECT table_name, 'CREATED' as status FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;

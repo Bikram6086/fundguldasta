@@ -2733,10 +2733,10 @@ async def trigger_monthly_digests(x_admin_key: Optional[str] = None):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @app.post("/api/portfolio/import-cas")
-async def import_cas(file: UploadFile = File(...)):
+async def import_cas(file: UploadFile = File(...), authorization: Optional[str] = _Header(default=None)):
     """
-    Accept a CAMS or KFintech CAS PDF, parse it, and return matched fund holdings
-    with allocation percentages ready to populate the portfolio analyser.
+    Accept a CAMS or KFintech CAS PDF, parse it. If the user is authenticated,
+    also persist the holdings to user_portfolios so the My Portfolio dashboard works.
     """
     if not (file.filename or "").lower().endswith(".pdf"):
         raise HTTPException(400, "Only PDF files are accepted. Export a CAS PDF from CAMS Online or KFintech.")
@@ -2748,4 +2748,157 @@ async def import_cas(file: UploadFile = File(...)):
 
     from engine.cas_parser import parse_cas_pdf
     result = parse_cas_pdf(pdf_bytes)
+
+    # If authenticated, persist holdings to user_portfolios
+    user_id = None
+    if authorization:
+        try:
+            from api.auth import decode_token
+            payload = decode_token(authorization.removeprefix("Bearer ").strip())
+            user_id = payload.get("sub")
+        except Exception:
+            pass
+
+    if user_id and result.get("holdings"):
+        conn = get_db()
+        cur = conn.cursor()
+        try:
+            saved = 0
+            for h in result["holdings"]:
+                sc = h.get("scheme_code")
+                if not sc:
+                    continue
+                cur.execute(
+                    """INSERT INTO user_portfolios
+                           (user_id, scheme_code, fund_name_raw, units, nav_at_import, value_at_import, cas_date)
+                       VALUES (%s, %s, %s, %s, %s, %s, CURRENT_DATE)
+                       ON CONFLICT (user_id, scheme_code)
+                       DO UPDATE SET units=EXCLUDED.units, nav_at_import=EXCLUDED.nav_at_import,
+                           value_at_import=EXCLUDED.value_at_import, fund_name_raw=EXCLUDED.fund_name_raw,
+                           cas_date=CURRENT_DATE, imported_at=NOW()""",
+                    (user_id, sc, h.get("fund_name_raw"), h.get("units"), h.get("nav"), h.get("value"))
+                )
+                saved += 1
+            conn.commit()
+            result["saved_to_portfolio"] = saved
+        except Exception as e:
+            conn.rollback()
+            result["save_error"] = str(e)[:120]
+        finally:
+            cur.close()
+            conn.close()
+
     return result
+
+
+@app.get("/api/portfolio/my-holdings")
+def get_my_holdings(authorization: Optional[str] = _Header(default=None)):
+    """Return the authenticated user's stored holdings with current NAV and P&L."""
+    user = _get_user_from_token(authorization)
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """SELECT up.scheme_code, up.fund_name_raw, up.units,
+                      up.nav_at_import, up.value_at_import, up.cas_date, up.imported_at,
+                      fm.scheme_name, fm.amc_name, fm.sebi_category,
+                      (SELECT nd.nav_value FROM nav_data nd WHERE nd.scheme_code = up.scheme_code
+                       ORDER BY nd.nav_date DESC LIMIT 1) AS current_nav,
+                      (SELECT nd2.nav_value FROM nav_data nd2 WHERE nd2.scheme_code = up.scheme_code
+                       ORDER BY nd2.nav_date DESC LIMIT 1 OFFSET 1) AS prev_nav,
+                      (SELECT nd3.nav_date FROM nav_data nd3 WHERE nd3.scheme_code = up.scheme_code
+                       ORDER BY nd3.nav_date DESC LIMIT 1) AS nav_date
+               FROM user_portfolios up
+               LEFT JOIN fund_metadata fm ON fm.scheme_code = up.scheme_code
+               WHERE up.user_id = %s
+               ORDER BY up.value_at_import DESC""",
+            (user["id"],)
+        )
+        rows = cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
+
+    holdings = []
+    total_import_val = 0.0
+    total_current_val = 0.0
+
+    for r in rows:
+        (sc, fname_raw, units, nav_imp, val_imp, cas_date, imported_at,
+         scheme_name, amc_name, category, cur_nav, prev_nav, nav_date) = r
+
+        units_f = float(units or 0)
+        nav_imp_f = float(nav_imp or 0)
+        val_imp_f = float(val_imp or 0)
+        cur_nav_f = float(cur_nav or nav_imp_f)
+        prev_nav_f = float(prev_nav or cur_nav_f)
+
+        current_val = units_f * cur_nav_f
+        pnl_abs = current_val - val_imp_f
+        pnl_pct = (pnl_abs / val_imp_f * 100) if val_imp_f > 0 else 0.0
+        day_change_pct = ((cur_nav_f - prev_nav_f) / prev_nav_f * 100) if prev_nav_f > 0 else 0.0
+        day_change_abs = units_f * (cur_nav_f - prev_nav_f)
+
+        total_import_val += val_imp_f
+        total_current_val += current_val
+
+        holdings.append({
+            "scheme_code": sc,
+            "fund_name": scheme_name or fname_raw or sc,
+            "fund_name_raw": fname_raw,
+            "amc_name": amc_name or "",
+            "category": category or "",
+            "units": round(units_f, 3),
+            "nav_at_import": round(nav_imp_f, 4),
+            "value_at_import": round(val_imp_f, 2),
+            "current_nav": round(cur_nav_f, 4),
+            "current_value": round(current_val, 2),
+            "pnl_abs": round(pnl_abs, 2),
+            "pnl_pct": round(pnl_pct, 2),
+            "day_change_pct": round(day_change_pct, 2),
+            "day_change_abs": round(day_change_abs, 2),
+            "nav_date": str(nav_date) if nav_date else None,
+            "cas_date": str(cas_date) if cas_date else None,
+        })
+
+    total_pnl = total_current_val - total_import_val
+    total_pnl_pct = (total_pnl / total_import_val * 100) if total_import_val > 0 else 0.0
+
+    # Category allocation
+    cat_alloc: dict = {}
+    for h in holdings:
+        cat = (h["category"] or "Other").split(" - ")[-1][:30]
+        cat_alloc[cat] = cat_alloc.get(cat, 0) + h["current_value"]
+
+    cat_alloc_pct = {}
+    if total_current_val > 0:
+        cat_alloc_pct = {k: round(v / total_current_val * 100, 1) for k, v in
+                         sorted(cat_alloc.items(), key=lambda x: -x[1])}
+
+    return {
+        "holdings": holdings,
+        "summary": {
+            "fund_count": len(holdings),
+            "total_value_at_import": round(total_import_val, 2),
+            "total_current_value": round(total_current_val, 2),
+            "total_pnl_abs": round(total_pnl, 2),
+            "total_pnl_pct": round(total_pnl_pct, 2),
+        },
+        "category_allocation": cat_alloc_pct,
+    }
+
+
+@app.delete("/api/portfolio/reset")
+def reset_portfolio(authorization: Optional[str] = _Header(default=None)):
+    """Delete all holdings for the authenticated user."""
+    user = _get_user_from_token(authorization)
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("DELETE FROM user_portfolios WHERE user_id = %s", (user["id"],))
+        deleted = cur.rowcount
+        conn.commit()
+    finally:
+        cur.close()
+        conn.close()
+    return {"deleted": deleted}
