@@ -17,6 +17,7 @@ import re
 import logging
 import calendar
 import datetime
+import zipfile
 from datetime import date
 from typing import Optional
 
@@ -127,11 +128,33 @@ FUND_SOURCES = {
         ),
         "sheet": "YO13",
     },
-    # ── Stubs — URL patterns not yet confirmed ──────────────────────────────
-    "118825": {"name": "Mirae Asset Large Cap Fund",       "amc": "mirae",   "url_template": None},
-    "120152": {"name": "Kotak Large Cap Fund",             "amc": "kotak",   "url_template": None},
-    "118834": {"name": "Mirae Asset Large & Mid Cap Fund", "amc": "mirae",   "url_template": None},
-    "119071": {"name": "DSP Midcap Fund",                  "amc": "dsp",     "url_template": None},
+    # ── Mirae Asset Large & Midcap ────────────────────────────────────────────
+    "118834": {
+        "name": "Mirae Asset Large & Midcap Fund",
+        "amc": "mirae",
+        "url_template": (
+            "https://www.miraeassetmf.co.in/docs/default-source/portfolios/"
+            "maebf-{month_lower}{year}.xlsx"
+        ),
+    },
+    # ── DSP Midcap — ZIP-based, URL is content-addressed (hash changes monthly) ──
+    # Update direct_url each month from: https://www.dspim.com/mandatory-disclosures/portfolio-disclosures
+    "119071": {
+        "name": "DSP Midcap Fund",
+        "amc": "dsp",
+        "url_template": None,
+        "direct_url": (
+            "https://www.dspim.com/media/pages/mandatory-disclosures/portfolio-disclosures"
+            "/d80216af21-1778404078/monthend-portfolios_30-april-2026.zip"
+        ),
+        "zip_inner_file": "DSP Equity ISIN Portfolio as on {day} {month_abbr} {year}.xlsx",
+        "sheet": "MIDCAP",
+    },
+    # ── Stubs — URL not accessible via automated download ────────────────────
+    # Kotak: CDN (www.kotakmf.com/documents/portfolio/) consistently times out automated requests
+    # Mirae Large Cap: not found on miraeassetmf.co.in/downloads/portfolio (60+ schemes listed)
+    "118825": {"name": "Mirae Asset Large Cap Fund", "amc": "mirae", "url_template": None},
+    "120152": {"name": "Kotak Large Cap Fund",       "amc": "kotak", "url_template": None},
 }
 
 _ISIN_RE = re.compile(r'^[A-Z]{2}[A-Z0-9]{10}$')
@@ -141,6 +164,8 @@ _ISIN_RE = re.compile(r'^[A-Z]{2}[A-Z0-9]{10}$')
 # ---------------------------------------------------------------------------
 
 def _build_url(cfg: dict, as_of: date) -> Optional[str]:
+    if cfg.get("direct_url"):
+        return cfg["direct_url"]
     tmpl = cfg.get("url_template")
     if not tmpl:
         return None
@@ -185,6 +210,20 @@ def _download_xlsx(url: str) -> Optional[bytes]:
         return r.content
     except Exception as exc:
         logger.error("Download failed for %s: %s", url, exc)
+        return None
+
+
+def _extract_from_zip(content: bytes, inner_filename: str) -> Optional[bytes]:
+    """Extract a named file from a ZIP archive."""
+    try:
+        z = zipfile.ZipFile(io.BytesIO(content))
+        if inner_filename in z.namelist():
+            with z.open(inner_filename) as f:
+                return f.read()
+        logger.warning("File '%s' not found in ZIP. Contents: %s", inner_filename, z.namelist())
+        return None
+    except Exception as exc:
+        logger.error("ZIP extraction failed: %s", exc)
         return None
 
 
@@ -289,7 +328,7 @@ def _parse_xlsx(content: bytes, sheet_name: Optional[str] = None) -> list:
         except ValueError:
             value_f = None
 
-        if weight_f is None or weight_f <= 0 or weight_f > 100:
+        if weight_f is None or weight_f <= 0 or weight_f > 110:
             continue
 
         # Clean trailing symbols from name
@@ -357,9 +396,25 @@ def fetch_and_store(scheme_code: str, as_of: date, db_config: dict) -> dict:
         return {"scheme_code": scheme_code, "status": "no_url_configured", "holdings_count": 0}
 
     logger.info("Fetching %s from %s", cfg["name"], url)
-    content = _download_xlsx(url)
-    if not content:
+    raw = _download_xlsx(url)
+    if not raw:
         return {"scheme_code": scheme_code, "status": "download_failed", "holdings_count": 0}
+
+    # ZIP extraction for funds that publish a consolidated ZIP (e.g. DSP)
+    zip_inner_tmpl = cfg.get("zip_inner_file")
+    if zip_inner_tmpl:
+        month_abbrs = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                       "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        inner_file = zip_inner_tmpl.format(
+            day=as_of.day,
+            month_abbr=month_abbrs[as_of.month - 1],
+            year=as_of.year,
+        )
+        content = _extract_from_zip(raw, inner_file)
+        if not content:
+            return {"scheme_code": scheme_code, "status": "zip_extract_failed", "holdings_count": 0}
+    else:
+        content = raw
 
     holdings = _parse_xlsx(content, sheet_name=cfg.get("sheet"))
     if not holdings:
@@ -391,7 +446,7 @@ def fetch_all_configured(as_of: Optional[date] = None, db_config: dict = None) -
 
     results = []
     for sc, cfg in FUND_SOURCES.items():
-        if cfg.get("url_template"):
+        if cfg.get("url_template") or cfg.get("direct_url"):
             result = fetch_and_store(sc, as_of, db_config)
             results.append(result)
             print(f"  {cfg['name']}: {result['status']} ({result.get('holdings_count', 0)} holdings)")

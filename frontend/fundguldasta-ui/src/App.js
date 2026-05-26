@@ -5923,7 +5923,7 @@ useEffect(() => {
                   <div style={{ marginTop: 16, padding: '12px 14px', background: 'rgba(240,165,0,0.05)', border: '1px solid rgba(240,165,0,0.15)', borderRadius: 8, fontSize: 11, color: G.mist, lineHeight: 1.7 }}>
                     <strong style={{ color: '#F0A500', display: 'block', marginBottom: 4 }}>Data Transparency â Known Limitations</strong>
                     â¢ <strong>Manager Stability score (15% weight)</strong>: Fund-specific manager data is used for all 13 verified funds — sourced from SIDs and manually verified. Lead manager (earliest appointment = longest tenure) is the primary scoring input; co-manager data is cross-referenced.<br />
-                    &bull; <strong>Stock-level portfolio overlap</strong>: Computed from monthly AMC portfolio disclosures (Excel) for 3 of 13 funds currently. Where unavailable, coverage % is shown in the Correlation section.<br />
+                    &bull; <strong>Stock-level portfolio overlap</strong>: Computed from monthly AMC portfolio disclosures (Excel) for 11 of 13 verified funds (Kotak Large Cap and Mirae Large Cap pending — AMC CDN not accessible for automated download). Coverage % shown in Correlation section.<br />
                     â¢ <strong>Expense ratio</strong>: Direct plan TER sourced from AMFI; verify current rates at amfiindia.com before investing.
                   </div>
                 </div>}
