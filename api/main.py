@@ -1116,13 +1116,12 @@ _COOLDOWN_MINUTES = 60
 @app.post("/api/pipeline/trigger-nav")
 def trigger_nav_refresh():
     """
-    Manually trigger NAV ingestion + precompute refresh.
+    Manually trigger NAV + benchmark ingestion + precompute refresh.
     Enforces a 60-minute cooldown to prevent repeated runs.
-    Runs synchronously — completes in ~15-30 seconds.
+    Uses direct function calls (not subprocess) so it works on Railway.
     """
     global _last_trigger_time
     from datetime import datetime, timedelta
-    import subprocess, sys, os
 
     now = datetime.utcnow()
     if _last_trigger_time and (now - _last_trigger_time) < timedelta(minutes=_COOLDOWN_MINUTES):
@@ -1136,25 +1135,29 @@ def trigger_nav_refresh():
     _last_trigger_time = now
     results = {}
 
-    # Step 1 — NAV ingestion
+    # Step 1 — NAV ingestion (direct import, works on Railway)
     try:
-        venv_python = os.path.join(os.path.expanduser('~/fundguldasta'), 'venv', 'bin', 'python3')
-        script = os.path.join(os.path.expanduser('~/fundguldasta'), 'data', 'nav_ingestion.py')
-        result = subprocess.run(
-            [venv_python, script],
-            capture_output=True, text=True, timeout=120,
-            cwd=os.path.expanduser('~/fundguldasta'),
-        )
-        last_line = [l for l in result.stdout.strip().splitlines() if l.strip()]
-        results['nav_ingestion'] = last_line[-1] if last_line else 'completed'
-        results['nav_status'] = 'ok' if result.returncode == 0 else 'error'
+        from data.nav_ingestion import main as nav_main
+        nav_main()
+        results['nav_ingestion'] = 'completed'
+        results['nav_status'] = 'ok'
     except Exception as e:
         results['nav_ingestion'] = str(e)
         results['nav_status'] = 'error'
         from api.alerts import send_pipeline_failure_alert
         threading.Thread(target=send_pipeline_failure_alert, args=('nav_ingestion', str(e)), daemon=True).start()
 
-    # Step 2 — Precompute common horizons
+    # Step 2 — Benchmark ingestion (direct import)
+    try:
+        from data.benchmark_ingestion import main as bench_main
+        bench_main()
+        results['benchmark_ingestion'] = 'completed'
+        results['benchmark_status'] = 'ok'
+    except Exception as e:
+        results['benchmark_ingestion'] = str(e)
+        results['benchmark_status'] = 'error'
+
+    # Step 3 — Precompute common horizons
     try:
         from engine.precompute import run_precomputation
         cached = 0
@@ -1170,7 +1173,7 @@ def trigger_nav_refresh():
         results['precompute'] = str(e)
         results['precompute_status'] = 'error'
 
-    # Step 3 — Return updated freshness
+    # Step 4 — Return updated freshness
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("SELECT MAX(nav_date) FROM nav_data")

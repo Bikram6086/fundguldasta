@@ -18,6 +18,12 @@ PIPELINES = [
         'required': True,
     },
     {
+        'name': 'benchmark_ingestion',
+        'script': 'data/benchmark_ingestion.py',
+        'description': 'NSE/Yahoo benchmark index update',
+        'required': False,
+    },
+    {
         'name': 'manager_change_detection',
         'script': 'data/manager_change_detection.py',
         'description': 'Fund manager change monitoring',
