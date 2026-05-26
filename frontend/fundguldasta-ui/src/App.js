@@ -1315,7 +1315,7 @@ useEffect(() => {
           <div style={{ marginBottom:14 }}>
             <div style={{ fontSize:11, color:G.slate, marginBottom:5 }}>Display Name (optional)</div>
             <input value={authName} onChange={e => setAuthName(e.target.value)}
-              placeholder="e.g. Bikram"
+              placeholder="e.g. Ram Muhammad Singh Michael"
               style={{ width:"100%", background:G.bg, border:`1px solid ${G.bord}`, borderRadius:8, padding:"9px 12px",
                 color:G.white, fontSize:14, fontFamily:"Outfit,sans-serif", boxSizing:"border-box" }} />
           </div>
