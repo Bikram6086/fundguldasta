@@ -144,12 +144,29 @@ CREATE TABLE IF NOT EXISTS user_portfolios (
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     scheme_code VARCHAR(20) NOT NULL,
     fund_name_raw TEXT,
+    folio_number VARCHAR(50),
     units DECIMAL(15,4) NOT NULL,
     nav_at_import DECIMAL(15,4),
     value_at_import DECIMAL(15,2),
     cas_date DATE,
     imported_at TIMESTAMP DEFAULT NOW(),
     UNIQUE(user_id, scheme_code)
+);
+
+CREATE TABLE IF NOT EXISTS user_transactions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    scheme_code VARCHAR(20),
+    folio_number VARCHAR(50),
+    txn_type VARCHAR(50),
+    txn_date DATE NOT NULL,
+    description TEXT,
+    amount DECIMAL(15,2),
+    nav DECIMAL(15,4),
+    units DECIMAL(15,4),
+    balance_units DECIMAL(15,4),
+    is_redemption BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_nav_scheme ON nav_data(scheme_code);
@@ -159,5 +176,8 @@ CREATE INDEX IF NOT EXISTS idx_metrics_scheme ON computed_metrics(scheme_code);
 CREATE INDEX IF NOT EXISTS idx_cache_archetype ON bouquet_cache(archetype_id);
 CREATE INDEX IF NOT EXISTS idx_pipeline_name ON pipeline_log(pipeline_name);
 CREATE INDEX IF NOT EXISTS idx_up_user ON user_portfolios(user_id);
+CREATE INDEX IF NOT EXISTS idx_ut_user ON user_transactions(user_id);
+CREATE INDEX IF NOT EXISTS idx_ut_user_date ON user_transactions(user_id, txn_date DESC);
+CREATE INDEX IF NOT EXISTS idx_ut_scheme ON user_transactions(user_id, scheme_code);
 
 SELECT table_name, 'CREATED' as status FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name;

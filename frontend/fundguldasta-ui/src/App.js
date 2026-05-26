@@ -85,6 +85,28 @@ async function apiResetPortfolio(token) {
   return res.json();
 }
 
+async function apiGetTransactions(token, schemeCode) {
+  const url = `${API_BASE}/api/portfolio/transactions${schemeCode ? `?scheme_code=${schemeCode}` : ''}`;
+  const res = await fetch(url, { headers: { "Authorization": `Bearer ${token}` } });
+  if (!res.ok) throw new Error("Failed to load transactions");
+  return res.json();
+}
+
+async function apiGetPerformance(token) {
+  const res = await fetch(`${API_BASE}/api/portfolio/performance`, {
+    headers: { "Authorization": `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Failed to load performance");
+  return res.json();
+}
+
+async function apiGetTaxReport(token, fy) {
+  const url = `${API_BASE}/api/portfolio/tax-report${fy ? `?fy=${fy}` : ''}`;
+  const res = await fetch(url, { headers: { "Authorization": `Bearer ${token}` } });
+  if (!res.ok) throw new Error("Failed to load tax report");
+  return res.json();
+}
+
 async function apiListSaved(token) {
   const res = await fetch(`${API_BASE}/api/user/saved-bouquets`, {
     headers: { "Authorization": `Bearer ${token}` },
@@ -544,6 +566,14 @@ export default function App() {
   const [mpImporting, setMpImporting] = useState(false);
   const [mpImportResult, setMpImportResult] = useState(null);
   const [mpImportError, setMpImportError] = useState(null);
+  const [mpTransactions, setMpTransactions] = useState(null);
+  const [mpTxnLoading, setMpTxnLoading] = useState(false);
+  const [mpTxnFilter, setMpTxnFilter] = useState('');
+  const [mpPerf, setMpPerf] = useState(null);
+  const [mpPerfLoading, setMpPerfLoading] = useState(false);
+  const [mpTax, setMpTax] = useState(null);
+  const [mpTaxLoading, setMpTaxLoading] = useState(false);
+  const [mpTaxFY, setMpTaxFY] = useState('');
 
   const tr = (en, hi) => lang === 'hi' ? hi : en;
 
@@ -1415,9 +1445,9 @@ useEffect(() => {
     const mpSummary = mpHoldings?.summary || null;
     const catAlloc = mpHoldings?.category_allocation || {};
     const hasHoldings = holdings.length > 0;
-    const effectiveTab = (!user && myPortfolioTab === 'dashboard') ? 'import' : myPortfolioTab;
+    const effectiveTab = (!user && ['dashboard','transactions','performance','tax'].includes(myPortfolioTab)) ? 'import' : myPortfolioTab;
     const mpTabs = user
-      ? [['dashboard','📊 Dashboard'],['import','📤 Import'],['analyser','🔍 Analyser']]
+      ? [['dashboard','📊 Dashboard'],['import','📤 Import'],['transactions','📋 Transactions'],['performance','📈 Performance'],['tax','🧾 Tax Report'],['analyser','🔍 Analyser']]
       : [['import','📤 Import'],['analyser','🔍 Analyser']];
 
     return (
@@ -1657,6 +1687,259 @@ useEffect(() => {
                   </div>
                 )}
               </>
+            )}
+
+            {/* ── TRANSACTIONS TAB ── */}
+            {effectiveTab === 'transactions' && (
+              <div>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16, flexWrap:"wrap", gap:10 }}>
+                  <div>
+                    <div style={{ color:G.white, fontSize:14, fontWeight:600 }}>Transaction History</div>
+                    <div style={{ color:G.slate, fontSize:11, marginTop:2 }}>All purchases, SIPs, redemptions and switches from your CAS PDF.</div>
+                  </div>
+                  <button onClick={async () => {
+                    const token = localStorage.getItem("fg_token");
+                    if (!token) return;
+                    setMpTxnLoading(true);
+                    try { const d = await apiGetTransactions(token); setMpTransactions(d); } catch (e) { /* silent */ }
+                    setMpTxnLoading(false);
+                  }} style={{ background:"rgba(212,175,55,0.1)", border:`1px solid rgba(212,175,55,0.3)`, borderRadius:8, padding:"6px 16px", color:G.gold, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                    {mpTxnLoading ? "Loading..." : "Load Transactions"}
+                  </button>
+                </div>
+
+                {!mpTransactions && !mpTxnLoading && (
+                  <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:40, textAlign:"center", color:G.slate, fontSize:13 }}>
+                    <div style={{ fontSize:28, marginBottom:12 }}>📋</div>
+                    <div>Click "Load Transactions" to view your transaction history.</div>
+                    <div style={{ fontSize:11, marginTop:8 }}>Transactions are extracted from your imported CAS PDF.</div>
+                  </div>
+                )}
+
+                {mpTransactions && mpTransactions.count === 0 && (
+                  <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:40, textAlign:"center" }}>
+                    <div style={{ fontSize:28, marginBottom:12 }}>📭</div>
+                    <div style={{ color:G.fog, fontSize:13 }}>No transactions found.</div>
+                    <div style={{ color:G.slate, fontSize:11, marginTop:8 }}>Import a CAS PDF from the Import tab to populate transaction history.</div>
+                  </div>
+                )}
+
+                {mpTransactions && mpTransactions.count > 0 && (
+                  <div>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12, flexWrap:"wrap", gap:8 }}>
+                      <span style={{ color:G.slate, fontSize:12 }}>{mpTransactions.count} transactions</span>
+                      <input value={mpTxnFilter} onChange={e => setMpTxnFilter(e.target.value)} placeholder="Filter by fund name..."
+                        style={{ background:G.elv, border:`1px solid ${G.bord}`, borderRadius:6, padding:"5px 10px", color:G.white, fontSize:12, fontFamily:"Outfit,sans-serif", outline:"none", width:200 }} />
+                    </div>
+                    <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, overflow:"hidden" }}>
+                      <div style={{ display:"grid", gridTemplateColumns:"90px 1fr 70px 80px 80px", gap:0, padding:"8px 14px", borderBottom:`1px solid ${G.bord}`, background:G.elv }}>
+                        {["Date","Fund","Type","Amount (₹)","Units"].map(h2 => (
+                          <div key={h2} style={{ color:G.slate, fontSize:10, fontWeight:600, letterSpacing:".06em", textTransform:"uppercase" }}>{h2}</div>
+                        ))}
+                      </div>
+                      {mpTransactions.transactions
+                        .filter(t => !mpTxnFilter || (t.scheme_name || t.scheme_code || "").toLowerCase().includes(mpTxnFilter.toLowerCase()))
+                        .slice(0, 200)
+                        .map((t, i) => (
+                        <div key={t.id} style={{ display:"grid", gridTemplateColumns:"90px 1fr 70px 80px 80px", gap:0, padding:"9px 14px", borderBottom: i < mpTransactions.count - 1 ? `1px solid ${G.bord}` : "none", background: i % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)" }}>
+                          <div style={{ color:G.mist, fontSize:11, fontFamily:"JetBrains Mono,monospace" }}>{t.txn_date}</div>
+                          <div style={{ color:G.fog, fontSize:11, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", paddingRight:8 }}>{t.scheme_name || t.scheme_code || "Unknown"}</div>
+                          <div>
+                            <span style={{ fontSize:10, fontWeight:600, padding:"2px 6px", borderRadius:4, background: t.is_redemption ? "rgba(224,85,85,0.12)" : "rgba(39,174,120,0.12)", color: t.is_redemption ? "#E05555" : "#27AE78" }}>
+                              {t.txn_type || (t.is_redemption ? "Redeem" : "Buy")}
+                            </span>
+                          </div>
+                          <div style={{ color:G.white, fontSize:11, fontFamily:"JetBrains Mono,monospace", textAlign:"right" }}>
+                            {t.amount != null ? `₹${Math.abs(t.amount).toLocaleString("en-IN", { maximumFractionDigits:0 })}` : "—"}
+                          </div>
+                          <div style={{ color:G.slate, fontSize:11, fontFamily:"JetBrains Mono,monospace", textAlign:"right" }}>
+                            {t.units != null ? (t.is_redemption ? "-" : "+") + Math.abs(t.units).toFixed(3) : "—"}
+                          </div>
+                        </div>
+                      ))}
+                      {mpTransactions.count > 200 && (
+                        <div style={{ padding:"10px 14px", color:G.slate, fontSize:11, textAlign:"center", borderTop:`1px solid ${G.bord}` }}>
+                          Showing first 200 of {mpTransactions.count} transactions.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── PERFORMANCE TAB ── */}
+            {effectiveTab === 'performance' && (
+              <div>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16, flexWrap:"wrap", gap:10 }}>
+                  <div>
+                    <div style={{ color:G.white, fontSize:14, fontWeight:600 }}>Portfolio Performance (XIRR)</div>
+                    <div style={{ color:G.slate, fontSize:11, marginTop:2 }}>Annualized return accounting for the exact timing of each investment.</div>
+                  </div>
+                  <button onClick={async () => {
+                    const token = localStorage.getItem("fg_token");
+                    if (!token) return;
+                    setMpPerfLoading(true);
+                    try { const d = await apiGetPerformance(token); setMpPerf(d); } catch (e) { /* silent */ }
+                    setMpPerfLoading(false);
+                  }} style={{ background:"rgba(212,175,55,0.1)", border:`1px solid rgba(212,175,55,0.3)`, borderRadius:8, padding:"6px 16px", color:G.gold, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                    {mpPerfLoading ? "Computing..." : "Compute XIRR"}
+                  </button>
+                </div>
+
+                {!mpPerf && !mpPerfLoading && (
+                  <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:40, textAlign:"center", color:G.slate, fontSize:13 }}>
+                    <div style={{ fontSize:28, marginBottom:12 }}>📈</div>
+                    <div>Click "Compute XIRR" to calculate your true annualized return.</div>
+                    <div style={{ fontSize:11, marginTop:8 }}>Requires CAS transaction history to be imported.</div>
+                  </div>
+                )}
+
+                {mpPerf && (
+                  <div>
+                    {!mpPerf.has_transactions && (
+                      <div style={{ background:"rgba(232,160,0,0.08)", border:"1px solid rgba(232,160,0,0.2)", borderRadius:10, padding:"14px 18px", color:G.am, fontSize:13, marginBottom:16 }}>
+                        ⚠ {mpPerf.note}
+                      </div>
+                    )}
+
+                    {mpPerf.has_transactions && (
+                      <>
+                        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:12, marginBottom:20 }}>
+                          {[
+                            ["Portfolio XIRR", mpPerf.xirr_pct != null ? `${mpPerf.xirr_pct.toFixed(2)}%` : "—", mpPerf.xirr_pct >= 15 ? "#27AE78" : mpPerf.xirr_pct >= 10 ? G.am : "#E05555"],
+                            ["Total Invested", `₹${(mpPerf.total_invested/100000).toFixed(1)}L`, G.white],
+                            ["Current Value", `₹${(mpPerf.current_value/100000).toFixed(1)}L`, G.gold],
+                            ["Absolute Gain", `₹${((mpPerf.absolute_gain||0)/100000).toFixed(1)}L`, mpPerf.absolute_gain >= 0 ? "#27AE78" : "#E05555"],
+                          ].map(([lbl, val, col]) => (
+                            <div key={lbl} style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:10, padding:"16px 18px" }}>
+                              <div style={{ color:G.slate, fontSize:11, marginBottom:6 }}>{lbl}</div>
+                              <div style={{ color:col, fontSize:22, fontWeight:700, fontFamily:"JetBrains Mono,monospace" }}>{val}</div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {Object.keys(mpPerf.per_fund_xirr || {}).length > 0 && (
+                          <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20, marginBottom:16 }}>
+                            <div style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:18, fontWeight:700, marginBottom:14 }}>Fund-wise XIRR</div>
+                            {Object.entries(mpPerf.per_fund_xirr).sort((a,b) => b[1]-a[1]).map(([sc, xirr]) => (
+                              <div key={sc} style={{ display:"flex", alignItems:"center", gap:12, marginBottom:10, padding:"10px 14px", background:G.elv, borderRadius:8 }}>
+                                <div style={{ flex:1, color:G.fog, fontSize:12 }}>{sc}</div>
+                                <div style={{ color: xirr >= 15 ? "#27AE78" : xirr >= 10 ? G.am : "#E05555", fontSize:15, fontWeight:700, fontFamily:"JetBrains Mono,monospace" }}>{xirr.toFixed(2)}%</div>
+                                <div style={{ width:80, height:6, background:G.bord, borderRadius:3 }}>
+                                  <div style={{ height:"100%", borderRadius:3, background: xirr >= 15 ? "#27AE78" : xirr >= 10 ? G.am : "#E05555", width:`${Math.min(100, Math.max(0, xirr/25*100))}%` }} />
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    <div style={{ color:G.mist, fontSize:11, marginTop:12, lineHeight:1.6 }}>{mpPerf.note}</div>
+                    <div style={{ color:G.mist, fontSize:10, marginTop:6 }}>XIRR = Extended Internal Rate of Return · Computes the discount rate that makes NPV of all cash flows = 0.</div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ── TAX REPORT TAB ── */}
+            {effectiveTab === 'tax' && (
+              <div>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16, flexWrap:"wrap", gap:10 }}>
+                  <div>
+                    <div style={{ color:G.white, fontSize:14, fontWeight:600 }}>Tax Report (LTCG / STCG)</div>
+                    <div style={{ color:G.slate, fontSize:11, marginTop:2 }}>FIFO-based capital gains calculation per Indian MF tax rules.</div>
+                  </div>
+                  <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                    <input value={mpTaxFY} onChange={e => setMpTaxFY(e.target.value)} placeholder="FY e.g. 2024-25"
+                      style={{ background:G.elv, border:`1px solid ${G.bord}`, borderRadius:6, padding:"5px 10px", color:G.white, fontSize:12, fontFamily:"Outfit,sans-serif", outline:"none", width:120 }} />
+                    <button onClick={async () => {
+                      const token = localStorage.getItem("fg_token");
+                      if (!token) return;
+                      setMpTaxLoading(true);
+                      try { const d = await apiGetTaxReport(token, mpTaxFY || null); setMpTax(d); } catch (e) { /* silent */ }
+                      setMpTaxLoading(false);
+                    }} style={{ background:"rgba(212,175,55,0.1)", border:`1px solid rgba(212,175,55,0.3)`, borderRadius:8, padding:"6px 16px", color:G.gold, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                      {mpTaxLoading ? "Computing..." : "Generate Report"}
+                    </button>
+                  </div>
+                </div>
+
+                {!mpTax && !mpTaxLoading && (
+                  <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:40, textAlign:"center", color:G.slate, fontSize:13 }}>
+                    <div style={{ fontSize:28, marginBottom:12 }}>🧾</div>
+                    <div>Click "Generate Report" for LTCG/STCG breakdown.</div>
+                    <div style={{ fontSize:11, marginTop:8 }}>Leave FY blank for current financial year. Uses FIFO lot matching.</div>
+                  </div>
+                )}
+
+                {mpTax && (
+                  <div>
+                    <div style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:20, fontWeight:700, marginBottom:16 }}>
+                      FY {mpTax.financial_year} · Capital Gains Summary
+                    </div>
+
+                    {!mpTax.has_data && (
+                      <div style={{ background:"rgba(232,160,0,0.08)", border:"1px solid rgba(232,160,0,0.2)", borderRadius:10, padding:"14px 18px", color:G.am, fontSize:13, marginBottom:16 }}>
+                        No redemptions found in FY {mpTax.financial_year}. Tax liability is ₹0 for this year.
+                      </div>
+                    )}
+
+                    {mpTax.has_data && (
+                      <>
+                        <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:12, marginBottom:20 }}>
+                          {[
+                            ["LTCG (Gross)", `₹${(mpTax.summary.total_ltcg/100000).toFixed(2)}L`, G.white],
+                            ["LTCG Exempt", `₹${(mpTax.summary.ltcg_exempt/100000).toFixed(2)}L`, "#27AE78"],
+                            ["LTCG Taxable", `₹${(mpTax.summary.ltcg_taxable/100000).toFixed(2)}L`, G.am],
+                            ["LTCG Tax (12.5%)", `₹${mpTax.summary.ltcg_tax.toLocaleString("en-IN",{maximumFractionDigits:0})}`, G.gold],
+                            ["STCG (Gross)", `₹${(mpTax.summary.total_stcg/100000).toFixed(2)}L`, G.white],
+                            ["STCG Tax (20%)", `₹${mpTax.summary.stcg_tax.toLocaleString("en-IN",{maximumFractionDigits:0})}`, "#E05555"],
+                            ["Total Tax", `₹${mpTax.summary.total_tax.toLocaleString("en-IN",{maximumFractionDigits:0})}`, "#E05555"],
+                          ].map(([lbl, val, col]) => (
+                            <div key={lbl} style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:10, padding:"14px 16px" }}>
+                              <div style={{ color:G.slate, fontSize:10, marginBottom:6 }}>{lbl}</div>
+                              <div style={{ color:col, fontSize:18, fontWeight:700, fontFamily:"JetBrains Mono,monospace" }}>{val}</div>
+                            </div>
+                          ))}
+                        </div>
+
+                        {mpTax.fund_reports.length > 0 && (
+                          <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20, marginBottom:16 }}>
+                            <div style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:18, fontWeight:700, marginBottom:14 }}>Fund-wise Breakdown</div>
+                            {mpTax.fund_reports.map(fr => (
+                              <div key={fr.scheme_code} style={{ marginBottom:12, padding:"12px 14px", background:G.elv, borderRadius:8 }}>
+                                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
+                                  <div>
+                                    <div style={{ color:G.white, fontSize:12, fontWeight:600 }}>{fr.scheme_name}</div>
+                                    <div style={{ color:G.slate, fontSize:10, marginTop:2 }}>{fr.fund_type === "equity" ? "Equity" : "Debt"} · {fr.lots_redeemed} lots redeemed</div>
+                                  </div>
+                                  <div style={{ textAlign:"right" }}>
+                                    <div style={{ color:"#E05555", fontSize:13, fontWeight:700, fontFamily:"JetBrains Mono,monospace" }}>₹{fr.total_tax.toLocaleString("en-IN",{maximumFractionDigits:0})}</div>
+                                    <div style={{ color:G.mist, fontSize:10 }}>tax liability</div>
+                                  </div>
+                                </div>
+                                <div style={{ display:"flex", gap:16 }}>
+                                  {fr.ltcg_gross > 0 && <div style={{ color:G.slate, fontSize:11 }}>LTCG: <span style={{ color:G.am, fontFamily:"JetBrains Mono,monospace" }}>₹{fr.ltcg_gross.toLocaleString("en-IN",{maximumFractionDigits:0})}</span></div>}
+                                  {fr.stcg_gross > 0 && <div style={{ color:G.slate, fontSize:11 }}>STCG: <span style={{ color:"#E05555", fontFamily:"JetBrains Mono,monospace" }}>₹{fr.stcg_gross.toLocaleString("en-IN",{maximumFractionDigits:0})}</span></div>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    <div style={{ background:"rgba(232,160,0,0.06)", border:"1px solid rgba(232,160,0,0.18)", borderRadius:8, padding:"10px 14px", color:G.am, fontSize:11, lineHeight:1.6, marginTop:8 }}>
+                      ⚠ {mpTax.note}
+                    </div>
+                    <div style={{ color:G.mist, fontSize:10, marginTop:8, lineHeight:1.5 }}>
+                      Rules applied: Equity LTCG @ 12.5% with ₹1.25L annual exemption · Equity STCG @ 20% · Debt funds taxed at slab rate (shown as STCG) · FIFO lot matching.
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
 
             {/* ── ANALYSER TAB ── */}

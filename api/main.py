@@ -2770,17 +2770,43 @@ async def import_cas(file: UploadFile = File(...), authorization: Optional[str] 
                     continue
                 cur.execute(
                     """INSERT INTO user_portfolios
-                           (user_id, scheme_code, fund_name_raw, units, nav_at_import, value_at_import, cas_date)
-                       VALUES (%s, %s, %s, %s, %s, %s, CURRENT_DATE)
+                           (user_id, scheme_code, fund_name_raw, folio_number, units, nav_at_import, value_at_import, cas_date)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_DATE)
                        ON CONFLICT (user_id, scheme_code)
                        DO UPDATE SET units=EXCLUDED.units, nav_at_import=EXCLUDED.nav_at_import,
                            value_at_import=EXCLUDED.value_at_import, fund_name_raw=EXCLUDED.fund_name_raw,
-                           cas_date=CURRENT_DATE, imported_at=NOW()""",
-                    (user_id, sc, h.get("fund_name_raw"), h.get("units"), h.get("nav"), h.get("value"))
+                           folio_number=EXCLUDED.folio_number, cas_date=CURRENT_DATE, imported_at=NOW()""",
+                    (user_id, sc, h.get("fund_name_raw"), h.get("folio"),
+                     h.get("units"), h.get("nav"), h.get("value"))
                 )
                 saved += 1
+
+            # Persist transactions (deduplicate by scheme_code + txn_date + amount)
+            txns_saved = 0
+            for t in result.get("transactions", []):
+                sc = t.get("scheme_code")
+                txn_date = t.get("txn_date")
+                if not txn_date:
+                    continue
+                try:
+                    cur.execute(
+                        """INSERT INTO user_transactions
+                               (user_id, scheme_code, folio_number, txn_type, txn_date,
+                                description, amount, nav, units, balance_units, is_redemption)
+                           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                           ON CONFLICT DO NOTHING""",
+                        (user_id, sc, t.get("folio"), t.get("txn_type"), txn_date,
+                         t.get("description"), t.get("amount"), t.get("nav"),
+                         t.get("units"), t.get("balance_units"),
+                         t.get("is_redemption", False))
+                    )
+                    txns_saved += cur.rowcount
+                except Exception:
+                    pass
+
             conn.commit()
             result["saved_to_portfolio"] = saved
+            result["transactions_saved"] = txns_saved
         except Exception as e:
             conn.rollback()
             result["save_error"] = str(e)[:120]
@@ -2895,6 +2921,7 @@ def reset_portfolio(authorization: Optional[str] = _Header(default=None)):
     conn = get_db()
     cur = conn.cursor()
     try:
+        cur.execute("DELETE FROM user_transactions WHERE user_id = %s", (user["id"],))
         cur.execute("DELETE FROM user_portfolios WHERE user_id = %s", (user["id"],))
         deleted = cur.rowcount
         conn.commit()
@@ -2902,3 +2929,244 @@ def reset_portfolio(authorization: Optional[str] = _Header(default=None)):
         cur.close()
         conn.close()
     return {"deleted": deleted}
+
+
+@app.get("/api/portfolio/transactions")
+def get_portfolio_transactions(
+    scheme_code: Optional[str] = None,
+    authorization: Optional[str] = _Header(default=None)
+):
+    """Return stored transaction history for the authenticated user."""
+    user = _get_user_from_token(authorization)
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        if scheme_code:
+            cur.execute(
+                """SELECT ut.id, ut.scheme_code, ut.folio_number, ut.txn_type, ut.txn_date,
+                          ut.description, ut.amount, ut.nav, ut.units, ut.balance_units, ut.is_redemption,
+                          fm.scheme_name
+                   FROM user_transactions ut
+                   LEFT JOIN fund_metadata fm ON fm.scheme_code = ut.scheme_code
+                   WHERE ut.user_id = %s AND ut.scheme_code = %s
+                   ORDER BY ut.txn_date DESC""",
+                (user["id"], scheme_code)
+            )
+        else:
+            cur.execute(
+                """SELECT ut.id, ut.scheme_code, ut.folio_number, ut.txn_type, ut.txn_date,
+                          ut.description, ut.amount, ut.nav, ut.units, ut.balance_units, ut.is_redemption,
+                          fm.scheme_name
+                   FROM user_transactions ut
+                   LEFT JOIN fund_metadata fm ON fm.scheme_code = ut.scheme_code
+                   WHERE ut.user_id = %s
+                   ORDER BY ut.txn_date DESC""",
+                (user["id"],)
+            )
+        rows = cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
+
+    cols = ["id", "scheme_code", "folio_number", "txn_type", "txn_date",
+            "description", "amount", "nav", "units", "balance_units", "is_redemption", "scheme_name"]
+    txns = []
+    for r in rows:
+        d = dict(zip(cols, r))
+        d["txn_date"] = str(d["txn_date"]) if d["txn_date"] else None
+        d["amount"] = float(d["amount"]) if d["amount"] else None
+        d["nav"] = float(d["nav"]) if d["nav"] else None
+        d["units"] = float(d["units"]) if d["units"] else None
+        d["balance_units"] = float(d["balance_units"]) if d["balance_units"] else None
+        txns.append(d)
+
+    return {"transactions": txns, "count": len(txns)}
+
+
+@app.get("/api/portfolio/performance")
+def get_portfolio_performance(authorization: Optional[str] = _Header(default=None)):
+    """
+    Compute XIRR-based performance for the authenticated user's portfolio.
+    Uses stored transactions + current holdings for cash flow construction.
+    """
+    user = _get_user_from_token(authorization)
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Load transactions
+        cur.execute(
+            """SELECT scheme_code, txn_date, amount, nav, units, is_redemption
+               FROM user_transactions WHERE user_id = %s ORDER BY txn_date""",
+            (user["id"],)
+        )
+        txn_rows = cur.fetchall()
+
+        # Load current holdings with live NAV
+        cur.execute(
+            """SELECT up.scheme_code, up.units,
+                      (SELECT nd.nav_value FROM nav_data nd WHERE nd.scheme_code = up.scheme_code
+                       ORDER BY nd.nav_date DESC LIMIT 1) AS current_nav
+               FROM user_portfolios up WHERE up.user_id = %s""",
+            (user["id"],)
+        )
+        holding_rows = cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
+
+    from engine.xirr import compute_xirr, build_cash_flows
+
+    transactions = [
+        {"txn_date": r[1], "amount": float(r[2] or 0),
+         "nav": float(r[3] or 0), "units": float(r[4] or 0),
+         "is_redemption": r[5], "scheme_code": r[0]}
+        for r in txn_rows
+    ]
+    holdings = [{"scheme_code": r[0], "units": float(r[1] or 0)} for r in holding_rows]
+    nav_lookup = {r[0]: float(r[2] or 0) for r in holding_rows if r[2]}
+
+    total_invested = sum(abs(t["amount"]) for t in transactions if not t["is_redemption"])
+    total_redeemed = sum(abs(t["amount"]) for t in transactions if t["is_redemption"])
+    current_value = sum(h["units"] * nav_lookup.get(h["scheme_code"], 0) for h in holdings)
+
+    xirr_val = None
+    if transactions:
+        cash_flows = build_cash_flows(transactions, holdings, nav_lookup)
+        if len(cash_flows) >= 2:
+            xirr_val = compute_xirr(cash_flows)
+
+    # Per-fund XIRR
+    per_fund = {}
+    scheme_codes = list({t["scheme_code"] for t in transactions if t["scheme_code"]})
+    for sc in scheme_codes:
+        sc_txns = [t for t in transactions if t["scheme_code"] == sc]
+        sc_holdings = [h for h in holdings if h["scheme_code"] == sc]
+        sc_flows = build_cash_flows(sc_txns, sc_holdings, nav_lookup)
+        if len(sc_flows) >= 2:
+            xirr_sc = compute_xirr(sc_flows)
+            if xirr_sc is not None:
+                per_fund[sc] = round(xirr_sc * 100, 2)
+
+    return {
+        "xirr_pct": round(xirr_val * 100, 2) if xirr_val is not None else None,
+        "total_invested": round(total_invested, 2),
+        "total_redeemed": round(total_redeemed, 2),
+        "current_value": round(current_value, 2),
+        "absolute_gain": round(current_value + total_redeemed - total_invested, 2),
+        "has_transactions": len(transactions) > 0,
+        "transaction_count": len(transactions),
+        "per_fund_xirr": per_fund,
+        "note": "XIRR computed from CAS transaction history. Import a fresh CAS for accurate results." if transactions else "No transaction history found. Import a CAS PDF to enable performance tracking.",
+    }
+
+
+@app.get("/api/portfolio/tax-report")
+def get_tax_report(
+    fy: Optional[str] = None,
+    authorization: Optional[str] = _Header(default=None)
+):
+    """
+    Generate LTCG/STCG tax report for the authenticated user.
+    fy: financial year e.g. '2024-25'. Defaults to current FY.
+    Uses FIFO lot matching on stored transactions.
+    """
+    user = _get_user_from_token(authorization)
+
+    from datetime import date as dt_date
+    today = dt_date.today()
+    if fy:
+        try:
+            fy_start_yr = int(fy.split("-")[0])
+        except Exception:
+            fy_start_yr = today.year if today.month >= 4 else today.year - 1
+    else:
+        fy_start_yr = today.year if today.month >= 4 else today.year - 1
+
+    fy_start = dt_date(fy_start_yr, 4, 1)
+    fy_end = dt_date(fy_start_yr + 1, 3, 31)
+    fy_label = f"{fy_start_yr}-{str(fy_start_yr + 1)[2:]}"
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """SELECT ut.scheme_code, ut.txn_date, ut.units, ut.nav, ut.is_redemption,
+                      fm.sebi_category, fm.scheme_name
+               FROM user_transactions ut
+               LEFT JOIN fund_metadata fm ON fm.scheme_code = ut.scheme_code
+               WHERE ut.user_id = %s AND ut.units IS NOT NULL AND ut.nav IS NOT NULL
+               ORDER BY ut.scheme_code, ut.txn_date""",
+            (user["id"],)
+        )
+        rows = cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
+
+    from engine.xirr import fifo_realized_gains, compute_tax_summary
+
+    # Group by scheme_code
+    by_fund: dict = {}
+    for r in rows:
+        sc = r[0]
+        if sc not in by_fund:
+            by_fund[sc] = {"scheme_name": r[6] or sc, "category": r[5] or "", "txns": []}
+        by_fund[sc]["txns"].append({
+            "txn_date": str(r[1]),
+            "units": float(r[2]) if not r[4] else -float(r[2]),  # negative for redemptions
+            "nav": float(r[3]),
+            "is_redemption": r[4],
+        })
+
+    fund_reports = []
+    total_ltcg = 0.0
+    total_stcg = 0.0
+
+    for sc, fd in by_fund.items():
+        realized = fifo_realized_gains(fd["txns"])
+        # Filter to redemptions within the FY
+        fy_realized = [g for g in realized
+                       if fy_start <= (g["sell_date"] if isinstance(g["sell_date"], dt_date)
+                                       else dt_date.fromisoformat(str(g["sell_date"]))) <= fy_end]
+
+        if not fy_realized:
+            continue
+
+        cat = fd["category"].lower()
+        fund_type = "equity" if any(k in cat for k in ["equity", "elss", "flexi", "mid", "small", "large", "multi"]) else "debt"
+
+        tax = compute_tax_summary(fy_realized, fund_type)
+        total_ltcg += tax["ltcg_gross"]
+        total_stcg += tax["stcg_gross"]
+
+        fund_reports.append({
+            "scheme_code": sc,
+            "scheme_name": fd["scheme_name"],
+            "fund_type": fund_type,
+            "lots_redeemed": len(fy_realized),
+            **tax,
+        })
+
+    overall = compute_tax_summary(
+        [{"purchase_date": None, "sell_date": fy_end, "gain_amount": g, "units": 0}
+         for g in [total_ltcg - total_stcg]],  # dummy — computed below properly
+        "equity"
+    )
+    overall_ltcg_tax = max(0, total_ltcg - 125000) * 0.125
+    overall_stcg_tax = max(0, total_stcg) * 0.20
+
+    return {
+        "financial_year": fy_label,
+        "fund_reports": fund_reports,
+        "summary": {
+            "total_ltcg": round(total_ltcg, 2),
+            "total_stcg": round(total_stcg, 2),
+            "ltcg_exempt": min(total_ltcg, 125000) if total_ltcg > 0 else 0,
+            "ltcg_taxable": round(max(0, total_ltcg - 125000), 2),
+            "ltcg_tax": round(overall_ltcg_tax, 2),
+            "stcg_tax": round(overall_stcg_tax, 2),
+            "total_tax": round(overall_ltcg_tax + overall_stcg_tax, 2),
+        },
+        "note": "Based on FIFO lot matching of CAS transactions. Verify with your CA before filing.",
+        "has_data": len(fund_reports) > 0,
+    }

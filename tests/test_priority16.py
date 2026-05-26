@@ -87,70 +87,72 @@ class TestFormatDetection:
 # ── CAMS text parser ──────────────────────────────────────────────────────────
 
 class TestCamsParser:
+    # _parse_text_cams now returns (holdings, transactions) tuple
 
     def test_parse_two_funds(self):
-        result = _parse_text_cams(CAMS_TEXT)
-        assert len(result) == 2
+        holdings, _ = _parse_text_cams(CAMS_TEXT)
+        assert len(holdings) == 2
 
     def test_cams_fund_names_extracted(self):
-        result = _parse_text_cams(CAMS_TEXT)
-        names = [h["fund_name_raw"] for h in result]
+        holdings, _ = _parse_text_cams(CAMS_TEXT)
+        names = [h["fund_name_raw"] for h in holdings]
         assert any("Parag Parikh" in n for n in names)
         assert any("HDFC Mid-Cap" in n for n in names)
 
     def test_cams_units_correct(self):
-        result = _parse_text_cams(CAMS_TEXT)
-        pp = next(h for h in result if "Parag" in h["fund_name_raw"])
+        holdings, _ = _parse_text_cams(CAMS_TEXT)
+        pp = next(h for h in holdings if "Parag" in h["fund_name_raw"])
         assert abs(pp["units"] - 220.0) < 0.01
 
     def test_cams_nav_correct(self):
-        result = _parse_text_cams(CAMS_TEXT)
-        pp = next(h for h in result if "Parag" in h["fund_name_raw"])
+        holdings, _ = _parse_text_cams(CAMS_TEXT)
+        pp = next(h for h in holdings if "Parag" in h["fund_name_raw"])
         assert abs(pp["nav"] - 65.44) < 0.01
 
     def test_cams_value_correct(self):
-        result = _parse_text_cams(CAMS_TEXT)
-        pp = next(h for h in result if "Parag" in h["fund_name_raw"])
+        holdings, _ = _parse_text_cams(CAMS_TEXT)
+        pp = next(h for h in holdings if "Parag" in h["fund_name_raw"])
         assert abs(pp["value"] - 14396.80) < 0.01
 
     def test_empty_text_returns_empty(self):
-        result = _parse_text_cams("")
-        assert result == []
+        holdings, txns = _parse_text_cams("")
+        assert holdings == []
 
     def test_no_closing_balance_returns_empty(self):
         text = "Parag Parikh Flexi Cap Fund - Direct Plan - Growth\nSome random lines\nNo balance data"
-        result = _parse_text_cams(text)
-        assert result == []
+        holdings, _ = _parse_text_cams(text)
+        assert holdings == []
 
 
 # ── KFintech text parser ──────────────────────────────────────────────────────
 
 class TestKFintechParser:
+    # _parse_text_kfintech now returns (holdings, transactions) tuple
 
     def test_parse_two_funds(self):
-        result = _parse_text_kfintech(KFINTECH_TEXT)
-        assert len(result) == 2
+        holdings, _ = _parse_text_kfintech(KFINTECH_TEXT)
+        assert len(holdings) == 2
 
     def test_kfintech_fund_names_extracted(self):
-        result = _parse_text_kfintech(KFINTECH_TEXT)
-        names = [h["fund_name_raw"] for h in result]
+        holdings, _ = _parse_text_kfintech(KFINTECH_TEXT)
+        names = [h["fund_name_raw"] for h in holdings]
         assert any("Mirae Asset" in n for n in names)
         assert any("DSP Midcap" in n for n in names)
 
     def test_kfintech_nav_not_date(self):
         """Nav should not be a date fragment like 31."""
-        result = _parse_text_kfintech(KFINTECH_TEXT)
-        for h in result:
+        holdings, _ = _parse_text_kfintech(KFINTECH_TEXT)
+        for h in holdings:
             assert h["nav"] > 10, f"NAV={h['nav']} looks like a date fragment"
 
     def test_kfintech_value_correct(self):
-        result = _parse_text_kfintech(KFINTECH_TEXT)
-        mirae = next(h for h in result if "Mirae" in h["fund_name_raw"])
+        holdings, _ = _parse_text_kfintech(KFINTECH_TEXT)
+        mirae = next(h for h in holdings if "Mirae" in h["fund_name_raw"])
         assert abs(mirae["value"] - 18923.45) < 0.01
 
     def test_kfintech_units_correct(self):
-        result = _parse_text_kfintech(KFINTECH_TEXT)
-        dsp = next(h for h in result if "DSP" in h["fund_name_raw"])
+        holdings, _ = _parse_text_kfintech(KFINTECH_TEXT)
+        dsp = next(h for h in holdings if "DSP" in h["fund_name_raw"])
         assert abs(dsp["units"] - 200.0) < 0.01
 
 
