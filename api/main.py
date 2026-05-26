@@ -601,7 +601,7 @@ def _compute_pros(funds, metrics_dict, confidence, overlap, stress_test):
 # To pre-warm manually: python3 -c "from engine.precompute import run_all_horizons; run_all_horizons()"
 
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 def health_check():
     """Fast health check — returns live platform health state."""
     state = _health_state
