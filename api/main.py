@@ -26,7 +26,7 @@ from engine.fund_replacement import (
     score_single_fund, compute_replacement_impact,
 )
 
-load_dotenv(os.path.expanduser('~/fundguldasta/config/.env'))
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config', '.env'))
 
 # Support both individual env vars (local dev) and DATABASE_URL (Railway/Timescale Cloud)
 _DATABASE_URL = os.getenv('DATABASE_URL')

@@ -402,9 +402,9 @@ def fetch_all_configured(as_of: Optional[date] = None, db_config: dict = None) -
 
 if __name__ == "__main__":
     import sys, os
-    sys.path.insert(0, "/home/hpbikram6086/fundguldasta")
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from dotenv import load_dotenv
-    load_dotenv("/home/hpbikram6086/fundguldasta/config/.env")
+    load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'config', '.env'))
 
     DB_CONFIG = {
         "host":     os.getenv("DB_HOST", "127.0.0.1"),

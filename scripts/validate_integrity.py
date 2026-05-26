@@ -161,6 +161,72 @@ def run_checks():
     cur.close()
     conn.close()
 
+    # ── 6. Pipeline Registration ─────────────────────────────────────────────
+    # Every data/*_ingestion.py script must be listed in run_pipelines.py so
+    # the nightly cron keeps ALL data sources current — not just NAV.
+    print("\n[ Pipeline Registration ]")
+    base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    import glob, re
+    ingestion_scripts = [
+        os.path.basename(f)
+        for f in glob.glob(os.path.join(base, 'data', '*_ingestion.py'))
+    ]
+    try:
+        with open(os.path.join(base, 'data', 'run_pipelines.py')) as fh:
+            pipeline_src = fh.read()
+        for script in sorted(ingestion_scripts):
+            check(
+                f"Pipeline registered: {script}",
+                script in pipeline_src,
+                f"{script} exists in data/ but is NOT listed in run_pipelines.py — "
+                f"nightly cron will never update this data source"
+            )
+    except FileNotFoundError:
+        check("run_pipelines.py exists", False, "data/run_pipelines.py not found")
+
+    # ── 7. Hero Screen Modal Coverage ───────────────────────────────────────
+    # The hero screen uses an early `return` — any modal opened from hero buttons
+    # must also be rendered inside that early return, otherwise clicking does nothing.
+    print("\n[ Hero Screen Modal Coverage ]")
+    app_js = os.path.join(base, 'frontend', 'fundguldasta-ui', 'src', 'App.js')
+    try:
+        with open(app_js) as fh:
+            app_src = fh.read()
+
+        # Extract the hero early-return block
+        hero_match = re.search(
+            r'if \(screen === ["\']hero["\']\) return \((.*?)^\s{2}\);',
+            app_src, re.DOTALL | re.MULTILINE
+        )
+        hero_block = hero_match.group(1) if hero_match else ""
+
+        # Find all modal state setters used in the hero button section
+        # Look for setXxxModal(true) in the hero block range
+        # Strategy: find all distinct modal names that appear as {xxxModal && ...} in main return
+        # then verify they also appear in the hero block
+        all_modal_renders = re.findall(r'\{(\w+Modal)\s*&&\s*\w+\(\)', app_src)
+        unique_modals = sorted(set(all_modal_renders))
+
+        for modal_var in unique_modals:
+            # Check if this modal's setter is called from within the hero screen region
+            # (between "if (screen === 'hero') return" and the buttons section)
+            # Simplified: check if any button in hero block calls setXxxModal(true)
+            setter = modal_var[0].lower() + modal_var[1:]  # quizModal -> quizModal
+            set_call = f'set{modal_var[0].upper()}{modal_var[1:]}(true)'
+            used_in_hero = set_call in hero_block or modal_var in hero_block
+
+            if used_in_hero:
+                # Modal is referenced in hero — make sure it's also RENDERED there
+                rendered_in_hero = modal_var in hero_block
+                check(
+                    f"Hero return renders: {modal_var}",
+                    rendered_in_hero,
+                    f"{set_call} is called from hero screen but {{{modal_var} && ...}} "
+                    f"is missing from the hero early return — modal will never appear"
+                )
+    except FileNotFoundError:
+        check("App.js exists", False, f"{app_js} not found")
+
 
 def main():
     parser = argparse.ArgumentParser()

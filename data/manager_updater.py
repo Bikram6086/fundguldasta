@@ -24,7 +24,7 @@ import sys
 import psycopg2
 from datetime import date, datetime
 
-sys.path.insert(0, '/home/hpbikram6086/fundguldasta')
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.db import get_db_config
 from config.scheme_codes import VERIFIED_FUNDS
 
