@@ -1167,7 +1167,18 @@ useEffect(() => {
     const at = QUIZ_ARCHETYPES[archId];
     setQuizModal(false);
     setMode("return"); setCAGR(String(at.cagr)); setYrs(String(at.yrs));
-    setTimeout(() => handleFind(), 50);
+    setInputWarn(""); setScreen("loading"); setApiError(null);
+    curateBouquets({ mode: "return", targetCAGR: at.cagr, horizonYears: at.yrs, targetCorpus: null, lumpsum: null, sipAmount: null })
+      .then(result => {
+        setCurationResult(result);
+        if (result.archetypes?.length > 0) {
+          setCagrAdvisory(result.archetypes[0].realisticAssessment || null);
+          setApproxHorizon(result.horizonApproximate ? { used: result.horizonUsed, requested: result.horizonRequested } : null);
+        }
+        return getFreshness().catch(() => null);
+      })
+      .then(fdata => { setFreshness(fdata); setScreen("results"); })
+      .catch(() => { setApiError("Could not connect to API."); setScreen("hero"); });
   };
 
   const handleWnSearch = async (q) => {
