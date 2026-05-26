@@ -2024,6 +2024,7 @@ useEffect(() => {
             )}
           </div>
         </div>
+      {authModal && AuthModal()}
       </>
     );
   }
