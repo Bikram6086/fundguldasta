@@ -2902,6 +2902,7 @@ useEffect(() => {
     if (screen === "hero") return (
     <>
       {authModal && AuthModal()}
+      {quizModal && QuizModal()}
       <style>{css}</style>
       <div className="hero">
         <div className="mesh" />
