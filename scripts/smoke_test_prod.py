@@ -12,7 +12,7 @@ Usage:
 import sys, argparse
 import requests
 
-PROD_URL = "https://fundguldasta-production.up.railway.app"
+PROD_URL = "https://web-production-8f6bd.up.railway.app"
 
 PASS = "\033[92m✓\033[0m"
 FAIL = "\033[91m✗\033[0m"
@@ -65,10 +65,11 @@ def run_smoke_tests():
     check("GET /api/stats returns 200", r and r.status_code == 200)
     if r and r.status_code == 200:
         d = r.json()
-        check("Stats has nav_records", "nav_records" in d,
+        nav_count = d.get("nav_records") or d.get("navRecords", 0)
+        check("Stats has NAV count", nav_count is not None and nav_count > 0,
               f"keys: {list(d.keys())}")
-        check("Stats NAV count > 500000", d.get("nav_records", 0) > 500000,
-              f"nav_records={d.get('nav_records')}")
+        check("Stats NAV count > 500000", nav_count > 500000,
+              f"nav_count={nav_count}")
 
     # ── Bouquet endpoints ────────────────────────────────────────────────────
     print("\n[ Bouquet Endpoints ]")
@@ -94,7 +95,7 @@ def run_smoke_tests():
     check("GET /api/funds/search returns 200", r and r.status_code == 200)
     if r and r.status_code == 200:
         d = r.json()
-        funds = d.get("funds") or d if isinstance(d, list) else []
+        funds = d if isinstance(d, list) else d.get("funds", [])
         check("Fund search returns results", len(funds) > 0,
               "No funds returned for 'parag parikh'")
 
@@ -123,9 +124,9 @@ def run_smoke_tests():
 
     # ── Auth endpoints ───────────────────────────────────────────────────────
     print("\n[ Auth ]")
-    r = post("/api/auth/login", {"email": "nonexistent@test.com", "password": "wrong"})
-    check("POST /api/auth/login reachable (401 expected)", r and r.status_code in (401, 400, 422),
-          f"status={r.status_code if r else 'no response'}")
+    r = get("/api/auth/me", timeout=25)
+    check("GET /api/auth/me → 401 without token", r and r.status_code == 401,
+          f"status={r.status_code if r else 'no response'} — auth guard not working")
 
 
 def main():
