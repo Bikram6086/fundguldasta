@@ -427,6 +427,7 @@ export default function App() {
   const [goalError, setGoalError] = useState(null);
   const [goalCagr, setGoalCagr] = useState("14");
   const [goalYrs, setGoalYrs] = useState("10");
+  const [goalFromPlanner, setGoalFromPlanner] = useState(null);
   const [selectedArch, setSelectedArch] = useState(null);
   const [bStep, setBStep] = useState(0);
   const [bAns, setBAns] = useState({});
@@ -3044,7 +3045,7 @@ useEffect(() => {
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.04)" }} onClick={() => { handleQuizReset(); setQuizModal(true); }}>{tr("🎯 Find My Risk Profile", HI_HERO.btnRisk)}</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.08)", border:"1px solid rgba(212,175,55,0.25)" }} onClick={() => { setAdvisorMessages([]); setAdvisorInput(""); setScreen("advisor"); }}>💬 Guldasta Advisor — Ask anything about Indian MF</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(99,179,237,0.06)", border:"1px solid rgba(99,179,237,0.3)", color:"#63B3ED" }} onClick={() => { setFiSearch(''); setFiResults([]); setFiAnalysis(null); setFiError(''); setScreen("fund_intel"); }}>🔬 Fund Intelligence — Deep-analyse any mutual fund</button>
-          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.1)", border:"1px solid rgba(212,175,55,0.4)", color:G.gold, fontWeight:700 }} onClick={() => { setGoalResult(null); setGoalError(null); setScreen("goal_bouquet"); }}>🎯 Build for My Goal — One bouquet built for your exact target</button>
+          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.1)", border:"1px solid rgba(212,175,55,0.4)", color:G.gold, fontWeight:700 }} onClick={() => { setGoalResult(null); setGoalError(null); setGoalFromPlanner(null); setScreen("goal_bouquet"); }}>🎯 Build for My Goal — One bouquet built for your exact target</button>
           <p className="note">{lang === 'hi' ? HI_HERO.note : "Research & education only · Not investment advice · Past performance does not guarantee future returns\nAll fund data sourced from AMFI · No commission earned on any recommendation · fundguldasta.com"}</p>
         </div>
       </div>
@@ -3397,6 +3398,10 @@ useEffect(() => {
                                 <div style={{ color:G.gold, fontSize:16, fontWeight:700, fontFamily:"JetBrains Mono,monospace" }}>{sip ? fmtINR(sip)+'/mo' : '—'}</div>
                                 {invested > 0 && <div style={{ color:G.mist, fontSize:10 }}>Total invest: {fmtCr(invested)}</div>}
                               </div>
+                              <button onClick={() => { setGoalCagr(String(b.cagr)); setGoalYrs(String(b.years)); setGoalResult(null); setGoalError(null); setGoalFromPlanner({ label: b.label, icon: b.icon, corpus: b.corpus }); setScreen("goal_bouquet"); }}
+                                style={{ background:"rgba(212,175,55,0.1)", border:"1px solid rgba(212,175,55,0.4)", borderRadius:6, color:G.gold, fontSize:11, cursor:"pointer", padding:"4px 10px", flexShrink:0, fontWeight:600, whiteSpace:"nowrap" }}>
+                                Get Funds →
+                              </button>
                               <button onClick={() => removeGoal(b.id)}
                                 style={{ background:"none", border:`1px solid ${G.bord}`, borderRadius:6, color:G.mist, fontSize:11, cursor:"pointer", padding:"4px 10px", flexShrink:0 }}>
                                 ✕
@@ -4417,13 +4422,23 @@ useEffect(() => {
       <>
         <nav style={{ background: "#0a0a0a", borderBottom: "1px solid rgba(212,175,55,0.15)", padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span style={{ fontFamily: "Cormorant Garamond,serif", fontSize: 20, color: G.gold, letterSpacing: 1 }}>FundGuldasta</span>
-          <button onClick={() => setScreen("hero")} style={{ background: "none", border: "1px solid rgba(212,175,55,0.3)", color: G.gold, borderRadius: 6, padding: "6px 16px", cursor: "pointer", fontSize: 13 }}>← Back</button>
+          <button onClick={() => { if (goalFromPlanner) { setGoalFromPlanner(null); setScreen("calculators"); setCalcTab("goals"); } else { setScreen("hero"); } }} style={{ background: "none", border: "1px solid rgba(212,175,55,0.3)", color: G.gold, borderRadius: 6, padding: "6px 16px", cursor: "pointer", fontSize: 13 }}>{goalFromPlanner ? "← Back to Goal Planner" : "← Back"}</button>
         </nav>
         <div style={{ maxWidth: 820, margin: "0 auto", padding: "32px 20px" }}>
           <div style={{ marginBottom: 28 }}>
             <div style={{ fontFamily: "Cormorant Garamond,serif", fontSize: 28, color: G.ivory, marginBottom: 6 }}>Goal Bouquet</div>
             <div style={{ color: G.mist, fontSize: 14 }}>A bespoke 5-fund bouquet built for your exact CAGR target — selected from the full eligible universe of {goalResult ? goalResult.universe_size : "271"} scored funds.</div>
           </div>
+
+          {goalFromPlanner && (
+            <div style={{ background: "rgba(99,179,237,0.06)", border: "1px solid rgba(99,179,237,0.25)", borderRadius: 10, padding: "12px 18px", marginBottom: 20, display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ fontSize: 20 }}>{goalFromPlanner.icon}</span>
+              <div>
+                <div style={{ color: "#63B3ED", fontSize: 13, fontWeight: 600 }}>{goalFromPlanner.label}</div>
+                <div style={{ color: G.mist, fontSize: 12 }}>From your Goal Planner · Corpus target: {goalFromPlanner.corpus ? `₹${(goalFromPlanner.corpus/100000).toFixed(0)}L` : "—"} · CAGR and horizon pre-filled below</div>
+              </div>
+            </div>
+          )}
 
           <div style={{ background: "rgba(212,175,55,0.06)", border: "1px solid rgba(212,175,55,0.2)", borderRadius: 12, padding: "24px 28px", marginBottom: 28 }}>
             <div style={{ display: "flex", gap: 20, flexWrap: "wrap", alignItems: "flex-end" }}>
