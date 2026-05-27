@@ -112,10 +112,18 @@ def compute_rolling_returns(scheme_code, horizon_years, benchmark_code='NIFTY500
 
     Returns dict with all rolling return statistics.
     """
+    def _sufficient(series, h):
+        if series is None or len(series) < h * 200:
+            return False
+        span_years = (series.index[-1] - series.index[0]).days / 365.25
+        return span_years >= h + 0.25
+
     nav_series = get_nav_series(scheme_code)
-    if (nav_series is None or len(nav_series) < horizon_years * 200) and proxy_code:
-        nav_series = get_nav_series(proxy_code)
-    if nav_series is None or len(nav_series) < horizon_years * 200:
+    if not _sufficient(nav_series, horizon_years) and proxy_code:
+        proxy_series = get_nav_series(proxy_code)
+        if _sufficient(proxy_series, horizon_years):
+            nav_series = proxy_series
+    if not _sufficient(nav_series, horizon_years):
         return None
 
     benchmark_series = get_benchmark_series(benchmark_code)
@@ -215,11 +223,13 @@ def compute_point_to_point_cagr(scheme_code, years, proxy_code=None):
     Falls back to proxy_code (regular plan) when direct plan lacks history.
     """
     nav_series = get_nav_series(scheme_code)
-    if nav_series is not None:
-        end_date = nav_series.index[-1]
-        needed_start = end_date - pd.Timedelta(days=int(years * 365.25) + 30)
-        if nav_series.index[0] > needed_start and proxy_code:
-            nav_series = get_nav_series(proxy_code)
+    if proxy_code:
+        end = (nav_series.index[-1] if nav_series is not None else None)
+        needed = pd.Timedelta(days=int(years * 365.25) + 30)
+        if nav_series is None or (end is not None and nav_series.index[0] > end - needed):
+            proxy_series = get_nav_series(proxy_code)
+            if proxy_series is not None and proxy_series.index[0] <= proxy_series.index[-1] - needed:
+                nav_series = proxy_series
     if nav_series is None or len(nav_series) < 2:
         return None
 

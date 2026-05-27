@@ -97,21 +97,22 @@ def find_regular_plan(direct_scheme_code: str) -> str | None:
     candidates = cur.fetchall()
     cur.close(); conn.close()
 
-    best_code = None
-    best_overlap = 0.0
-    best_inception = None
-
+    qualified = []
     for code, name, inception in candidates:
         cand_tokens = set(_core_name(name).split())
         if not core_tokens or not cand_tokens:
             continue
         overlap = len(core_tokens & cand_tokens) / len(core_tokens | cand_tokens)
-        if overlap > best_overlap or (overlap == best_overlap and best_inception and inception < best_inception):
-            best_overlap = overlap
-            best_code = code
-            best_inception = inception
+        if overlap >= 0.55:
+            qualified.append((inception, overlap, code))
 
-    result = best_code if best_overlap >= 0.55 else None
+    # Among qualified matches, prefer earliest inception (most history)
+    # — this ensures we pick the original unlabeled plan (2006-2010) over
+    #   a SEBI-mandated "Regular Plan" variant created later (2013-2017)
+    result = None
+    if qualified:
+        qualified.sort(key=lambda x: x[0])  # sort by inception ASC
+        result = qualified[0][2]
     _proxy_cache[direct_scheme_code] = result
     return result
 
