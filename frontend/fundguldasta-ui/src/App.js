@@ -3208,6 +3208,22 @@ useEffect(() => {
                         <div style={{ marginTop:14, fontSize:10, color:G.mist, lineHeight:1.6 }}>
                           Projection based on constant CAGR — actual returns will vary. Adjust CAGR down 1–2% for conservative planning. Does not account for LTCG tax on redemption.
                         </div>
+                        {sipCalcCagr && sipCalcYears && (
+                          <div style={{ marginTop:14, borderTop:`1px solid ${G.bord}`, paddingTop:12, display:"flex", alignItems:"center", justifyContent:"space-between", gap:12 }}>
+                            <div style={{ fontSize:11, color:G.mist }}>Now find funds that can actually deliver this {sipCalcCagr}% CAGR over {sipCalcYears} years.</div>
+                            <button onClick={() => {
+                              const h = parseInt(sipCalcYears) || 7;
+                              const snapped = h <= 6 ? 5 : h <= 8 ? 7 : h <= 12 ? 10 : 15;
+                              const c = parseFloat(sipCalcCagr) || 14;
+                              setGoalCagr(String(c)); setGoalYrs(String(snapped));
+                              setGoalResult(null); setGoalError(null);
+                              setGoalFromPlanner({ label: `SIP Projection · ${sipCalcCagr}% CAGR · ${sipCalcYears} years`, icon: "📊", corpus: sipResult.corpus, sourceTab: 'sip', originalHorizon: h, snappedHorizon: snapped });
+                              setScreen("goal_bouquet");
+                            }} style={{ background:"rgba(212,175,55,0.12)", border:"1px solid rgba(212,175,55,0.45)", borderRadius:6, color:G.gold, fontSize:12, cursor:"pointer", padding:"6px 14px", fontWeight:700, fontFamily:"Outfit,sans-serif", flexShrink:0, whiteSpace:"nowrap" }}>
+                              Get Funds →
+                            </button>
+                          </div>
+                        )}
                       </>
                     )}
                   </div>
@@ -3398,7 +3414,7 @@ useEffect(() => {
                                 <div style={{ color:G.gold, fontSize:16, fontWeight:700, fontFamily:"JetBrains Mono,monospace" }}>{sip ? fmtINR(sip)+'/mo' : '—'}</div>
                                 {invested > 0 && <div style={{ color:G.mist, fontSize:10 }}>Total invest: {fmtCr(invested)}</div>}
                               </div>
-                              <button onClick={() => { setGoalCagr(String(b.cagr)); setGoalYrs(String(b.years)); setGoalResult(null); setGoalError(null); setGoalFromPlanner({ label: b.label, icon: b.icon, corpus: b.corpus }); setScreen("goal_bouquet"); }}
+                              <button onClick={() => { setGoalCagr(String(b.cagr)); setGoalYrs(String(b.years)); setGoalResult(null); setGoalError(null); setGoalFromPlanner({ label: b.label, icon: b.icon, corpus: b.corpus, sourceTab: 'goals' }); setScreen("goal_bouquet"); }}
                                 style={{ background:"rgba(212,175,55,0.1)", border:"1px solid rgba(212,175,55,0.4)", borderRadius:6, color:G.gold, fontSize:11, cursor:"pointer", padding:"4px 10px", flexShrink:0, fontWeight:600, whiteSpace:"nowrap" }}>
                                 Get Funds →
                               </button>
@@ -3758,6 +3774,27 @@ useEffect(() => {
                           </table>
                         </div>
                       </div>
+                    </div>
+                  )}
+
+                  {/* ─ Get funds for accumulation phase ─ */}
+                  {isValid && !alreadyCovered && corpusGap > 0 && (
+                    <div style={{ marginTop:16, padding:"16px 20px", background:"rgba(212,175,55,0.04)", border:"1px solid rgba(212,175,55,0.25)", borderRadius:10, display:"flex", alignItems:"center", justifyContent:"space-between", gap:16, flexWrap:"wrap" }}>
+                      <div>
+                        <div style={{ color:G.white, fontSize:13, fontWeight:600 }}>Ready to find the right funds?</div>
+                        <div style={{ color:G.mist, fontSize:12, marginTop:3 }}>
+                          Get a bespoke 5-fund bouquet built for a {retAccumCagrN}% CAGR target — your accumulation CAGR for retirement.
+                        </div>
+                      </div>
+                      <button onClick={() => {
+                        const snapped = accumYears <= 6 ? 5 : accumYears <= 8 ? 7 : accumYears <= 12 ? 10 : 15;
+                        setGoalCagr(String(retAccumCagrN)); setGoalYrs(String(snapped));
+                        setGoalResult(null); setGoalError(null);
+                        setGoalFromPlanner({ label: `Retirement Plan · ${fmtCr(corpusNeeded)} corpus`, icon: "🌅", corpus: corpusNeeded, sourceTab: 'retirement', originalHorizon: accumYears, snappedHorizon: snapped });
+                        setScreen("goal_bouquet");
+                      }} style={{ background:"rgba(212,175,55,0.12)", border:"1px solid rgba(212,175,55,0.5)", borderRadius:8, color:G.gold, fontSize:13, cursor:"pointer", padding:"9px 22px", fontWeight:700, fontFamily:"Outfit,sans-serif", flexShrink:0 }}>
+                        Get Funds →
+                      </button>
                     </div>
                   )}
 
@@ -4422,7 +4459,7 @@ useEffect(() => {
       <>
         <nav style={{ background: "#0a0a0a", borderBottom: "1px solid rgba(212,175,55,0.15)", padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <span style={{ fontFamily: "Cormorant Garamond,serif", fontSize: 20, color: G.gold, letterSpacing: 1 }}>FundGuldasta</span>
-          <button onClick={() => { if (goalFromPlanner) { setGoalFromPlanner(null); setScreen("calculators"); setCalcTab("goals"); } else { setScreen("hero"); } }} style={{ background: "none", border: "1px solid rgba(212,175,55,0.3)", color: G.gold, borderRadius: 6, padding: "6px 16px", cursor: "pointer", fontSize: 13 }}>{goalFromPlanner ? "← Back to Goal Planner" : "← Back"}</button>
+          <button onClick={() => { if (goalFromPlanner) { const tab = goalFromPlanner.sourceTab || 'goals'; setGoalFromPlanner(null); setScreen("calculators"); setCalcTab(tab); } else { setScreen("hero"); } }} style={{ background: "none", border: "1px solid rgba(212,175,55,0.3)", color: G.gold, borderRadius: 6, padding: "6px 16px", cursor: "pointer", fontSize: 13 }}>{goalFromPlanner ? `← Back to ${goalFromPlanner.sourceTab === 'sip' ? 'SIP Calculator' : goalFromPlanner.sourceTab === 'retirement' ? 'Retirement Calculator' : 'Goal Planner'}` : "← Back"}</button>
         </nav>
         <div style={{ maxWidth: 820, margin: "0 auto", padding: "32px 20px" }}>
           <div style={{ marginBottom: 28 }}>
@@ -4435,7 +4472,14 @@ useEffect(() => {
               <span style={{ fontSize: 20 }}>{goalFromPlanner.icon}</span>
               <div>
                 <div style={{ color: "#63B3ED", fontSize: 13, fontWeight: 600 }}>{goalFromPlanner.label}</div>
-                <div style={{ color: G.mist, fontSize: 12 }}>From your Goal Planner · Corpus target: {goalFromPlanner.corpus ? `₹${(goalFromPlanner.corpus/100000).toFixed(0)}L` : "—"} · CAGR and horizon pre-filled below</div>
+                <div style={{ color: G.mist, fontSize: 12 }}>
+                  {goalFromPlanner.sourceTab === 'sip'
+                    ? `From SIP Calculator${goalFromPlanner.originalHorizon !== goalFromPlanner.snappedHorizon ? ` · ${goalFromPlanner.originalHorizon}yr adjusted to ${goalFromPlanner.snappedHorizon}yr` : ''} · Corpus: ${goalFromPlanner.corpus ? `₹${(goalFromPlanner.corpus/100000).toFixed(0)}L` : '—'} · CAGR and horizon pre-filled below`
+                    : goalFromPlanner.sourceTab === 'retirement'
+                    ? `From Retirement Calculator · Corpus: ${goalFromPlanner.corpus ? `₹${(goalFromPlanner.corpus/100000).toFixed(0)}L` : '—'}${goalFromPlanner.originalHorizon !== goalFromPlanner.snappedHorizon ? ` · ${goalFromPlanner.originalHorizon}yr adjusted to ${goalFromPlanner.snappedHorizon}yr (max scored horizon)` : ''} · CAGR and horizon pre-filled below`
+                    : `From your Goal Planner · Corpus target: ${goalFromPlanner.corpus ? `₹${(goalFromPlanner.corpus/100000).toFixed(0)}L` : "—"} · CAGR and horizon pre-filled below`
+                  }
+                </div>
               </div>
             </div>
           )}
