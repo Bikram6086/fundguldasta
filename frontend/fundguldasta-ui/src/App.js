@@ -165,6 +165,13 @@ async function curateBouquets(params) {
   return null;
 }
 
+async function curateGoalBouquet(horizonYears, targetCagr) {
+  if (USE_LIVE_DATA) {
+    return apiCall("POST", "/api/bouquets/goal", { horizon_years: horizonYears, target_cagr: targetCagr });
+  }
+  return null;
+}
+
 async function getFreshness() {
   if (USE_LIVE_DATA) {
     return apiCall("GET", "/api/bouquets/steady/freshness");
@@ -415,6 +422,11 @@ export default function App() {
   const [sip, setSip] = useState("");
   const [inputWarn, setInputWarn] = useState("");
   const [curationResult, setCurationResult] = useState(null);
+  const [goalResult, setGoalResult] = useState(null);
+  const [goalLoading, setGoalLoading] = useState(false);
+  const [goalError, setGoalError] = useState(null);
+  const [goalCagr, setGoalCagr] = useState("14");
+  const [goalYrs, setGoalYrs] = useState("10");
   const [selectedArch, setSelectedArch] = useState(null);
   const [bStep, setBStep] = useState(0);
   const [bAns, setBAns] = useState({});
@@ -3032,6 +3044,7 @@ useEffect(() => {
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.04)" }} onClick={() => { handleQuizReset(); setQuizModal(true); }}>{tr("🎯 Find My Risk Profile", HI_HERO.btnRisk)}</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.08)", border:"1px solid rgba(212,175,55,0.25)" }} onClick={() => { setAdvisorMessages([]); setAdvisorInput(""); setScreen("advisor"); }}>💬 Guldasta Advisor — Ask anything about Indian MF</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(99,179,237,0.06)", border:"1px solid rgba(99,179,237,0.3)", color:"#63B3ED" }} onClick={() => { setFiSearch(''); setFiResults([]); setFiAnalysis(null); setFiError(''); setScreen("fund_intel"); }}>🔬 Fund Intelligence — Deep-analyse any mutual fund</button>
+          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.1)", border:"1px solid rgba(212,175,55,0.4)", color:G.gold, fontWeight:700 }} onClick={() => { setGoalResult(null); setGoalError(null); setScreen("goal_bouquet"); }}>🎯 Build for My Goal — One bouquet built for your exact target</button>
           <p className="note">{lang === 'hi' ? HI_HERO.note : "Research & education only · Not investment advice · Past performance does not guarantee future returns\nAll fund data sourced from AMFI · No commission earned on any recommendation · fundguldasta.com"}</p>
         </div>
       </div>
@@ -4370,6 +4383,203 @@ useEffect(() => {
       </div>
     </>
   );
+
+  if (screen === "goal_bouquet") {
+    const handleGoalBuild = async () => {
+      const h = parseInt(goalYrs, 10);
+      const c = parseFloat(goalCagr);
+      if (!h || !c || h < 1 || h > 30 || c < 5 || c > 30) {
+        setGoalError("Please enter a valid CAGR (5–30%) and horizon (1–30 years).");
+        return;
+      }
+      setGoalLoading(true);
+      setGoalError(null);
+      setGoalResult(null);
+      try {
+        const r = await curateGoalBouquet(h, c);
+        if (r) setGoalResult(r);
+        else setGoalError("Goal Bouquet scoring data is not yet ready. Please try again later.");
+      } catch (e) {
+        const msg = e?.message || "";
+        if (msg.includes("503") || msg.toLowerCase().includes("not yet ready")) {
+          setGoalError("Scoring data is being prepared (bulk scoring in progress). Please try again in a few minutes.");
+        } else {
+          setGoalError("Failed to build bouquet. Please try again.");
+        }
+      } finally {
+        setGoalLoading(false);
+      }
+    };
+
+    const scoreCol = (s) => s >= 80 ? '#27AE78' : s >= 65 ? '#F0A500' : '#E05555';
+
+    return (
+      <>
+        <nav style={{ background: "#0a0a0a", borderBottom: "1px solid rgba(212,175,55,0.15)", padding: "14px 24px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <span style={{ fontFamily: "Cormorant Garamond,serif", fontSize: 20, color: G.gold, letterSpacing: 1 }}>FundGuldasta</span>
+          <button onClick={() => setScreen("hero")} style={{ background: "none", border: "1px solid rgba(212,175,55,0.3)", color: G.gold, borderRadius: 6, padding: "6px 16px", cursor: "pointer", fontSize: 13 }}>← Back</button>
+        </nav>
+        <div style={{ maxWidth: 820, margin: "0 auto", padding: "32px 20px" }}>
+          <div style={{ marginBottom: 28 }}>
+            <div style={{ fontFamily: "Cormorant Garamond,serif", fontSize: 28, color: G.ivory, marginBottom: 6 }}>Goal Bouquet</div>
+            <div style={{ color: G.mist, fontSize: 14 }}>A bespoke 5-fund bouquet built for your exact CAGR target — selected from the full eligible universe of {goalResult ? goalResult.universe_size : "271"} scored funds.</div>
+          </div>
+
+          <div style={{ background: "rgba(212,175,55,0.06)", border: "1px solid rgba(212,175,55,0.2)", borderRadius: 12, padding: "24px 28px", marginBottom: 28 }}>
+            <div style={{ display: "flex", gap: 20, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <div>
+                <div style={{ color: G.mist, fontSize: 12, marginBottom: 6 }}>Target CAGR (%)</div>
+                <input
+                  type="number" min="5" max="30" step="1"
+                  value={goalCagr}
+                  onChange={e => setGoalCagr(e.target.value)}
+                  style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(212,175,55,0.3)", borderRadius: 8, color: G.gold, fontSize: 22, fontFamily: "JetBrains Mono,monospace", padding: "10px 16px", width: 110, outline: "none" }}
+                />
+              </div>
+              <div>
+                <div style={{ color: G.mist, fontSize: 12, marginBottom: 6 }}>Investment Horizon (years)</div>
+                <input
+                  type="number" min="1" max="30" step="1"
+                  value={goalYrs}
+                  onChange={e => setGoalYrs(e.target.value)}
+                  style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(212,175,55,0.3)", borderRadius: 8, color: G.gold, fontSize: 22, fontFamily: "JetBrains Mono,monospace", padding: "10px 16px", width: 110, outline: "none" }}
+                />
+              </div>
+              <button
+                onClick={handleGoalBuild}
+                disabled={goalLoading}
+                style={{ background: goalLoading ? "rgba(212,175,55,0.2)" : G.gold, color: "#0a0a0a", fontWeight: 700, fontSize: 15, border: "none", borderRadius: 8, padding: "12px 28px", cursor: goalLoading ? "default" : "pointer", whiteSpace: "nowrap" }}
+              >
+                {goalLoading ? "Building…" : "Build My Bouquet"}
+              </button>
+            </div>
+            {goalError && (
+              <div style={{ marginTop: 16, color: "#F0A500", fontSize: 13, background: "rgba(240,165,0,0.07)", border: "1px solid rgba(240,165,0,0.3)", borderRadius: 8, padding: "10px 14px" }}>{goalError}</div>
+            )}
+          </div>
+
+          {goalResult && (() => {
+            const res = goalResult;
+            const adv = res.advisory || {};
+            const profileColors = { conservative: '#27AE78', moderate: '#63B3ED', growth: '#F0A500', aggressive: '#E05555' };
+            const profileColor = profileColors[res.risk_profile] || G.gold;
+            const periods = res.metrics?.periods || {};
+
+            return (
+              <div>
+                {adv.category && adv.category !== 'realistic' && (
+                  <div style={{ background: "rgba(240,165,0,0.08)", border: "1px solid rgba(240,165,0,0.4)", borderRadius: 10, padding: "12px 18px", marginBottom: 20, color: "#F0A500", fontSize: 13 }}>
+                    ⚠ {adv.message} {adv.realistic_range && <span style={{ color: G.mist }}>(Realistic range for {res.horizon_years}yr: {adv.realistic_range})</span>}
+                  </div>
+                )}
+
+                <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(212,175,55,0.15)", borderRadius: 12, padding: "20px 24px", marginBottom: 24 }}>
+                  <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
+                    <div>
+                      <div style={{ color: G.mist, fontSize: 11 }}>Risk Profile</div>
+                      <div style={{ color: profileColor, fontWeight: 700, fontSize: 16, textTransform: "capitalize" }}>{res.risk_profile}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: G.mist, fontSize: 11 }}>Target CAGR</div>
+                      <div style={{ color: G.gold, fontWeight: 700, fontSize: 16, fontFamily: "JetBrains Mono,monospace" }}>{res.target_cagr}%</div>
+                    </div>
+                    <div>
+                      <div style={{ color: G.mist, fontSize: 11 }}>Horizon</div>
+                      <div style={{ color: G.gold, fontWeight: 700, fontSize: 16, fontFamily: "JetBrains Mono,monospace" }}>{res.horizon_years}yr</div>
+                    </div>
+                    <div>
+                      <div style={{ color: G.mist, fontSize: 11 }}>Avg Fund Score</div>
+                      <div style={{ color: scoreCol(res.avg_fund_score), fontWeight: 700, fontSize: 16 }}>{res.avg_fund_score}/100</div>
+                    </div>
+                    <div>
+                      <div style={{ color: G.mist, fontSize: 11 }}>Categories</div>
+                      <div style={{ color: G.ivory, fontWeight: 700, fontSize: 16 }}>{res.category_count}</div>
+                    </div>
+                    <div>
+                      <div style={{ color: G.mist, fontSize: 11 }}>Universe Scored</div>
+                      <div style={{ color: G.ivory, fontSize: 14 }}>{res.universe_size} funds</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 28 }}>
+                  {(res.funds || []).map((fund, idx) => (
+                    <div key={fund.scheme_code} style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(212,175,55,0.12)", borderRadius: 10, padding: "16px 20px", display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
+                      <div style={{ minWidth: 54, textAlign: "center" }}>
+                        <div style={{ color: G.gold, fontWeight: 700, fontSize: 20, fontFamily: "JetBrains Mono,monospace" }}>{fund.weight}%</div>
+                        <div style={{ color: G.mist, fontSize: 10 }}>weight</div>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 180 }}>
+                        <div style={{ color: G.ivory, fontWeight: 600, fontSize: 14 }}>{fund.name}</div>
+                        <div style={{ color: G.mist, fontSize: 12, marginTop: 2 }}>{fund.amc} · <span style={{ color: G.slate }}>{fund.category}</span></div>
+                      </div>
+                      <div style={{ display: "flex", gap: 18, flexWrap: "wrap" }}>
+                        <div style={{ textAlign: "center" }}>
+                          <div style={{ color: scoreCol(fund.fund_score), fontWeight: 700, fontSize: 16 }}>{fund.fund_score}</div>
+                          <div style={{ color: G.mist, fontSize: 10 }}>score</div>
+                        </div>
+                        {fund.rolling_mean_cagr != null && (
+                          <div style={{ textAlign: "center" }}>
+                            <div style={{ color: G.gold, fontWeight: 700, fontSize: 16, fontFamily: "JetBrains Mono,monospace" }}>{fund.rolling_mean_cagr}%</div>
+                            <div style={{ color: G.mist, fontSize: 10 }}>rolling mean CAGR</div>
+                          </div>
+                        )}
+                        {fund.expense_ratio != null && (
+                          <div style={{ textAlign: "center" }}>
+                            <div style={{ color: G.slate, fontSize: 13, fontFamily: "JetBrains Mono,monospace" }}>{fund.expense_ratio}%</div>
+                            <div style={{ color: G.mist, fontSize: 10 }}>expense</div>
+                          </div>
+                        )}
+                        {fund.aum_crores != null && (
+                          <div style={{ textAlign: "center" }}>
+                            <div style={{ color: G.slate, fontSize: 13 }}>₹{fund.aum_crores >= 10000 ? (fund.aum_crores / 1000).toFixed(0) + "K" : fund.aum_crores.toFixed(0)}Cr</div>
+                            <div style={{ color: G.mist, fontSize: 10 }}>AUM</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {Object.keys(periods).length > 0 && (
+                  <div style={{ background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 10, padding: "18px 20px", marginBottom: 20 }}>
+                    <div style={{ color: G.slate, fontSize: 12, marginBottom: 14, textTransform: "uppercase", letterSpacing: 1 }}>Bouquet Performance Metrics</div>
+                    <div style={{ overflowX: "auto" }}>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                        <thead>
+                          <tr>
+                            {["Horizon", "Weighted CAGR", "vs Benchmark", "Max Drawdown", "Sortino", "Consistency"].map(h => (
+                              <th key={h} style={{ color: G.mist, fontWeight: 400, padding: "6px 10px", textAlign: "right", borderBottom: "1px solid rgba(255,255,255,0.06)", whiteSpace: "nowrap" }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {Object.entries(periods).map(([period, m]) => (
+                            <tr key={period}>
+                              <td style={{ color: G.ivory, padding: "8px 10px", textAlign: "right", fontFamily: "JetBrains Mono,monospace" }}>{period}</td>
+                              <td style={{ color: G.gold, padding: "8px 10px", textAlign: "right", fontFamily: "JetBrains Mono,monospace", fontWeight: 700 }}>{m.weighted_cagr != null ? m.weighted_cagr.toFixed(1) + "%" : "—"}</td>
+                              <td style={{ color: m.vs_benchmark > 0 ? '#27AE78' : '#E05555', padding: "8px 10px", textAlign: "right", fontFamily: "JetBrains Mono,monospace" }}>{m.vs_benchmark != null ? (m.vs_benchmark > 0 ? "+" : "") + m.vs_benchmark.toFixed(1) + "%" : "—"}</td>
+                              <td style={{ color: '#E05555', padding: "8px 10px", textAlign: "right", fontFamily: "JetBrains Mono,monospace" }}>{m.max_drawdown != null ? m.max_drawdown.toFixed(1) + "%" : "—"}</td>
+                              <td style={{ color: G.slate, padding: "8px 10px", textAlign: "right", fontFamily: "JetBrains Mono,monospace" }}>{m.sortino != null ? m.sortino.toFixed(2) : "—"}</td>
+                              <td style={{ color: G.slate, padding: "8px 10px", textAlign: "right", fontFamily: "JetBrains Mono,monospace" }}>{m.return_consistency != null ? m.return_consistency.toFixed(0) + "%" : "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                <div style={{ padding: "12px 16px", background: "rgba(255,255,255,0.02)", borderRadius: 10, fontSize: 11, color: G.mist, lineHeight: 1.7 }}>
+                  Research &amp; education only. This bouquet is built algorithmically from scored funds — not investment advice. Historical performance does not guarantee future returns. Direct plans only.
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      </>
+    );
+  }
 
   if (screen === "fund_intel") {
     const FI_BLUE = '#63B3ED';

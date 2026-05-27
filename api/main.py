@@ -885,6 +885,39 @@ def curate_bouquets(request: CurateRequest):
         'horizonRequested':         horizon,
     }
 
+class GoalBouquetRequest(BaseModel):
+    horizon_years: int = 7
+    target_cagr: float = 16.0
+
+
+@app.post("/api/bouquets/goal")
+def curate_goal_bouquet(request: GoalBouquetRequest):
+    """
+    Screen 2: Build a bespoke bouquet from the full 271-fund eligible universe
+    for the user's specific CAGR + horizon goal.
+    Reads from computed_metrics (populated by bulk_scorer).
+    """
+    from engine.goal_bouquet import build_goal_bouquet
+    from engine.cagr_advisor import assess_realism
+
+    horizon = int(request.horizon_years)
+    target = float(request.target_cagr)
+
+    advisory = assess_realism(target, horizon)
+
+    result = build_goal_bouquet(horizon_years=horizon, target_cagr=target)
+
+    if result is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Goal Bouquet scoring data not yet ready. The Fund Intelligence Engine is still scoring the full fund universe. Please try again in a few minutes."
+        )
+
+    result['advisory'] = advisory
+    result['computedAt'] = datetime.now().isoformat()
+    return result
+
+
 @app.get("/api/bouquets/{archetype_id}/metrics")
 def get_metrics(
     archetype_id: str,
