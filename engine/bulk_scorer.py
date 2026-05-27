@@ -29,6 +29,7 @@ from engine.eligibility_filter import run_eligibility_filter
 from engine.fund_scorer import compute_composite_score
 from engine.rolling_returns import compute_rolling_returns, compute_point_to_point_cagr
 from engine.risk_metrics import compute_all_risk_metrics
+from engine.regular_plan_proxy import find_regular_plan
 
 DB_CONFIG = get_db_config()
 
@@ -96,26 +97,30 @@ def score_and_store(fund: dict, horizons: list) -> dict:
     upside = risk.get('upside_capture')
     downside = risk.get('downside_capture')
 
+    # Find regular plan proxy once per fund (used for 15/20/30yr horizons)
+    proxy_code = find_regular_plan(code)
+
     conn = psycopg2.connect(**DB_CONFIG)
     cur = conn.cursor()
     results = {}
 
     for horizon in horizons:
         try:
-            # Rolling return stats for this horizon
-            rolling = compute_rolling_returns(code, horizon)
+            # Rolling return stats — proxy used automatically when direct plan
+            # lacks sufficient history (pre-2013 periods for 15/20/30yr horizons)
+            rolling = compute_rolling_returns(code, horizon, proxy_code=proxy_code)
             if not rolling:
                 results[horizon] = None
                 continue
 
             # Point-to-point CAGR for this horizon
             try:
-                cagr_ptp = compute_point_to_point_cagr(code, horizon)
+                cagr_ptp = compute_point_to_point_cagr(code, horizon, proxy_code=proxy_code)
             except Exception:
                 cagr_ptp = rolling.get('cagr_mean')
 
-            # Composite score (all 6 dimensions)
-            score = compute_composite_score(code, horizon, TARGET_CAGR, category)
+            # Composite score — proxy_code threads into return_consistency only
+            score = compute_composite_score(code, horizon, TARGET_CAGR, category, proxy_code=proxy_code)
             dims = score['dimension_scores']
 
             cur.execute("""
@@ -215,8 +220,11 @@ def run_bulk_scoring(horizons=None, verbose=True):
         tier = fund['evidence_tier']
         cat = fund['sebi_category']
 
+        proxy = find_regular_plan(code)
+        proxy_tag = f"[proxy:{proxy}]" if proxy else ""
+
         if verbose:
-            print(f"[{i:>3}/{len(funds)}] T{tier} {code} {name[:42]:<42}", end=" ", flush=True)
+            print(f"[{i:>3}/{len(funds)}] T{tier} {code} {name[:38]:<38} {proxy_tag:<16}", end=" ", flush=True)
 
         try:
             results = score_and_store(fund, horizons)

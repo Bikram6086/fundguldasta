@@ -45,7 +45,7 @@ WEIGHTS = {
     'forward_context':      10,
 }
 
-def score_return_consistency(scheme_code, horizon_years, target_cagr):
+def score_return_consistency(scheme_code, horizon_years, target_cagr, proxy_code=None):
     """
     Score based on rolling return consistency.
     How reliably has this fund delivered returns near target?
@@ -54,8 +54,10 @@ def score_return_consistency(scheme_code, horizon_years, target_cagr):
     - % of rolling periods beating target CAGR (40%)
     - % of rolling periods beating benchmark (40%)
     - Standard deviation of rolling returns (20% — lower is better)
+
+    proxy_code: regular plan scheme_code used when direct plan lacks history
     """
-    result = compute_rolling_returns(scheme_code, horizon_years)
+    result = compute_rolling_returns(scheme_code, horizon_years, proxy_code=proxy_code)
     if result is None:
         return 30, {}  # Default score if insufficient data
 
@@ -284,16 +286,20 @@ def score_forward_context(scheme_code, category):
         'note': 'Category-level assessment only. Explicitly uncertain. Low weight in composite score.',
     }
 
-def compute_composite_score(scheme_code, horizon_years, target_cagr, category):
+def compute_composite_score(scheme_code, horizon_years, target_cagr, category, proxy_code=None):
     """
     Master scoring function.
     Computes all 6 dimension scores and combines with weights.
     Returns composite score 0-100 with full breakdown.
+
+    proxy_code: regular plan scheme_code; used only for return_consistency
+                (rolling returns) when direct plan lacks long-horizon history.
+                Other 5 dimensions use direct plan data only.
     """
     scores = {}
     details = {}
 
-    s, d = score_return_consistency(scheme_code, horizon_years, target_cagr)
+    s, d = score_return_consistency(scheme_code, horizon_years, target_cagr, proxy_code=proxy_code)
     scores['return_consistency'] = s
     details['return_consistency'] = d
 

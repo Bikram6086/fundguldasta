@@ -92,7 +92,7 @@ def compute_cagr(start_value, end_value, years):
     except Exception:
         return None
 
-def compute_rolling_returns(scheme_code, horizon_years, benchmark_code='NIFTY500'):
+def compute_rolling_returns(scheme_code, horizon_years, benchmark_code='NIFTY500', proxy_code=None):
     """
     Core function. Computes all rolling CAGR windows for a fund.
 
@@ -107,10 +107,14 @@ def compute_rolling_returns(scheme_code, horizon_years, benchmark_code='NIFTY500
         scheme_code:    AMFI scheme code
         horizon_years:  Investment horizon in years (3, 5, 7, 10, 15)
         benchmark_code: Benchmark index for comparison
+        proxy_code:     Optional regular plan scheme_code to use when direct
+                        plan lacks sufficient history (pre-2013 periods)
 
     Returns dict with all rolling return statistics.
     """
     nav_series = get_nav_series(scheme_code)
+    if (nav_series is None or len(nav_series) < horizon_years * 200) and proxy_code:
+        nav_series = get_nav_series(proxy_code)
     if nav_series is None or len(nav_series) < horizon_years * 200:
         return None
 
@@ -204,12 +208,18 @@ def compute_rolling_returns(scheme_code, horizon_years, benchmark_code='NIFTY500
 
     return result
 
-def compute_point_to_point_cagr(scheme_code, years):
+def compute_point_to_point_cagr(scheme_code, years, proxy_code=None):
     """
     Simple point-to-point CAGR for the metrics table display.
     Uses most recent NAV as end point, goes back 'years' from there.
+    Falls back to proxy_code (regular plan) when direct plan lacks history.
     """
     nav_series = get_nav_series(scheme_code)
+    if nav_series is not None:
+        end_date = nav_series.index[-1]
+        needed_start = end_date - pd.Timedelta(days=int(years * 365.25) + 30)
+        if nav_series.index[0] > needed_start and proxy_code:
+            nav_series = get_nav_series(proxy_code)
     if nav_series is None or len(nav_series) < 2:
         return None
 
