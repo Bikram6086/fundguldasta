@@ -736,15 +736,32 @@ def _archetype_relevance(arch_id: str, target_cagr: float):
     elif target_cagr < lo:
         dist = lo - target_cagr
         if dist <= 2:
-            label = "Close Match"
+            label = "Slightly Above Your Goal"
         elif dist <= 5:
-            label = "Above Your Target"
+            label = "Higher Risk Than Needed"
         else:
-            label = "Well Above Target"
+            label = "Much Higher Risk Than Needed"
         return dist, label
-    else:  # target > hi
+    else:  # target > hi — archetype historically below user's goal
         dist = target_cagr - hi
-        return dist, "Below Your Target"
+        if dist <= 2:
+            label = "May Fall Short of Your Goal"
+        else:
+            label = "Unlikely to Reach Your Target"
+        return dist, label
+
+
+def _cagr_buffer(arch_id: str, target_cagr: float) -> str:
+    """Human-readable string showing how far archetype range is from user's target."""
+    lo, hi = ARCHETYPE_CAGR_RANGES[arch_id]
+    buf_lo = lo - target_cagr
+    buf_hi = hi - target_cagr
+    if buf_lo >= 0:
+        return f"+{buf_lo:.0f}% to +{buf_hi:.0f}% above your goal"
+    elif buf_hi < 0:
+        return f"{buf_lo:.0f}% to {buf_hi:.0f}% below your goal"
+    else:
+        return "Your goal sits within this range"
 
 
 @app.post("/api/bouquets/curate")
@@ -843,6 +860,7 @@ def curate_bouquets(request: CurateRequest):
             'realisticAssessment':  advisory,
             'relevanceScore':       round(rel_dist, 1),
             'matchLabel':           rel_label,
+            'cagrBuffer':           _cagr_buffer(arch_id, implied_cagr or 16.0),
         })
 
     if not archetypes:

@@ -5012,6 +5012,17 @@ useEffect(() => {
             );
           })()}
 
+          {curationResult?.impliedCAGR > 0 && (
+            <div style={{ background:"rgba(212,175,55,0.06)", border:"1px solid rgba(212,175,55,0.15)", borderRadius:10, padding:"12px 18px", marginBottom:20, display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+              <div style={{ color:G.mist, fontSize:12 }}>Your goal:</div>
+              <div style={{ color:G.gold, fontSize:14, fontWeight:700, fontFamily:"JetBrains Mono,monospace" }}>{curationResult.impliedCAGR}% CAGR</div>
+              <div style={{ color:G.mist, fontSize:12 }}>over</div>
+              <div style={{ color:G.gold, fontSize:14, fontWeight:700, fontFamily:"JetBrains Mono,monospace" }}>{curationResult.horizonRequested || yrs} years</div>
+              <div style={{ flex:1 }} />
+              <div style={{ color:G.slate, fontSize:11 }}>Archetypes ranked by fit to your goal</div>
+            </div>
+          )}
+
           <div style={{ marginBottom: 26 }}>
             <div className="slbl">Select Your Risk Archetype</div>
             <div className="spec">
@@ -5022,10 +5033,17 @@ useEffect(() => {
                   <div style={{ fontSize: 12, fontWeight: 600, color: G.white, marginBottom: 4 }}>{at.label}</div>
                   <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 18, fontWeight: 500, color: at.color, marginBottom: 4 }}>{at.cagrRange}</div>
                   <div style={{ fontSize: 11, color: G.mist }}>{at.risk} Risk</div>
+                  {at.cagrBuffer && (
+                    <div style={{ fontSize: 10, color: at.cagrBuffer.includes('below') ? '#F0A500' : 'rgba(255,255,255,0.3)', marginTop: 3, lineHeight: 1.4 }}>{at.cagrBuffer}</div>
+                  )}
                   {bProf?.archId === at.id && <div style={{ fontSize: 10, fontWeight: 600, color: at.color, marginTop: 6 }}>↑ Suggested for you</div>}
-                  {(at.matchLabel === 'Best Match' || at.matchLabel === 'Closest Match')
-                    ? <div className="match-best">{at.matchLabel}</div>
-                    : at.matchLabel && <div className="match-label">{at.matchLabel}</div>}
+                  {at.matchLabel && (
+                    (at.matchLabel === 'Best Match' || at.matchLabel === 'Closest Match')
+                      ? <div className="match-best">{at.matchLabel}</div>
+                      : (at.matchLabel.includes('Unlikely') || at.matchLabel.includes('Fall Short') || at.matchLabel.includes('Much Higher'))
+                        ? <div className="match-label" style={{ color:'#F0A500', borderColor:'rgba(240,165,0,0.3)', background:'rgba(240,165,0,0.08)' }}>{at.matchLabel}</div>
+                        : <div className="match-label">{at.matchLabel}</div>
+                  )}
                   <div style={{ display:"flex", gap:6, marginTop:8, flexWrap:"wrap" }}>
                     <button onClick={e => { e.stopPropagation(); handleSaveBouquet(at); }}
                       title={savedMsg[at.id] ? "Saved!" : "Save bouquet"}
@@ -5072,9 +5090,16 @@ useEffect(() => {
                         <div style={{ fontSize: 12, fontWeight: 600, color: G.white, marginBottom: 4 }}>{at.label}</div>
                         <div style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 18, fontWeight: 500, color: at.color, marginBottom: 4 }}>{at.cagrRange}</div>
                         <div style={{ fontSize: 11, color: G.mist }}>{at.risk} Risk</div>
-                        {(at.matchLabel === "Best Match" || at.matchLabel === "Closest Match")
-                          ? <div className="match-best">{at.matchLabel}</div>
-                          : at.matchLabel && at.matchLabel !== "Alternative" && <div className="match-label">{at.matchLabel}</div>}
+                        {at.cagrBuffer && (
+                          <div style={{ fontSize: 10, color: at.cagrBuffer.includes('below') ? '#F0A500' : 'rgba(255,255,255,0.3)', marginTop: 3, lineHeight: 1.4 }}>{at.cagrBuffer}</div>
+                        )}
+                        {at.matchLabel && at.matchLabel !== "Alternative" && (
+                          (at.matchLabel === 'Best Match' || at.matchLabel === 'Closest Match')
+                            ? <div className="match-best">{at.matchLabel}</div>
+                            : (at.matchLabel.includes('Unlikely') || at.matchLabel.includes('Fall Short') || at.matchLabel.includes('Much Higher'))
+                              ? <div className="match-label" style={{ color:'#F0A500', borderColor:'rgba(240,165,0,0.3)', background:'rgba(240,165,0,0.08)' }}>{at.matchLabel}</div>
+                              : <div className="match-label">{at.matchLabel}</div>
+                        )}
                         <div style={{ fontSize: 9, color: "rgba(255,255,255,0.2)", marginTop: 5, letterSpacing: ".04em" }}>Alt Round {round.roundNumber}</div>
                       </div>
                     ))}
