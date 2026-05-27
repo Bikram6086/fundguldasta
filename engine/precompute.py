@@ -446,3 +446,57 @@ def run_all_horizons(target_cagr: float = 16.0):
             run_alternative_precomputation(horizon_years=h, target_cagr=target_cagr)
         except Exception as e:
             print(f"  run_all_horizons: skipped {h}yr — {e}")
+
+
+def precompute_goal_bouquets(
+    horizons: list | None = None,
+    cagrs: list | None = None,
+) -> dict:
+    """
+    Pre-compute and cache Goal Bouquet results for common (horizon, cagr) combos.
+    Stores in bouquet_cache using archetype_id = 'goal_h{h}_c{c}'.
+    Safe to run nightly — overwrites stale cache entries.
+    """
+    from engine.goal_bouquet import build_goal_bouquet
+
+    if horizons is None:
+        horizons = [5, 7, 10, 15]
+    if cagrs is None:
+        cagrs = [12, 14, 16, 18, 20]
+
+    total = len(horizons) * len(cagrs)
+    print(f"\n{'='*60}")
+    print(f"GOAL BOUQUET PRECOMPUTE — {total} combinations")
+    print(f"Horizons: {horizons} | CAGR targets: {cagrs}")
+    print(f"Started: {datetime.now()}")
+    print(f"{'='*60}")
+
+    done = 0
+    skipped = 0
+    failed = 0
+
+    for h in horizons:
+        for c in cagrs:
+            label = f"h{h}_c{c}"
+            try:
+                result = build_goal_bouquet(
+                    horizon_years=h,
+                    target_cagr=float(c),
+                    use_cache=False,
+                    store_cache=True,
+                )
+                if result:
+                    done += 1
+                    n = result.get('universe_size', 0)
+                    score = result.get('avg_fund_score', 0)
+                    print(f"  ✅ {label}  universe={n}  avg_score={score}")
+                else:
+                    skipped += 1
+                    print(f"  ⚠️  {label}  skipped — insufficient scored data")
+            except Exception as e:
+                failed += 1
+                print(f"  ❌ {label}  FAILED: {e}")
+
+    print(f"\nGoal bouquet precompute done: {done} cached, {skipped} skipped, {failed} failed")
+    print(f"Completed: {datetime.now()}")
+    return {'done': done, 'skipped': skipped, 'failed': failed}

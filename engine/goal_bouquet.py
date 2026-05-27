@@ -8,56 +8,56 @@ Algorithm:
 1. Load pre-scored funds from computed_metrics for the given horizon
 2. Map CAGR target to a category allocation profile (conservative → aggressive)
 3. Pre-select top candidates per category
-4. Compute correlation matrix for candidates only (~30 funds, not 271)
-5. Select best 5-fund combination: max score, min correlation, category diversity
-6. Assign weights from the allocation profile
-7. Compute bouquet-level metrics
+4. Batch-fetch all candidate NAV series in one query (avoids N×300 round-trips)
+5. Compute correlation matrix using pre-fetched series
+6. Select best 5-fund combination: max score, min correlation, category diversity
+7. Assign weights from the allocation profile
+8. Compute bouquet-level metrics
+9. Cache result in bouquet_cache keyed by (horizon, cagr_bucket)
 
 Why 5 funds: matches the existing archetype structure and is the minimum
 for meaningful diversification across 3+ SEBI categories.
 """
 
+import json
 import psycopg2
 import numpy as np
 import pandas as pd
-from datetime import date
+from datetime import date, datetime, timedelta
 from itertools import combinations
 
 from config.db import get_db_config
-from engine.rolling_returns import get_nav_series, compute_rolling_returns, compute_point_to_point_cagr
+from engine.rolling_returns import compute_rolling_returns, compute_point_to_point_cagr
 from engine.bouquet_builder import compute_bouquet_metrics
 
 DB_CONFIG = get_db_config()
 
-# Maximum pairwise correlation allowed in a bouquet
 MAX_CORRELATION = 0.85
+CACHE_TTL_HOURS = 24
 
-# Category allocation profiles keyed by risk level
-# Each profile defines category → target weight (%)
-# Profile is used to: (a) weight categories during selection, (b) assign fund weights
 ALLOCATION_PROFILES = {
-    'conservative': {   # CAGR target ≤ 13%
+    'conservative': {
         'Large Cap':          30,
         'Flexi Cap':          25,
         'Balanced Advantage': 20,
         'Mid Cap':            15,
         'Multi Cap':          10,
     },
-    'moderate': {       # CAGR target 14–16%
+    'moderate': {
         'Large Cap':          25,
         'Flexi Cap':          20,
         'Mid Cap':            25,
         'Large & Mid Cap':    15,
         'Small Cap':          15,
     },
-    'growth': {         # CAGR target 17–19%
+    'growth': {
         'Flexi Cap':          20,
         'Mid Cap':            30,
         'Large Cap':          15,
         'Small Cap':          25,
         'Multi Cap':          10,
     },
-    'aggressive': {     # CAGR target 20%+
+    'aggressive': {
         'Mid Cap':            25,
         'Small Cap':          35,
         'Flexi Cap':          20,
@@ -66,7 +66,6 @@ ALLOCATION_PROFILES = {
     },
 }
 
-# Fallback category order when a profile category has no qualifying fund
 FALLBACK_CATEGORIES = [
     'Flexi Cap', 'Large Cap', 'Mid Cap', 'Small Cap', 'Multi Cap',
     'Large & Mid Cap', 'ELSS', 'Focused', 'Value', 'Contra',
@@ -85,11 +84,68 @@ def _get_risk_profile(target_cagr: float) -> str:
         return 'aggressive'
 
 
+def _cache_key(horizon_years: int, target_cagr: float) -> str:
+    return f"goal_h{horizon_years}_c{int(round(target_cagr))}"
+
+
+def _get_from_cache(horizon_years: int, target_cagr: float) -> dict | None:
+    """Return cached goal bouquet if fresh (< CACHE_TTL_HOURS old), else None."""
+    arch_id = _cache_key(horizon_years, target_cagr)
+    cutoff = datetime.utcnow() - timedelta(hours=CACHE_TTL_HOURS)
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT funds_json, created_at
+            FROM bouquet_cache
+            WHERE archetype_id = %s
+              AND is_active = TRUE
+            ORDER BY created_at DESC
+            LIMIT 1
+        """, (arch_id,))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        if row and row[1] and row[1] > cutoff:
+            return json.loads(row[0])
+    except Exception:
+        pass
+    return None
+
+
+def _store_in_cache(result: dict, horizon_years: int, target_cagr: float) -> None:
+    """Store goal bouquet result in bouquet_cache."""
+    arch_id = _cache_key(horizon_years, target_cagr)
+    try:
+        conn = psycopg2.connect(**DB_CONFIG)
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO bouquet_cache (
+                archetype_id, horizon_years, target_cagr, computation_date,
+                funds_json, metrics_json, confidence_json, stress_test_json,
+                overlap_json, methodology_json, devils_json, comparator_json,
+                is_active
+            ) VALUES (%s, %s, %s, CURRENT_DATE, %s, %s, %s, %s, %s, %s, %s, %s, TRUE)
+            ON CONFLICT (archetype_id, horizon_years, computation_date)
+            DO UPDATE SET
+                funds_json  = EXCLUDED.funds_json,
+                metrics_json = EXCLUDED.metrics_json,
+                is_active   = TRUE
+        """, (
+            arch_id, horizon_years, float(round(target_cagr)),
+            json.dumps(result),
+            json.dumps({}),
+            json.dumps({}), json.dumps({}), json.dumps({}),
+            json.dumps([]), json.dumps([]), json.dumps({}),
+        ))
+        conn.commit()
+        cur.close()
+        conn.close()
+    except Exception as e:
+        print(f"[goal_bouquet] cache store failed ({arch_id}): {e}")
+
+
 def _load_scored_funds(horizon_years: int) -> list[dict]:
-    """
-    Load all funds scored for this horizon from computed_metrics.
-    Returns list sorted by fund_score DESC.
-    """
     conn = psycopg2.connect(**DB_CONFIG)
     cur = conn.cursor()
     cur.execute("""
@@ -148,10 +204,6 @@ def _load_scored_funds(horizon_years: int) -> list[dict]:
 
 
 def _select_candidates(scored_funds: list, profile: dict, top_n: int = 5) -> list:
-    """
-    Select top-N candidates per category from the allocation profile.
-    Returns a flat list of candidate funds.
-    """
     by_category = {}
     for f in scored_funds:
         cat = f['category']
@@ -162,14 +214,12 @@ def _select_candidates(scored_funds: list, profile: dict, top_n: int = 5) -> lis
     candidates = []
     seen_codes = set()
 
-    # First pass: pick top-N from each profile category
     for cat in profile:
         for fund in by_category.get(cat, [])[:top_n]:
             if fund['scheme_code'] not in seen_codes:
                 candidates.append(fund)
                 seen_codes.add(fund['scheme_code'])
 
-    # Second pass: if we have < 15 candidates, fill from fallback categories
     if len(candidates) < 15:
         for cat in FALLBACK_CATEGORIES:
             if cat in profile:
@@ -184,60 +234,85 @@ def _select_candidates(scored_funds: list, profile: dict, top_n: int = 5) -> lis
     return candidates
 
 
-def _compute_correlation(code1: str, code2: str, years: int = 5) -> float:
-    """Return pairwise return correlation (last N years). Defaults to 0.7 on error."""
+def _fetch_nav_batch(codes: list, years: int = 5) -> dict:
+    """
+    Batch-fetch recent NAV series for all candidate funds in ONE query.
+    Returns {scheme_code: pd.Series}. Dramatically faster than per-fund queries.
+    """
+    if not codes:
+        return {}
+    cutoff = date.today() - timedelta(days=int(years * 365.25) + 30)
     try:
-        nav1 = get_nav_series(code1)
-        nav2 = get_nav_series(code2)
-        if nav1 is None or nav2 is None:
-            return 0.7
-        cutoff = min(nav1.index[-1], nav2.index[-1]) - pd.Timedelta(days=int(years * 365.25))
-        nav1 = nav1[nav1.index >= cutoff]
-        nav2 = nav2[nav2.index >= cutoff]
-        ret1 = nav1.pct_change().dropna()
-        ret2 = nav2.pct_change().dropna()
-        common = ret1.index.intersection(ret2.index)
+        conn = psycopg2.connect(**DB_CONFIG)
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT scheme_code, nav_date, nav_value
+            FROM nav_data
+            WHERE scheme_code = ANY(%s)
+              AND nav_date >= %s
+            ORDER BY scheme_code, nav_date ASC
+        """, (codes, cutoff))
+        rows = cur.fetchall()
+        cur.close()
+        conn.close()
+    except Exception:
+        return {}
+
+    nav_map: dict = {}
+    for code, nav_date, nav_value in rows:
+        code = str(code)
+        if code not in nav_map:
+            nav_map[code] = ([], [])
+        nav_map[code][0].append(nav_date)
+        nav_map[code][1].append(float(nav_value))
+
+    result = {}
+    for code, (dates, values) in nav_map.items():
+        result[code] = pd.Series(values, index=pd.DatetimeIndex(dates))
+
+    return result
+
+
+def _compute_correlation_from_series(s1: pd.Series, s2: pd.Series) -> float:
+    """Compute correlation from pre-fetched NAV series."""
+    try:
+        r1 = s1.pct_change().dropna()
+        r2 = s2.pct_change().dropna()
+        common = r1.index.intersection(r2.index)
         if len(common) < 100:
             return 0.7
-        return round(float(ret1[common].corr(ret2[common])), 4)
+        return round(float(r1[common].corr(r2[common])), 4)
     except Exception:
         return 0.7
 
 
-def _build_correlation_matrix(candidates: list) -> dict:
-    """Build pairwise correlation matrix for candidate funds."""
+def _build_correlation_matrix(candidates: list, nav_cache: dict) -> dict:
+    """Build pairwise correlation matrix using pre-fetched NAV series."""
     codes = [f['scheme_code'] for f in candidates]
     matrix = {}
     for i, c1 in enumerate(codes):
         for c2 in codes[i + 1:]:
-            corr = _compute_correlation(c1, c2)
+            s1 = nav_cache.get(str(c1))
+            s2 = nav_cache.get(str(c2))
+            if s1 is None or s2 is None:
+                corr = 0.7
+            else:
+                corr = _compute_correlation_from_series(s1, s2)
             matrix[(c1, c2)] = corr
             matrix[(c2, c1)] = corr
     return matrix
 
 
 def _combination_score(funds: list, corr_matrix: dict, profile: dict) -> float:
-    """
-    Score a fund combination.
-    Penalises high correlation and rewards category diversity.
-    """
-    # Average fund score
     avg_score = np.mean([f['fund_score'] for f in funds])
-
-    # Correlation penalty: average pairwise correlation
     codes = [f['scheme_code'] for f in funds]
     pairs = [(c1, c2) for i, c1 in enumerate(codes) for c2 in codes[i + 1:]]
     avg_corr = np.mean([corr_matrix.get((c1, c2), 0.7) for c1, c2 in pairs]) if pairs else 0
-
-    # Category diversity bonus: more unique categories = better
     unique_cats = len(set(f['category'] for f in funds))
     diversity_bonus = (unique_cats - 1) * 2
-
-    # Profile alignment: how many funds match the target allocation profile
     profile_cats = set(profile.keys())
     aligned = sum(1 for f in funds if f['category'] in profile_cats)
     alignment_bonus = aligned * 1.5
-
     return avg_score - (avg_corr * 15) + diversity_bonus + alignment_bonus
 
 
@@ -251,10 +326,6 @@ def _has_high_correlation(funds: list, corr_matrix: dict) -> bool:
 
 
 def _assign_weights(funds: list, profile: dict) -> list:
-    """
-    Assign weights to selected funds based on allocation profile.
-    Funds in profile categories get their target weights; others share residual.
-    """
     weights = {}
     assigned_weight = 0
     unassigned = []
@@ -267,60 +338,67 @@ def _assign_weights(funds: list, profile: dict) -> list:
         else:
             unassigned.append(f['scheme_code'])
 
-    # If total assigned > 100 (multiple funds in same category), normalise
     if assigned_weight > 0:
         scale = 100 / (assigned_weight + len(unassigned) * 10) if unassigned else 100 / assigned_weight
         weights = {k: round(v * scale) for k, v in weights.items()}
 
-    # Give residual to unassigned funds
     residual = 100 - sum(weights.values())
     for code in unassigned:
         weights[code] = residual // len(unassigned) if unassigned else 0
 
-    # Final normalise to exactly 100
     total = sum(weights.values())
     if total != 100 and funds:
-        # Add/subtract from highest-weighted fund
         max_code = max(weights, key=weights.get)
         weights[max_code] += (100 - total)
 
     return [{'scheme_code': f['scheme_code'], 'weight': weights[f['scheme_code']]} for f in funds]
 
 
-def build_goal_bouquet(horizon_years: int, target_cagr: float) -> dict | None:
+def build_goal_bouquet(
+    horizon_years: int,
+    target_cagr: float,
+    use_cache: bool = True,
+    store_cache: bool = True,
+) -> dict | None:
     """
     Build a bespoke bouquet for the user's specific goal.
+
+    use_cache=True  → return cached result if fresh (default for API)
+    store_cache=True → persist result to bouquet_cache after computation
+    use_cache=False  → force recompute (used by precompute job)
 
     Returns a dict compatible with the existing bouquet format, or None if
     insufficient scored data exists (bulk_scorer not yet run).
     """
-    # Map CAGR to risk profile
+    if use_cache:
+        cached = _get_from_cache(horizon_years, target_cagr)
+        if cached is not None:
+            return cached
+
     risk_profile = _get_risk_profile(target_cagr)
     profile = ALLOCATION_PROFILES[risk_profile]
 
-    # Load all scored funds for this horizon
     scored = _load_scored_funds(horizon_years)
     if len(scored) < 10:
-        return None  # Not enough scored data — bulk_scorer hasn't run yet
+        return None
 
-    # Pre-select candidates (~25-30 funds) — limits correlation matrix size
     candidates = _select_candidates(scored, profile, top_n=5)
     if len(candidates) < 5:
         return None
 
-    # Build correlation matrix for candidates only
-    corr_matrix = _build_correlation_matrix(candidates)
+    # Batch-fetch all candidate NAV series in ONE query
+    codes = [str(f['scheme_code']) for f in candidates]
+    nav_cache = _fetch_nav_batch(codes, years=5)
 
-    # Find best 5-fund combination
+    corr_matrix = _build_correlation_matrix(candidates, nav_cache)
+
     best_combo = None
     best_score = -999
 
     for combo in combinations(candidates, 5):
         combo = list(combo)
-        # Must have at least 3 distinct categories
         if len(set(f['category'] for f in combo)) < 3:
             continue
-        # No highly correlated pairs
         if _has_high_correlation(combo, corr_matrix):
             continue
         sc = _combination_score(combo, corr_matrix, profile)
@@ -328,7 +406,6 @@ def build_goal_bouquet(horizon_years: int, target_cagr: float) -> dict | None:
             best_score = sc
             best_combo = combo
 
-    # Fallback: if no valid 5-fund combo, relax category constraint
     if not best_combo:
         for combo in combinations(candidates, 5):
             combo = list(combo)
@@ -342,51 +419,52 @@ def build_goal_bouquet(horizon_years: int, target_cagr: float) -> dict | None:
     if not best_combo:
         return None
 
-    # Assign weights
     fund_weights_list = _assign_weights(best_combo, profile)
-
-    # Compute bouquet metrics
     fund_weight_tuples = [(fw['scheme_code'], fw['weight']) for fw in fund_weights_list]
     metrics = compute_bouquet_metrics(fund_weight_tuples, horizon_years)
 
-    # Enrich fund data
     funds_out = []
     for fw in fund_weights_list:
         code = fw['scheme_code']
         fund = next(f for f in best_combo if f['scheme_code'] == code)
         funds_out.append({
-            'scheme_code':   code,
-            'name':          fund['scheme_name'],
-            'amc':           fund['amc_name'],
-            'category':      fund['category'],
-            'weight':        fw['weight'],
-            'fund_score':    round(fund['fund_score'], 1),
-            'aum_crores':    fund['aum_crores'],
-            'expense_ratio': fund['expense_ratio'],
+            'scheme_code':       code,
+            'name':              fund['scheme_name'],
+            'amc':               fund['amc_name'],
+            'category':          fund['category'],
+            'weight':            fw['weight'],
+            'fund_score':        round(fund['fund_score'], 1),
+            'aum_crores':        fund['aum_crores'],
+            'expense_ratio':     fund['expense_ratio'],
             'rolling_mean_cagr': round(fund['rolling_mean'], 1) if fund['rolling_mean'] else None,
         })
 
     avg_score = round(np.mean([f['fund_score'] for f in best_combo]), 1)
     unique_cats = len(set(f['category'] for f in best_combo))
 
-    return {
-        'type':            'goal_bouquet',
-        'risk_profile':    risk_profile,
-        'target_cagr':     target_cagr,
-        'horizon_years':   horizon_years,
-        'fund_count':      len(funds_out),
-        'funds':           funds_out,
-        'metrics':         {'periods': metrics},
-        'avg_fund_score':  avg_score,
-        'category_count':  unique_cats,
-        'universe_size':   len(scored),
-        'generated_at':    date.today().isoformat(),
+    result = {
+        'type':           'goal_bouquet',
+        'risk_profile':   risk_profile,
+        'target_cagr':    target_cagr,
+        'horizon_years':  horizon_years,
+        'fund_count':     len(funds_out),
+        'funds':          funds_out,
+        'metrics':        {'periods': metrics},
+        'avg_fund_score': avg_score,
+        'category_count': unique_cats,
+        'universe_size':  len(scored),
+        'generated_at':   date.today().isoformat(),
     }
+
+    if store_cache:
+        _store_in_cache(result, horizon_years, target_cagr)
+
+    return result
 
 
 if __name__ == "__main__":
     print("Testing Goal Bouquet Engine...")
-    result = build_goal_bouquet(horizon_years=7, target_cagr=14)
+    result = build_goal_bouquet(horizon_years=7, target_cagr=14, use_cache=False)
     if result:
         print(f"\nGoal Bouquet — 14% CAGR / 7yr:")
         print(f"  Risk profile: {result['risk_profile']}")
