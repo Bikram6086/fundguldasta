@@ -32,7 +32,9 @@ from engine.bouquet_builder import compute_bouquet_metrics
 
 DB_CONFIG = get_db_config()
 
-MAX_CORRELATION = 0.85
+# Indian equity funds correlate at 0.85–0.98 (structural, not a bug — see CLAUDE.md)
+# Using CORRELATION_HARD_REJECT: only reject funds that are essentially identical
+MAX_CORRELATION = 0.93
 CACHE_TTL_HOURS = 24
 
 ALLOCATION_PROFILES = {
