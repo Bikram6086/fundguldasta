@@ -37,6 +37,9 @@ DB_CONFIG = get_db_config()
 MAX_CORRELATION = 0.93
 CACHE_TTL_HOURS = 24
 
+# Horizons for which bulk_scorer populates computed_metrics — descending priority for fallback
+SCORED_HORIZONS = [30, 25, 20, 15, 10, 7, 5]
+
 ALLOCATION_PROFILES = {
     'conservative': {
         'Large Cap':          30,
@@ -203,6 +206,26 @@ def _load_scored_funds(horizon_years: int) -> list[dict]:
 
     funds.sort(key=lambda x: x['fund_score'], reverse=True)
     return funds
+
+
+def _load_scored_funds_with_fallback(horizon_years: int) -> tuple[list, int]:
+    """
+    Try to load scored funds for the requested horizon.
+    If fewer than 10 funds exist (e.g. 25yr/30yr requests for young investors),
+    step down to the next available scored horizon with sufficient data.
+    Returns (funds, actual_horizon_used).
+    """
+    # Try requested horizon and all shorter horizons in descending order
+    candidates = sorted([h for h in SCORED_HORIZONS if h <= horizon_years], reverse=True)
+    if not candidates:
+        candidates = [5]
+
+    for h in candidates:
+        funds = _load_scored_funds(h)
+        if len(funds) >= 10:
+            return funds, h
+
+    return [], horizon_years
 
 
 def _select_candidates(scored_funds: list, profile: dict, top_n: int = 5) -> list:
@@ -380,9 +403,19 @@ def build_goal_bouquet(
     risk_profile = _get_risk_profile(target_cagr)
     profile = ALLOCATION_PROFILES[risk_profile]
 
-    scored = _load_scored_funds(horizon_years)
+    scored, actual_horizon = _load_scored_funds_with_fallback(horizon_years)
     if len(scored) < 10:
         return None
+
+    # Note if we had to fall back to a shorter scoring horizon
+    horizon_note = None
+    if actual_horizon < horizon_years:
+        horizon_note = (
+            f"Your {horizon_years}-year horizon is scored using {actual_horizon}-year rolling data "
+            f"— the deepest reliable analysis available in Indian MF history. "
+            f"For long-horizon investors, consistency across {actual_horizon}-year cycles "
+            f"is the most predictive measure of future quality."
+        )
 
     candidates = _select_candidates(scored, profile, top_n=5)
     if len(candidates) < 5:
@@ -445,17 +478,19 @@ def build_goal_bouquet(
     unique_cats = len(set(f['category'] for f in best_combo))
 
     result = {
-        'type':           'goal_bouquet',
-        'risk_profile':   risk_profile,
-        'target_cagr':    target_cagr,
-        'horizon_years':  horizon_years,
-        'fund_count':     len(funds_out),
-        'funds':          funds_out,
-        'metrics':        {'periods': metrics},
-        'avg_fund_score': avg_score,
-        'category_count': unique_cats,
-        'universe_size':  len(scored),
-        'generated_at':   date.today().isoformat(),
+        'type':                    'goal_bouquet',
+        'risk_profile':            risk_profile,
+        'target_cagr':             target_cagr,
+        'horizon_years':           horizon_years,
+        'actual_scoring_horizon':  actual_horizon,
+        'horizon_note':            horizon_note,
+        'fund_count':              len(funds_out),
+        'funds':                   funds_out,
+        'metrics':                 {'periods': metrics},
+        'avg_fund_score':          avg_score,
+        'category_count':          unique_cats,
+        'universe_size':           len(scored),
+        'generated_at':            date.today().isoformat(),
     }
 
     if store_cache:

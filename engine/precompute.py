@@ -460,7 +460,7 @@ def precompute_goal_bouquets(
     from engine.goal_bouquet import build_goal_bouquet
 
     if horizons is None:
-        horizons = [5, 7, 10, 15]
+        horizons = [5, 7, 10, 15, 20, 25, 30]
     if cagrs is None:
         cagrs = [12, 14, 16, 18, 20]
 

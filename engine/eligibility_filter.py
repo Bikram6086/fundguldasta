@@ -123,6 +123,28 @@ def get_all_direct_equity_funds():
 
     return funds
 
+def _get_regular_plan_aum(direct_scheme_code: str) -> float | None:
+    """
+    Find this direct plan's regular plan counterpart and return its AUM.
+    Used to qualify direct plans where the strategy is proven at scale
+    through the regular plan, even if the direct variant is still growing.
+    """
+    try:
+        from engine.regular_plan_proxy import find_regular_plan
+        regular_code = find_regular_plan(str(direct_scheme_code))
+        if not regular_code:
+            return None
+        conn = psycopg2.connect(**DB_CONFIG)
+        cur = conn.cursor()
+        cur.execute("SELECT aum_crores FROM fund_metadata WHERE scheme_code = %s", (str(regular_code),))
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+        return float(row[0]) if row and row[0] else None
+    except Exception:
+        return None
+
+
 def check_expense_ratio(fund):
     """Pass if expense ratio is below ceiling or unknown."""
     if fund['expense_ratio'] is None:
@@ -131,13 +153,21 @@ def check_expense_ratio(fund):
         return False, f"Expense ratio {fund['expense_ratio']}% exceeds {MAX_EXPENSE_RATIO}% ceiling"
     return True, f"Expense ratio {fund['expense_ratio']}% within limit"
 
+
 def check_aum(fund):
-    """Pass if AUM is above floor or unknown."""
+    """
+    Pass if direct plan AUM is above floor, OR if the regular plan counterpart
+    has AUM ≥ floor (strategy proven at scale, investors still migrating to direct).
+    """
     if fund['aum_crores'] is None:
         return True, "AUM unknown — allowing pending verification"
-    if fund['aum_crores'] < MIN_AUM_CRORES:
-        return False, f"AUM Rs{fund['aum_crores']}Cr below Rs{MIN_AUM_CRORES}Cr minimum"
-    return True, f"AUM Rs{fund['aum_crores']}Cr above minimum"
+    if fund['aum_crores'] >= MIN_AUM_CRORES:
+        return True, f"Direct AUM ₹{fund['aum_crores']:.0f}Cr qualifies"
+    # Direct plan AUM below threshold — check strategy scale via regular plan
+    regular_aum = _get_regular_plan_aum(fund['scheme_code'])
+    if regular_aum and regular_aum >= MIN_AUM_CRORES:
+        return True, f"Direct AUM ₹{fund['aum_crores']:.0f}Cr + regular plan ₹{regular_aum:.0f}Cr (strategy proven at scale)"
+    return False, f"AUM ₹{fund['aum_crores']:.0f}Cr below ₹{MIN_AUM_CRORES}Cr minimum"
 
 def check_nav_history(fund):
     """Check if fund has sufficient NAV history."""

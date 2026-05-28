@@ -4532,6 +4532,12 @@ useEffect(() => {
                   </div>
                 )}
 
+                {res.horizon_note && (
+                  <div style={{ background: "rgba(99,179,237,0.06)", border: "1px solid rgba(99,179,237,0.3)", borderRadius: 10, padding: "12px 18px", marginBottom: 20, color: "#63B3ED", fontSize: 13 }}>
+                    ℹ {res.horizon_note}
+                  </div>
+                )}
+
                 <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(212,175,55,0.15)", borderRadius: 12, padding: "20px 24px", marginBottom: 24 }}>
                   <div style={{ display: "flex", gap: 24, flexWrap: "wrap", alignItems: "center", marginBottom: 8 }}>
                     <div>
@@ -4629,6 +4635,9 @@ useEffect(() => {
                   </div>
                 )}
 
+                <div style={{ padding: "12px 16px", background: "rgba(255,255,255,0.02)", borderRadius: 10, fontSize: 11, color: G.mist, lineHeight: 1.7, marginBottom: 10 }}>
+                  <strong style={{ color: G.slate }}>Scoring note:</strong> For funds launched post-2013 (when SEBI mandated direct plans), historical analysis uses the pre-existing regular plan NAV data where available — same fund, same manager, same portfolio, only higher expense ratio. The bouquet output always recommends <strong style={{ color: G.slate }}>direct plans only</strong> — you invest in the direct version; the regular plan history informs the quality analysis.
+                </div>
                 <div style={{ padding: "12px 16px", background: "rgba(255,255,255,0.02)", borderRadius: 10, fontSize: 11, color: G.mist, lineHeight: 1.7 }}>
                   Research &amp; education only. This bouquet is built algorithmically from scored funds — not investment advice. Historical performance does not guarantee future returns. Direct plans only.
                 </div>
