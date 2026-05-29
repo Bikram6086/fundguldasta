@@ -1,0 +1,185 @@
+#!/bin/bash
+# FundGuldasta pre-push hook
+# Guards: stale-branch + feature fingerprint + App.js size floor +
+#         test suite + integrity check + React CI build.
+# All must pass. A failure in any blocks the push.
+
+set -e
+cd /home/hpbikram6086/fundguldasta
+source venv/bin/activate
+
+echo ""
+echo "╔══════════════════════════════════════════╗"
+echo "║  FundGuldasta Pre-Push Checks             ║"
+echo "╚══════════════════════════════════════════╝"
+
+# ──────────────────────────────────────────────────────────────
+# GATE 1: Stale-branch guard
+# Blocks pushes from a local branch that hasn't incorporated the
+# latest remote commits. Root cause of the May 2026 incident where
+# a stale clone overwrote newer App.js with an older version.
+# ──────────────────────────────────────────────────────────────
+echo ""
+echo "[ Stale-branch guard... ]"
+git fetch origin main --quiet 2>/dev/null || true
+REMOTE_SHA=$(git rev-parse origin/main 2>/dev/null || echo "")
+if [ -n "$REMOTE_SHA" ]; then
+    if ! git merge-base --is-ancestor "$REMOTE_SHA" HEAD 2>/dev/null; then
+        echo ""
+        echo "✗ STALE BRANCH — push blocked."
+        echo "  Your local branch does not include the latest commits from origin/main."
+        echo "  Someone pushed after your last pull. Run:"
+        echo ""
+        echo "    git pull --rebase origin main"
+        echo ""
+        echo "  Then re-commit your changes and push again."
+        exit 1
+    fi
+fi
+echo "  Stale-branch check: OK (origin/main is an ancestor of HEAD)"
+
+# ──────────────────────────────────────────────────────────────
+# GATE 2: App.js feature fingerprint guard
+# Verifies that every critical feature string exists in App.js.
+# Catches accidental pushes of older App.js versions that are
+# missing screens or features built in previous sessions.
+# Each check_feature call: check_feature "label" "grep_pattern"
+# ──────────────────────────────────────────────────────────────
+echo ""
+echo "[ Feature fingerprint guard (App.js)... ]"
+APPJS="frontend/fundguldasta-ui/src/App.js"
+FP_FAIL=0
+FP_TOTAL=0
+
+check_feature() {
+    local label="$1"
+    local pattern="$2"
+    FP_TOTAL=$((FP_TOTAL + 1))
+    if ! grep -qF "$pattern" "$APPJS" 2>/dev/null; then
+        echo "  ✗ MISSING: $label  (marker: $pattern)"
+        FP_FAIL=$((FP_FAIL + 1))
+    fi
+}
+
+# Core screens — these must always be present
+check_feature "Investment Calculators screen"        "Investment Calculators"
+check_feature "Guldasta Advisor screen"              "Guldasta Advisor"
+check_feature "Fund Intelligence screen"             "Fund Intelligence"
+check_feature "Goal Bouquet screen"                  "goal_bouquet"
+check_feature "Build for My Goal button"             "Build for My Goal"
+check_feature "Goal Bouquet API function"            "curateGoalBouquet"
+check_feature "SIP Calculator state"                 "sipResult"
+check_feature "Retirement Calculator state"          "retAccumCagr"
+check_feature "Goal Planner UI"                      "multi-goal plan"
+check_feature "CAS portfolio import endpoint"        "import-cas"
+check_feature "Auth login endpoint"                  "api/auth/login"
+check_feature "Hindi language toggle"                "setLang"
+check_feature "CAGR realism advisory state"          "cagrAdvisory"
+check_feature "Bouquet customise state"              "customizeOpen"
+check_feature "Fund replacement / customize API"     "api/bouquets/customize"
+check_feature "Build Your Own Bouquet screen"        "custom_builder"
+check_feature "Backtest API call"                    "backtest"
+check_feature "Overlap / correlation display"        "avgCorrelation"
+check_feature "Confidence score display"             "confidence"
+check_feature "Stress test display"                  "stressTest"
+
+if [ "$FP_FAIL" -gt 0 ]; then
+    echo ""
+    echo "✗ FEATURE FINGERPRINT FAILED — push blocked ($FP_FAIL/$FP_TOTAL features missing)."
+    echo "  This usually means App.js was overwritten with an older version."
+    echo "  Run: git diff HEAD~1 -- frontend/fundguldasta-ui/src/App.js"
+    echo "  to see what changed, then restore the missing features."
+    exit 1
+fi
+echo "  Feature fingerprint: OK ($FP_TOTAL/$FP_TOTAL features present)"
+
+# ──────────────────────────────────────────────────────────────
+# GATE 3: App.js minimum size floor
+# App.js is the single-file SPA — it should never shrink by more
+# than 5% in one commit. A dramatic shrink is a strong signal
+# that the file was replaced with an older or truncated version.
+# ──────────────────────────────────────────────────────────────
+echo ""
+echo "[ App.js size floor... ]"
+APPJS_LINES=$(wc -l < "$APPJS")
+MIN_LINES=4000   # App.js is ~4600 lines as of May 2026; floor gives 13% headroom
+if [ "$APPJS_LINES" -lt "$MIN_LINES" ]; then
+    echo ""
+    echo "✗ APP.JS TOO SHORT — push blocked."
+    echo "  App.js has $APPJS_LINES lines but minimum is $MIN_LINES."
+    echo "  The file may have been accidentally overwritten or truncated."
+    echo "  Run: git diff HEAD~1 -- frontend/fundguldasta-ui/src/App.js | wc -l"
+    echo "  to inspect the change."
+    exit 1
+fi
+echo "  App.js size: OK ($APPJS_LINES lines ≥ $MIN_LINES minimum)"
+
+# 1. Run test suite
+echo ""
+echo "[ Running test suite... ]"
+python3 -m pytest tests/ -x -q --tb=short 2>&1
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "✗ Tests FAILED — push blocked."
+    echo "  Fix failing tests before pushing."
+    exit 1
+fi
+
+# 2. Static analysis — Railway-incompatible hardcoded paths
+# Excludes: run_*.py (local runner scripts), __main__ blocks (not imported),
+#           scripts/ and tests/ (never deployed to Railway)
+echo ""
+echo "[ Static analysis: Railway-compatibility... ]"
+BAD_PATHS=$(grep -rn \
+    -e "expanduser.*fundguldasta" \
+    -e "venv/bin/python" \
+    -e "~/fundguldasta" \
+    -e "/home/hpbikram6086" \
+    api/ data/ engine/ config/ \
+    --include="*.py" \
+    --exclude="run_*.py" \
+    --exclude-dir=__pycache__ \
+    2>/dev/null \
+    | grep -v "__main__" \
+    || true)
+if [ -n "$BAD_PATHS" ]; then
+    echo ""
+    echo "✗ Railway-incompatible hardcoded paths found — push blocked."
+    echo "  These paths don't exist on Railway and will silently fail in production:"
+    echo "$BAD_PATHS" | head -20
+    echo ""
+    echo "  Use os.path.dirname(__file__) or direct imports instead."
+    exit 1
+fi
+echo "  Railway path check: OK"
+
+# 3. Run integrity check
+echo ""
+echo "[ Running integrity check... ]"
+python3 scripts/validate_integrity.py 2>&1
+if [ $? -ne 0 ]; then
+    echo ""
+    echo "✗ Integrity check FAILED — push blocked."
+    echo "  Fix data issues before pushing."
+    exit 1
+fi
+
+# 3. React CI build — catches ESLint errors and broken JSX before Vercel sees them
+echo ""
+echo "[ Running frontend CI build... ]"
+cd /home/hpbikram6086/fundguldasta/frontend/fundguldasta-ui
+if ! CI=true npm run build > /tmp/fg_build.log 2>&1; then
+    echo ""
+    echo "✗ Frontend CI build FAILED — push blocked."
+    echo "  Run: cd frontend/fundguldasta-ui && CI=true npm run build"
+    echo "  --- Build output ---"
+    tail -30 /tmp/fg_build.log
+    exit 1
+fi
+cd /home/hpbikram6086/fundguldasta
+echo "  Frontend build: OK"
+
+echo ""
+echo "✓ All checks passed — proceeding with push."
+echo ""
+exit 0
