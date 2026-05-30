@@ -3496,7 +3496,6 @@ useEffect(() => {
                         <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
                           {goalBuckets.map((b,idx) => {
                             if (!b.corpus || !b.years) return null;
-                            const inflAdj = b.corpus * Math.pow(1 + parseFloat(goalInflation)/100, b.years);
                             const realPow = b.corpus / Math.pow(1 + parseFloat(goalInflation)/100, b.years);
                             const shortHorizon = b.years <= 3;
                             return (
