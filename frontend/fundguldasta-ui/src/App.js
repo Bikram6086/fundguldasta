@@ -517,6 +517,7 @@ export default function App() {
   const cbResultsRef = useRef(null);
   const [cbSelectedSwaps, setCbSelectedSwaps] = useState(new Set());
   const [pwaPrompt, setPwaPrompt] = useState(null);
+  const [heroGroupOpen, setHeroGroupOpen] = useState(null);
   const [user, setUser] = useState(null);
   const [authModal, setAuthModal] = useState(false);
   const [authTab, setAuthTab] = useState("login");
@@ -2983,6 +2984,10 @@ useEffect(() => {
             Install App
           </button>
         )}
+        <div style={{ display:'flex', gap:10, flexWrap:'wrap', marginBottom:8, justifyContent:'center' }}>
+          <button className="byob-entry" style={{ marginTop:0, background:"rgba(212,175,55,0.08)", border:"1px solid rgba(212,175,55,0.3)", color:G.gold, fontSize:13, fontWeight:600 }} onClick={() => { setPrevScreen("hero"); setScreen("golden_rules"); }}>📜 Golden Rules of MF Investing</button>
+          <button className="byob-entry" style={{ marginTop:0, background:"rgba(212,175,55,0.04)", border:"1px solid rgba(212,175,55,0.2)", color:G.mist, fontSize:13 }} onClick={() => { handleQuizReset(); setQuizModal(true); }}>🎯 Find My Risk Profile</button>
+        </div>
         {apiError && <div className="warn-box" style={{ maxWidth: 600, marginBottom: 20 }}>⚠️ {apiError}</div>}
         <div className="icard">
           <div className="tabs">
@@ -2992,10 +2997,10 @@ useEffect(() => {
           </div>
           {mode === "return" && (
             <div style={{ marginBottom: 24 }}>
-              <label className="lbl">Target CAGR & investment horizon (any value — we'll show you what it means)</label>
+              <label className="lbl">Target CAGR & investment horizon — <span style={{color:'rgba(212,175,55,0.7)',fontWeight:400}}>realistic range: 10–15% for most horizons</span></label>
               <div className="row">
-                <div className="iw"><input className="inp" type="text" inputMode="numeric" placeholder="16" value={cagr} onChange={e => setCAGR(e.target.value)} /><span className="sfx">% CAGR</span></div>
-                <div className="iw"><input className="inp" type="text" inputMode="numeric" placeholder="7" value={yrs} onChange={e => setYrs(e.target.value)} /><span className="sfx">Years</span></div>
+                <div className="iw"><input className="inp" type="text" inputMode="numeric" placeholder="12" value={cagr} onChange={e => setCAGR(e.target.value)} /><span className="sfx">% CAGR</span></div>
+                <div className="iw"><input className="inp" type="text" inputMode="numeric" placeholder="10" value={yrs} onChange={e => setYrs(e.target.value)} /><span className="sfx">Years</span></div>
               </div>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
                 {[5, 7, 10, 15, 20, 30].map(y => (
@@ -3051,7 +3056,7 @@ useEffect(() => {
               </div>
               {sip && yrs && (
                 <div className="implied" style={{ fontSize: 12 }}>
-                  At 12% → ₹{(parseFloat(sip) * parseFloat(yrs) * 12 * 1.6 / 100000).toFixed(1)}L · At 16% → ₹{(parseFloat(sip) * parseFloat(yrs) * 12 * 2.0 / 100000).toFixed(1)}L · At 20% → ₹{(parseFloat(sip) * parseFloat(yrs) * 12 * 2.5 / 100000).toFixed(1)}L
+                  At 10% → ₹{(parseFloat(sip) * parseFloat(yrs) * 12 * 1.4 / 100000).toFixed(1)}L · At 12% → ₹{(parseFloat(sip) * parseFloat(yrs) * 12 * 1.6 / 100000).toFixed(1)}L · At 15% → ₹{(parseFloat(sip) * parseFloat(yrs) * 12 * 2.0 / 100000).toFixed(1)}L
                 </div>
               )}
             </>
@@ -3072,18 +3077,48 @@ useEffect(() => {
             </div>
           )}
           <button className="btn-p" disabled={!isValid} onClick={handleFind}>{tr("Curate My Bouquets →","मेरे गुलदस्ता तैयार करें →")}</button>
-          <button className="byob-entry" style={{ marginTop: 8 }} onClick={() => setScreen("custom_builder")}>{tr("✎ Build Your Own Bouquet", HI_HERO.btnBYOB)}</button>
-          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.08)" }} onClick={() => setScreen("portfolio")}>{tr("📊 Analyse My Portfolio", HI_HERO.btnPortfolio)}</button>
-          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.06)" }} onClick={() => { setPrevScreen(screen); setCalcPreFill(null); setCalcTab('sip'); setScreen("calculators"); }}>{tr("📐 Investment Calculators", HI_HERO.btnCalc)}</button>
-          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.04)" }} onClick={() => { handleQuizReset(); setQuizModal(true); }}>{tr("🎯 Find My Risk Profile", HI_HERO.btnRisk)}</button>
-          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.08)", border:"1px solid rgba(212,175,55,0.25)" }} onClick={() => { setAdvisorMessages([]); setAdvisorInput(""); setScreen("advisor"); }}>💬 Guldasta Advisor — Ask anything about Indian MF</button>
-          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(99,179,237,0.06)", border:"1px solid rgba(99,179,237,0.3)", color:"#63B3ED" }} onClick={() => { setFiSearch(''); setFiResults([]); setFiAnalysis(null); setFiError(''); setScreen("fund_intel"); }}>🔬 Fund Intelligence — Deep-analyse any mutual fund</button>
-          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.1)", border:"1px solid rgba(212,175,55,0.4)", color:G.gold, fontWeight:700 }} onClick={() => { setGoalResult(null); setGoalError(null); setGoalFromPlanner(null); setScreen("goal_bouquet"); }}>🎯 Build for My Goal — One bouquet built for your exact target</button>
-          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(99,179,237,0.08)", border:"1px solid rgba(99,179,237,0.35)", color:"#63B3ED" }} onClick={() => { setPrevScreen("hero"); setIndexCompare(null); setIndexCompareError(null); setScreen("index_compare"); }}>📊 Index Fund Compare — Track the trackers</button>
-          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(99,179,237,0.05)", border:"1px solid rgba(99,179,237,0.2)", color:"#63B3ED" }} onClick={() => { setPrevScreen("hero"); setCoreSat(null); setCoreSatError(null); setScreen("core_satellite"); }}>🎯 Core-Satellite Bouquet — Index core + active satellite</button>
-          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.1)", color:G.slate, fontSize:13 }} onClick={() => { setPrevScreen("hero"); setScreen("learn-passive-active"); }}>📚 Passive vs Active — The evidence every investor needs</button>
-          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.05)", border:"1px solid rgba(212,175,55,0.2)", color:G.mist, fontSize:13 }} onClick={() => { setPrevScreen("hero"); setScreen("learn-compounding"); }}>🧮 Compounding & Investor Psychology — Why behaviour beats fund selection</button>
-          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.08)", border:"1px solid rgba(212,175,55,0.3)", color:G.gold, fontSize:13, fontWeight:600 }} onClick={() => { setPrevScreen("hero"); setScreen("golden_rules"); }}>📜 Golden Rules of Mutual Fund Investing</button>
+          {/* Standalone: Find My Risk Profile */}
+          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.04)", border:"1px solid rgba(212,175,55,0.2)", color:G.mist }} onClick={() => { handleQuizReset(); setQuizModal(true); }}>{tr("🎯 Find My Risk Profile", HI_HERO.btnRisk)}</button>
+
+          {/* Group: Bouquets & Strategies */}
+          <button className="byob-entry" style={{ marginTop: 8, display:'flex', justifyContent:'space-between', alignItems:'center', background:"rgba(212,175,55,0.07)", border:"1px solid rgba(212,175,55,0.25)" }} onClick={() => setHeroGroupOpen(heroGroupOpen === 'bouquets' ? null : 'bouquets')}>
+            <span>🗂 Bouquets &amp; Strategies</span><span style={{fontSize:11,color:G.slate}}>{heroGroupOpen === 'bouquets' ? '▲' : '▼'}</span>
+          </button>
+          {heroGroupOpen === 'bouquets' && (
+            <div style={{ marginLeft:12, borderLeft:'2px solid rgba(212,175,55,0.2)', paddingLeft:10 }}>
+              <button className="byob-entry" style={{ marginTop:6 }} onClick={() => setScreen("custom_builder")}>{tr("✎ Build Your Own Bouquet", HI_HERO.btnBYOB)}</button>
+              <button className="byob-entry" style={{ marginTop:6, background:"rgba(212,175,55,0.1)", border:"1px solid rgba(212,175,55,0.4)", color:G.gold, fontWeight:700 }} onClick={() => { setGoalResult(null); setGoalError(null); setGoalFromPlanner(null); setScreen("goal_bouquet"); }}>🎯 Build for My Goal — bouquet for your exact target</button>
+              <button className="byob-entry" style={{ marginTop:6, background:"rgba(99,179,237,0.05)", border:"1px solid rgba(99,179,237,0.2)", color:"#63B3ED" }} onClick={() => { setPrevScreen("hero"); setCoreSat(null); setCoreSatError(null); setScreen("core_satellite"); }}>🎯 Core-Satellite — Index core + active satellite</button>
+            </div>
+          )}
+
+          {/* Group: Research & Analyse */}
+          <button className="byob-entry" style={{ marginTop: 8, display:'flex', justifyContent:'space-between', alignItems:'center', background:"rgba(99,179,237,0.05)", border:"1px solid rgba(99,179,237,0.2)", color:"#63B3ED" }} onClick={() => setHeroGroupOpen(heroGroupOpen === 'research' ? null : 'research')}>
+            <span>📊 Research &amp; Analyse</span><span style={{fontSize:11,color:G.slate}}>{heroGroupOpen === 'research' ? '▲' : '▼'}</span>
+          </button>
+          {heroGroupOpen === 'research' && (
+            <div style={{ marginLeft:12, borderLeft:'2px solid rgba(99,179,237,0.2)', paddingLeft:10 }}>
+              <button className="byob-entry" style={{ marginTop:6, background:"rgba(212,175,55,0.08)", color:G.mist }} onClick={() => setScreen("portfolio")}>{tr("📊 Analyse My Portfolio", HI_HERO.btnPortfolio)}</button>
+              <button className="byob-entry" style={{ marginTop:6, background:"rgba(99,179,237,0.06)", border:"1px solid rgba(99,179,237,0.3)", color:"#63B3ED" }} onClick={() => { setFiSearch(''); setFiResults([]); setFiAnalysis(null); setFiError(''); setScreen("fund_intel"); }}>🔬 Fund Intelligence — Deep-analyse any fund</button>
+              <button className="byob-entry" style={{ marginTop:6, background:"rgba(99,179,237,0.08)", border:"1px solid rgba(99,179,237,0.35)", color:"#63B3ED" }} onClick={() => { setPrevScreen("hero"); setIndexCompare(null); setIndexCompareError(null); setScreen("index_compare"); }}>📊 Index Fund Compare — Track the trackers</button>
+            </div>
+          )}
+
+          {/* Direct: Calculate & Plan */}
+          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.06)" }} onClick={() => { setPrevScreen(screen); setCalcPreFill(null); setCalcTab('sip'); setScreen("calculators"); }}>{tr("📐 Calculate & Plan", HI_HERO.btnCalc)}</button>
+
+          {/* Group: Learn & Advise */}
+          <button className="byob-entry" style={{ marginTop: 8, display:'flex', justifyContent:'space-between', alignItems:'center', background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.1)", color:G.slate }} onClick={() => setHeroGroupOpen(heroGroupOpen === 'learn' ? null : 'learn')}>
+            <span>📚 Learn &amp; Advise</span><span style={{fontSize:11,color:G.slate}}>{heroGroupOpen === 'learn' ? '▲' : '▼'}</span>
+          </button>
+          {heroGroupOpen === 'learn' && (
+            <div style={{ marginLeft:12, borderLeft:'2px solid rgba(255,255,255,0.1)', paddingLeft:10 }}>
+              <button className="byob-entry" style={{ marginTop:6, background:"rgba(212,175,55,0.08)", border:"1px solid rgba(212,175,55,0.25)" }} onClick={() => { setAdvisorMessages([]); setAdvisorInput(""); setScreen("advisor"); }}>💬 Guldasta Advisor — Ask anything about Indian MF</button>
+              <button className="byob-entry" style={{ marginTop:6, background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.1)", color:G.slate, fontSize:13 }} onClick={() => { setPrevScreen("hero"); setScreen("learn-passive-active"); }}>📚 Passive vs Active — The evidence every investor needs</button>
+              <button className="byob-entry" style={{ marginTop:6, background:"rgba(212,175,55,0.05)", border:"1px solid rgba(212,175,55,0.2)", color:G.mist, fontSize:13 }} onClick={() => { setPrevScreen("hero"); setScreen("learn-compounding"); }}>🧮 Compounding & Investor Psychology</button>
+              <button className="byob-entry" style={{ marginTop:6, background:"rgba(212,175,55,0.08)", border:"1px solid rgba(212,175,55,0.3)", color:G.gold, fontSize:13, fontWeight:600 }} onClick={() => { setPrevScreen("hero"); setScreen("golden_rules"); }}>📜 Golden Rules of Mutual Fund Investing</button>
+            </div>
+          )}
           <p className="note">{lang === 'hi' ? HI_HERO.note : "Research & education only · Not investment advice · Past performance does not guarantee future returns\nAll fund data sourced from AMFI · No commission earned on any recommendation · fundguldasta.com"}</p>
         </div>
       </div>
