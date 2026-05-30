@@ -148,6 +148,8 @@ CREATE TABLE IF NOT EXISTS user_portfolios (
     units DECIMAL(15,4) NOT NULL,
     nav_at_import DECIMAL(15,4),
     value_at_import DECIMAL(15,2),
+    avg_cost_per_unit DECIMAL(15,4),
+    import_source VARCHAR(20) DEFAULT 'cas',
     cas_date DATE,
     imported_at TIMESTAMP DEFAULT NOW(),
     UNIQUE(user_id, scheme_code)

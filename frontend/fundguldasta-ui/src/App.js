@@ -107,6 +107,24 @@ async function apiGetTaxReport(token, fy) {
   return res.json();
 }
 
+async function apiAddHoldingManual(token, holdings) {
+  const res = await fetch(`${API_BASE}/api/portfolio/add-holding`, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ holdings }),
+  });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "Failed to save holdings"); }
+  return res.json();
+}
+
+async function apiGetBenchmark(token) {
+  const res = await fetch(`${API_BASE}/api/portfolio/benchmark`, {
+    headers: { "Authorization": `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error("Failed to load benchmark");
+  return res.json();
+}
+
 async function apiListSaved(token) {
   const res = await fetch(`${API_BASE}/api/user/saved-bouquets`, {
     headers: { "Authorization": `Bearer ${token}` },
@@ -624,6 +642,14 @@ export default function App() {
   const [mpTax, setMpTax] = useState(null);
   const [mpTaxLoading, setMpTaxLoading] = useState(false);
   const [mpTaxFY, setMpTaxFY] = useState('');
+  const [mpBenchmark, setMpBenchmark] = useState(null);
+  const [mpBenchLoading, setMpBenchLoading] = useState(false);
+  const [mpBulkRows, setMpBulkRows] = useState([{ scheme_code:'', fund_name:'', units:'', avg_cost:'' }]);
+  const [mpBulkSaving, setMpBulkSaving] = useState(false);
+  const [mpBulkError, setMpBulkError] = useState(null);
+  const [mpBulkSuccess, setMpBulkSuccess] = useState(null);
+  const [mpBulkSearch, setMpBulkSearch] = useState({});
+  const [mpBulkResults, setMpBulkResults] = useState({});
 
   const tr = (en, hi) => lang === 'hi' ? hi : en;
 
@@ -945,7 +971,13 @@ useEffect(() => {
       setUser(u);
       apiListSaved(token).then(setSavedList).catch(() => {});
       apiGetPreferences(token).then(p => p && setUserPrefs(p)).catch(() => {});
-      apiGetMyHoldings(token).then(d => setMpHoldings(d)).catch(() => {});
+      apiGetMyHoldings(token).then(d => {
+        setMpHoldings(d);
+        if (d?.holdings?.length > 0) {
+          apiGetPerformance(token).then(setMpPerf).catch(() => {});
+          apiGetBenchmark(token).then(setMpBenchmark).catch(() => {});
+        }
+      }).catch(() => {});
     }).catch(() => {
       localStorage.removeItem("fg_token");
     });
@@ -1290,6 +1322,13 @@ useEffect(() => {
     try {
       const data = await apiGetMyHoldings(token);
       setMpHoldings(data);
+      // Auto-load XIRR and benchmark whenever holdings refresh
+      if (data?.holdings?.length > 0) {
+        setMpPerfLoading(true);
+        apiGetPerformance(token).then(d => { setMpPerf(d); setMpPerfLoading(false); }).catch(() => setMpPerfLoading(false));
+        setMpBenchLoading(true);
+        apiGetBenchmark(token).then(d => { setMpBenchmark(d); setMpBenchLoading(false); }).catch(() => setMpBenchLoading(false));
+      }
     } catch(e) { setMpError(e.message); }
     finally { setMpLoading(false); }
   };
@@ -1551,26 +1590,31 @@ useEffect(() => {
                   <div style={{ textAlign:"center", padding:"60px 20px" }}>
                     <div style={{ fontSize:36, marginBottom:14 }}>📂</div>
                     <div style={{ color:G.white, fontSize:14, fontWeight:600, marginBottom:8 }}>No portfolio imported yet</div>
-                    <div style={{ color:G.slate, fontSize:12, marginBottom:20 }}>Import your CAS PDF to see your live portfolio dashboard.</div>
-                    <button onClick={() => setMyPortfolioTab('import')} style={{ background:"linear-gradient(135deg,rgba(212,175,55,0.2),rgba(212,175,55,0.08))", border:`1px solid ${G.bordG}`, borderRadius:10, padding:"10px 28px", color:G.gold, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
-                      Import CAS PDF →
-                    </button>
+                    <div style={{ color:G.slate, fontSize:12, marginBottom:16 }}>Import your CAS PDF or enter holdings manually to see your live portfolio dashboard.</div>
+                    <div style={{ display:"flex", gap:12, justifyContent:"center", flexWrap:"wrap" }}>
+                      <button onClick={() => setMyPortfolioTab('import')} style={{ background:"linear-gradient(135deg,rgba(212,175,55,0.2),rgba(212,175,55,0.08))", border:`1px solid ${G.bordG}`, borderRadius:10, padding:"10px 28px", color:G.gold, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                        📤 Import CAS PDF →
+                      </button>
+                      <button onClick={() => { setMyPortfolioTab('import'); setTimeout(() => document.getElementById('bulk-entry-section')?.scrollIntoView({behavior:'smooth'}), 100); }} style={{ background:"rgba(39,174,120,0.1)", border:"1px solid rgba(39,174,120,0.3)", borderRadius:10, padding:"10px 28px", color:"#27AE78", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                        ✏ Enter Manually →
+                      </button>
+                    </div>
                   </div>
                 )}
                 {!mpLoading && hasHoldings && (
                   <>
                     {/* Summary cards */}
-                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(175px,1fr))", gap:12, marginBottom:20 }}>
+                    <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))", gap:12, marginBottom:20 }}>
                       {[
                         ["Portfolio Value", `₹${(mpSummary.total_current_value||0).toLocaleString("en-IN",{maximumFractionDigits:0})}`, G.gold, null],
-                        ["Value at Import", `₹${(mpSummary.total_value_at_import||0).toLocaleString("en-IN",{maximumFractionDigits:0})}`, G.white, null],
                         [(mpSummary.total_pnl_abs||0)>=0?"Total Gain":"Total Loss", `${(mpSummary.total_pnl_abs||0)>=0?"+":""}₹${Math.abs(mpSummary.total_pnl_abs||0).toLocaleString("en-IN",{maximumFractionDigits:0})}`, (mpSummary.total_pnl_abs||0)>=0?"#27AE78":"#E05555", `${(mpSummary.total_pnl_pct||0)>=0?"+":""}${(mpSummary.total_pnl_pct||0).toFixed(2)}% since import`],
-                        ["Funds", mpSummary.fund_count, G.white, null],
+                        ["XIRR", mpPerf?.xirr_pct != null ? `${mpPerf.xirr_pct.toFixed(1)}%` : (mpPerfLoading ? "…" : "—"), mpPerf?.xirr_pct >= 15 ? "#27AE78" : mpPerf?.xirr_pct >= 10 ? G.am : mpPerf?.xirr_pct != null ? "#E05555" : G.slate, "annualised return"],
+                        ["Funds", mpSummary.fund_count, G.white, `Invested ₹${(mpSummary.total_value_at_import||0).toLocaleString("en-IN",{maximumFractionDigits:0})}`],
                       ].map(([lbl, val, col, sub]) => (
                         <div key={lbl} style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:"14px 16px" }}>
                           <div style={{ color:G.slate, fontSize:10, marginBottom:6, letterSpacing:".06em", textTransform:"uppercase" }}>{lbl}</div>
                           <div style={{ color:col, fontSize:20, fontWeight:700, fontFamily:"JetBrains Mono,monospace" }}>{val}</div>
-                          {sub && <div style={{ color:col, fontSize:11, marginTop:4 }}>{sub}</div>}
+                          {sub && <div style={{ color:col === G.white ? G.slate : col, fontSize:11, marginTop:4, opacity:0.8 }}>{sub}</div>}
                         </div>
                       ))}
                     </div>
@@ -1697,7 +1741,104 @@ useEffect(() => {
                       </div>
                     )}
                   </div>
-                ) : (
+                ) : null}
+                {/* Bulk manual entry — only for logged-in users */}
+                {user && (
+                  <div id="bulk-entry-section" style={{ background:G.sur, border:`1px solid rgba(39,174,120,0.3)`, borderRadius:12, padding:20, marginBottom:20 }}>
+                    <div style={{ color:"#27AE78", fontSize:14, fontWeight:700, marginBottom:4, fontFamily:"Cormorant Garamond,serif" }}>✏ Enter Holdings Manually</div>
+                    <div style={{ color:G.slate, fontSize:11, marginBottom:16 }}>No CAS PDF? Search for each fund and enter your units and average cost. Holdings are saved to your account.</div>
+
+                    {mpBulkRows.map((row, idx) => (
+                      <div key={idx} style={{ display:"grid", gridTemplateColumns:"1fr 90px 100px 32px", gap:8, marginBottom:8, alignItems:"start" }}>
+                        {/* Fund search */}
+                        <div style={{ position:"relative" }}>
+                          <input
+                            value={mpBulkSearch[idx] !== undefined ? mpBulkSearch[idx] : (row.fund_name || '')}
+                            onChange={async e => {
+                              const q = e.target.value;
+                              setMpBulkSearch(prev => ({ ...prev, [idx]: q }));
+                              if (q.length >= 2) {
+                                const r = await apiFundSearch(q);
+                                setMpBulkResults(prev => ({ ...prev, [idx]: r }));
+                              } else { setMpBulkResults(prev => ({ ...prev, [idx]: [] })); }
+                            }}
+                            placeholder="Search fund name..."
+                            style={{ width:"100%", background:G.elv, border:`1px solid ${G.bord}`, borderRadius:6, padding:"7px 10px", color:G.white, fontSize:12, fontFamily:"Outfit,sans-serif", outline:"none", boxSizing:"border-box" }}
+                          />
+                          {(mpBulkResults[idx] || []).length > 0 && (
+                            <div style={{ position:"absolute", top:"100%", left:0, right:0, background:"#1a1a1a", border:`1px solid ${G.bord}`, borderRadius:6, zIndex:100, maxHeight:180, overflowY:"auto" }}>
+                              {(mpBulkResults[idx] || []).slice(0,6).map(f => (
+                                <div key={f.scheme_code} onClick={() => {
+                                  const updated = [...mpBulkRows];
+                                  updated[idx] = { ...updated[idx], scheme_code: f.scheme_code, fund_name: f.scheme_name };
+                                  setMpBulkRows(updated);
+                                  setMpBulkSearch(prev => ({ ...prev, [idx]: f.scheme_name }));
+                                  setMpBulkResults(prev => ({ ...prev, [idx]: [] }));
+                                }}
+                                  style={{ padding:"8px 12px", cursor:"pointer", borderBottom:`1px solid ${G.bord}` }}
+                                  onMouseEnter={e => e.currentTarget.style.background = "rgba(212,175,55,0.08)"}
+                                  onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                                  <div style={{ color:G.fog, fontSize:12 }}>{f.scheme_name}</div>
+                                  <div style={{ color:G.slate, fontSize:10 }}>{f.amc_name} · {f.scheme_code}</div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {row.scheme_code && <div style={{ color:"#27AE78", fontSize:10, marginTop:2 }}>✓ {row.scheme_code}</div>}
+                        </div>
+                        <input
+                          value={row.units}
+                          onChange={e => { const u = [...mpBulkRows]; u[idx] = { ...u[idx], units: e.target.value }; setMpBulkRows(u); }}
+                          placeholder="Units"
+                          style={{ background:G.elv, border:`1px solid ${G.bord}`, borderRadius:6, padding:"7px 10px", color:G.white, fontSize:12, fontFamily:"JetBrains Mono,monospace", outline:"none", width:"100%", boxSizing:"border-box" }}
+                        />
+                        <input
+                          value={row.avg_cost}
+                          onChange={e => { const u = [...mpBulkRows]; u[idx] = { ...u[idx], avg_cost: e.target.value }; setMpBulkRows(u); }}
+                          placeholder="Avg cost ₹"
+                          style={{ background:G.elv, border:`1px solid ${G.bord}`, borderRadius:6, padding:"7px 10px", color:G.white, fontSize:12, fontFamily:"JetBrains Mono,monospace", outline:"none", width:"100%", boxSizing:"border-box" }}
+                        />
+                        <button onClick={() => {
+                          if (mpBulkRows.length > 1) { setMpBulkRows(mpBulkRows.filter((_,i) => i !== idx)); }
+                        }} style={{ background:"none", border:`1px solid rgba(224,85,85,0.3)`, borderRadius:6, padding:"7px 8px", color:"#E05555", fontSize:14, cursor:"pointer", lineHeight:1 }}>✕</button>
+                      </div>
+                    ))}
+
+                    <div style={{ display:"flex", gap:8, marginTop:4, flexWrap:"wrap" }}>
+                      <button onClick={() => setMpBulkRows([...mpBulkRows, { scheme_code:'', fund_name:'', units:'', avg_cost:'' }])}
+                        style={{ background:"none", border:`1px solid rgba(39,174,120,0.3)`, borderRadius:6, padding:"5px 14px", color:"#27AE78", fontSize:12, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                        + Add Row
+                      </button>
+                      <button onClick={async () => {
+                        const token = localStorage.getItem("fg_token");
+                        if (!token) return;
+                        const toSave = mpBulkRows.filter(r => r.scheme_code && parseFloat(r.units) > 0).map(r => ({
+                          scheme_code: r.scheme_code,
+                          fund_name: r.fund_name,
+                          units: parseFloat(r.units),
+                          avg_cost_per_unit: r.avg_cost ? parseFloat(r.avg_cost) : undefined,
+                        }));
+                        if (!toSave.length) { setMpBulkError("Fill in at least one fund with units."); return; }
+                        setMpBulkSaving(true); setMpBulkError(null); setMpBulkSuccess(null);
+                        try {
+                          const d = await apiAddHoldingManual(token, toSave);
+                          setMpBulkSuccess(`✓ ${d.saved} holding${d.saved !== 1 ? "s" : ""} saved.`);
+                          setMpBulkRows([{ scheme_code:'', fund_name:'', units:'', avg_cost:'' }]);
+                          setMpBulkSearch({}); setMpBulkResults({});
+                          await loadMyHoldings();
+                        } catch(e) { setMpBulkError(e.message); }
+                        finally { setMpBulkSaving(false); }
+                      }} style={{ background: "rgba(39,174,120,0.15)", border:"1px solid rgba(39,174,120,0.4)", borderRadius:6, padding:"5px 18px", color:"#27AE78", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                        {mpBulkSaving ? "Saving..." : "Save Holdings"}
+                      </button>
+                    </div>
+                    {mpBulkError && <div style={{ color:"#FF6B6B", fontSize:12, marginTop:8 }}>{mpBulkError}</div>}
+                    {mpBulkSuccess && <div style={{ color:"#27AE78", fontSize:12, marginTop:8 }}>{mpBulkSuccess} <button onClick={() => setMyPortfolioTab('dashboard')} style={{ background:"none", border:"none", color:G.gold, fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>View Dashboard →</button></div>}
+                    <div style={{ color:G.mist, fontSize:10, marginTop:12, lineHeight:1.6 }}>Units and avg cost can be found on your broker / AMC account statement or CAMS/KFintech portal.</div>
+                  </div>
+                )}
+
+                {!user && (
                   <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20, marginBottom:20 }}>
                     <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:10 }}>
                       <div>
@@ -1884,15 +2025,25 @@ useEffect(() => {
                         {Object.keys(mpPerf.per_fund_xirr || {}).length > 0 && (
                           <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20, marginBottom:16 }}>
                             <div style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:18, fontWeight:700, marginBottom:14 }}>Fund-wise XIRR</div>
-                            {Object.entries(mpPerf.per_fund_xirr).sort((a,b) => b[1]-a[1]).map(([sc, xirr]) => (
-                              <div key={sc} style={{ display:"flex", alignItems:"center", gap:12, marginBottom:10, padding:"10px 14px", background:G.elv, borderRadius:8 }}>
-                                <div style={{ flex:1, color:G.fog, fontSize:12 }}>{sc}</div>
-                                <div style={{ color: xirr >= 15 ? "#27AE78" : xirr >= 10 ? G.am : "#E05555", fontSize:15, fontWeight:700, fontFamily:"JetBrains Mono,monospace" }}>{xirr.toFixed(2)}%</div>
-                                <div style={{ width:80, height:6, background:G.bord, borderRadius:3 }}>
-                                  <div style={{ height:"100%", borderRadius:3, background: xirr >= 15 ? "#27AE78" : xirr >= 10 ? G.am : "#E05555", width:`${Math.min(100, Math.max(0, xirr/25*100))}%` }} />
-                                </div>
-                              </div>
-                            ))}
+                            {Object.entries(mpPerf.per_fund_xirr)
+                              .sort((a,b) => (b[1]?.xirr_pct ?? b[1]) - (a[1]?.xirr_pct ?? a[1]))
+                              .map(([sc, info]) => {
+                                const xirr = typeof info === 'object' ? info.xirr_pct : info;
+                                const fname = typeof info === 'object' ? info.fund_name : sc;
+                                return (
+                                  <div key={sc} style={{ display:"flex", alignItems:"center", gap:12, marginBottom:10, padding:"10px 14px", background:G.elv, borderRadius:8 }}>
+                                    <div style={{ flex:1, minWidth:0 }}>
+                                      <div style={{ color:G.fog, fontSize:12, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{fname}</div>
+                                      <div style={{ color:G.mist, fontSize:10, marginTop:1 }}>{sc}</div>
+                                    </div>
+                                    <div style={{ color: xirr >= 15 ? "#27AE78" : xirr >= 10 ? G.am : "#E05555", fontSize:15, fontWeight:700, fontFamily:"JetBrains Mono,monospace", flexShrink:0 }}>{xirr.toFixed(2)}%</div>
+                                    <div style={{ width:80, height:6, background:G.bord, borderRadius:3, flexShrink:0 }}>
+                                      <div style={{ height:"100%", borderRadius:3, background: xirr >= 15 ? "#27AE78" : xirr >= 10 ? G.am : "#E05555", width:`${Math.min(100, Math.max(0, xirr/25*100))}%` }} />
+                                    </div>
+                                  </div>
+                                );
+                              })
+                            }
                           </div>
                         )}
                       </>
@@ -1900,6 +2051,32 @@ useEffect(() => {
 
                     <div style={{ color:G.mist, fontSize:11, marginTop:12, lineHeight:1.6 }}>{mpPerf.note}</div>
                     <div style={{ color:G.mist, fontSize:10, marginTop:6 }}>XIRR = Extended Internal Rate of Return · Computes the discount rate that makes NPV of all cash flows = 0.</div>
+                  </div>
+                )}
+
+                {/* Benchmark comparison */}
+                {(mpBenchmark?.has_data || mpBenchLoading) && (
+                  <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:20, marginTop:16 }}>
+                    <div style={{ color:G.gold, fontFamily:"Cormorant Garamond,serif", fontSize:18, fontWeight:700, marginBottom:4 }}>vs Nifty 50 Benchmark</div>
+                    <div style={{ color:G.slate, fontSize:11, marginBottom:16 }}>Simple CAGR from your first import date · Not risk-adjusted</div>
+                    {mpBenchLoading && <div style={{ color:G.slate, fontSize:12 }}>Loading benchmark...</div>}
+                    {mpBenchmark?.has_data && (
+                      <>
+                        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:16 }}>
+                          {[
+                            ["Your Portfolio CAGR", mpBenchmark.portfolio.cagr_pct != null ? `${mpBenchmark.portfolio.cagr_pct.toFixed(1)}%` : "—", mpBenchmark.portfolio.cagr_pct >= 15 ? "#27AE78" : mpBenchmark.portfolio.cagr_pct >= 10 ? G.am : "#E05555"],
+                            ["Nifty 50 CAGR", mpBenchmark.nifty50.cagr_pct != null ? `${mpBenchmark.nifty50.cagr_pct.toFixed(1)}%` : "—", G.white],
+                            ["Alpha (excess)", mpBenchmark.alpha != null ? `${mpBenchmark.alpha > 0 ? "+" : ""}${mpBenchmark.alpha.toFixed(1)}%` : "—", mpBenchmark.alpha > 0 ? "#27AE78" : mpBenchmark.alpha < 0 ? "#E05555" : G.slate],
+                          ].map(([lbl, val, col]) => (
+                            <div key={lbl} style={{ background:G.elv, borderRadius:10, padding:"14px 16px" }}>
+                              <div style={{ color:G.slate, fontSize:10, marginBottom:6, letterSpacing:".06em", textTransform:"uppercase" }}>{lbl}</div>
+                              <div style={{ color:col, fontSize:22, fontWeight:700, fontFamily:"JetBrains Mono,monospace" }}>{val}</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ color:G.slate, fontSize:11 }}>Period: {mpBenchmark.from_date} to {mpBenchmark.to_date} ({mpBenchmark.years}y) · Portfolio: {mpBenchmark.portfolio.abs_gain_pct?.toFixed(1)}% absolute · Nifty 50: {mpBenchmark.nifty50.abs_gain_pct?.toFixed(1)}% absolute</div>
+                      </>
+                    )}
                   </div>
                 )}
               </div>

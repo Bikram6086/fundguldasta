@@ -2896,14 +2896,16 @@ async def import_cas(file: UploadFile = File(...), authorization: Optional[str] 
                     continue
                 cur.execute(
                     """INSERT INTO user_portfolios
-                           (user_id, scheme_code, fund_name_raw, folio_number, units, nav_at_import, value_at_import, cas_date)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, CURRENT_DATE)
+                           (user_id, scheme_code, fund_name_raw, folio_number, units, nav_at_import,
+                            value_at_import, avg_cost_per_unit, import_source, cas_date)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'cas', CURRENT_DATE)
                        ON CONFLICT (user_id, scheme_code)
                        DO UPDATE SET units=EXCLUDED.units, nav_at_import=EXCLUDED.nav_at_import,
-                           value_at_import=EXCLUDED.value_at_import, fund_name_raw=EXCLUDED.fund_name_raw,
-                           folio_number=EXCLUDED.folio_number, cas_date=CURRENT_DATE, imported_at=NOW()""",
+                           value_at_import=EXCLUDED.value_at_import, avg_cost_per_unit=EXCLUDED.avg_cost_per_unit,
+                           fund_name_raw=EXCLUDED.fund_name_raw, folio_number=EXCLUDED.folio_number,
+                           import_source='cas', cas_date=CURRENT_DATE, imported_at=NOW()""",
                     (user_id, sc, h.get("fund_name_raw"), h.get("folio"),
-                     h.get("units"), h.get("nav"), h.get("value"))
+                     h.get("units"), h.get("nav"), h.get("value"), h.get("nav"))
                 )
                 saved += 1
 
@@ -3057,6 +3059,179 @@ def reset_portfolio(authorization: Optional[str] = _Header(default=None)):
     return {"deleted": deleted}
 
 
+@app.post("/api/portfolio/add-holding")
+def add_holding_manual(
+    body: dict,
+    authorization: Optional[str] = _Header(default=None)
+):
+    """
+    Manually add or update one or more holdings.
+    body: { holdings: [ {scheme_code, units, avg_cost_per_unit?, value?} ] }
+    Upserts into user_portfolios with import_source='manual'.
+    """
+    user = _get_user_from_token(authorization)
+    items = body.get("holdings", [])
+    if not items:
+        raise HTTPException(status_code=400, detail="holdings list is required")
+
+    conn = get_db()
+    cur = conn.cursor()
+    saved = 0
+    errors = []
+    try:
+        for item in items:
+            sc = str(item.get("scheme_code", "")).strip()
+            if not sc:
+                errors.append("scheme_code is required for each holding")
+                continue
+            units = float(item.get("units") or 0)
+            if units <= 0:
+                errors.append(f"{sc}: units must be positive")
+                continue
+            avg_cost = item.get("avg_cost_per_unit")
+            value = item.get("value")
+            if avg_cost:
+                avg_cost = float(avg_cost)
+                nav_at_import = avg_cost
+                value_at_import = units * avg_cost if value is None else float(value)
+            elif value:
+                value_at_import = float(value)
+                nav_at_import = value_at_import / units
+                avg_cost = nav_at_import
+            else:
+                nav_at_import = None
+                value_at_import = None
+                avg_cost = None
+
+            # Look up fund name if not provided
+            fname = item.get("fund_name")
+            if not fname:
+                cur.execute("SELECT scheme_name FROM fund_metadata WHERE scheme_code = %s", (sc,))
+                row = cur.fetchone()
+                fname = row[0] if row else sc
+
+            cur.execute(
+                """INSERT INTO user_portfolios
+                       (user_id, scheme_code, fund_name_raw, units, nav_at_import,
+                        value_at_import, avg_cost_per_unit, import_source, cas_date)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, 'manual', CURRENT_DATE)
+                   ON CONFLICT (user_id, scheme_code)
+                   DO UPDATE SET
+                       units = EXCLUDED.units,
+                       nav_at_import = COALESCE(EXCLUDED.nav_at_import, user_portfolios.nav_at_import),
+                       value_at_import = COALESCE(EXCLUDED.value_at_import, user_portfolios.value_at_import),
+                       avg_cost_per_unit = COALESCE(EXCLUDED.avg_cost_per_unit, user_portfolios.avg_cost_per_unit),
+                       fund_name_raw = COALESCE(EXCLUDED.fund_name_raw, user_portfolios.fund_name_raw),
+                       import_source = 'manual',
+                       cas_date = CURRENT_DATE,
+                       imported_at = NOW()""",
+                (user["id"], sc, fname, units, nav_at_import, value_at_import, avg_cost)
+            )
+            saved += 1
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise HTTPException(status_code=500, detail=str(e)[:200])
+    finally:
+        cur.close()
+        conn.close()
+
+    return {"saved": saved, "errors": errors}
+
+
+@app.get("/api/portfolio/benchmark")
+def get_portfolio_benchmark(authorization: Optional[str] = _Header(default=None)):
+    """
+    Compare portfolio performance vs Nifty 50 benchmark from import date to today.
+    Returns absolute gain %, annualised CAGR for portfolio and benchmark over same period.
+    """
+    user = _get_user_from_token(authorization)
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            """SELECT up.scheme_code, up.units, up.nav_at_import, up.value_at_import, up.cas_date,
+                      (SELECT nd.nav_value FROM nav_data nd WHERE nd.scheme_code = up.scheme_code
+                       ORDER BY nd.nav_date DESC LIMIT 1) AS current_nav
+               FROM user_portfolios up WHERE up.user_id = %s AND up.value_at_import > 0""",
+            (user["id"],)
+        )
+        holding_rows = cur.fetchall()
+
+        # Benchmark (Nifty 50) price on earliest cas_date and latest available
+        cur.execute(
+            """SELECT MIN(cas_date) FROM user_portfolios WHERE user_id = %s AND cas_date IS NOT NULL""",
+            (user["id"],)
+        )
+        from_date = (cur.fetchone() or [None])[0]
+
+        bench_start = bench_end = None
+        if from_date:
+            cur.execute(
+                """SELECT closing_value FROM benchmark_data
+                   WHERE index_code = 'NIFTY_50' AND price_date >= %s
+                   ORDER BY price_date ASC LIMIT 1""",
+                (from_date,)
+            )
+            r = cur.fetchone()
+            bench_start = float(r[0]) if r else None
+
+            cur.execute(
+                """SELECT closing_value, price_date FROM benchmark_data
+                   WHERE index_code = 'NIFTY_50'
+                   ORDER BY price_date DESC LIMIT 1"""
+            )
+            r = cur.fetchone()
+            bench_end = float(r[0]) if r else None
+            bench_end_date = str(r[1]) if r else None
+    finally:
+        cur.close()
+        conn.close()
+
+    if not holding_rows:
+        return {"has_data": False, "note": "No holdings with import value found."}
+
+    from datetime import date as dt_date
+    total_import_val = sum(float(r[3] or 0) for r in holding_rows)
+    total_current_val = sum(float(r[1] or 0) * float(r[5] or r[2] or 0) for r in holding_rows)
+
+    today = dt_date.today()
+    from_date_dt = from_date if isinstance(from_date, dt_date) else (
+        dt_date.fromisoformat(str(from_date)) if from_date else today
+    )
+    years = max((today - from_date_dt).days / 365.25, 0.01)
+
+    pf_abs_gain_pct = ((total_current_val - total_import_val) / total_import_val * 100) if total_import_val > 0 else 0.0
+    pf_cagr = (((total_current_val / total_import_val) ** (1 / years)) - 1) * 100 if total_import_val > 0 and total_current_val > 0 else None
+
+    bench_abs_gain_pct = bench_cagr = None
+    if bench_start and bench_end and bench_start > 0:
+        bench_abs_gain_pct = (bench_end - bench_start) / bench_start * 100
+        bench_cagr = (((bench_end / bench_start) ** (1 / years)) - 1) * 100
+
+    return {
+        "has_data": True,
+        "from_date": str(from_date) if from_date else None,
+        "to_date": str(today),
+        "years": round(years, 2),
+        "portfolio": {
+            "import_value": round(total_import_val, 2),
+            "current_value": round(total_current_val, 2),
+            "abs_gain_pct": round(pf_abs_gain_pct, 2),
+            "cagr_pct": round(pf_cagr, 2) if pf_cagr is not None else None,
+        },
+        "nifty50": {
+            "start_value": round(bench_start, 2) if bench_start else None,
+            "end_value": round(bench_end, 2) if bench_end else None,
+            "abs_gain_pct": round(bench_abs_gain_pct, 2) if bench_abs_gain_pct is not None else None,
+            "cagr_pct": round(bench_cagr, 2) if bench_cagr is not None else None,
+            "end_date": bench_end_date if bench_end else None,
+        },
+        "alpha": round(pf_cagr - bench_cagr, 2) if pf_cagr is not None and bench_cagr is not None else None,
+        "note": "Simple CAGR comparison from CAS import date. Not risk-adjusted.",
+    }
+
+
 @app.get("/api/portfolio/transactions")
 def get_portfolio_transactions(
     scheme_code: Optional[str] = None,
@@ -3127,12 +3302,15 @@ def get_portfolio_performance(authorization: Optional[str] = _Header(default=Non
         )
         txn_rows = cur.fetchall()
 
-        # Load current holdings with live NAV
+        # Load current holdings with live NAV and fund name
         cur.execute(
             """SELECT up.scheme_code, up.units,
                       (SELECT nd.nav_value FROM nav_data nd WHERE nd.scheme_code = up.scheme_code
-                       ORDER BY nd.nav_date DESC LIMIT 1) AS current_nav
-               FROM user_portfolios up WHERE up.user_id = %s""",
+                       ORDER BY nd.nav_date DESC LIMIT 1) AS current_nav,
+                      COALESCE(fm.scheme_name, up.fund_name_raw, up.scheme_code) AS fund_name
+               FROM user_portfolios up
+               LEFT JOIN fund_metadata fm ON fm.scheme_code = up.scheme_code
+               WHERE up.user_id = %s""",
             (user["id"],)
         )
         holding_rows = cur.fetchall()
@@ -3150,6 +3328,7 @@ def get_portfolio_performance(authorization: Optional[str] = _Header(default=Non
     ]
     holdings = [{"scheme_code": r[0], "units": float(r[1] or 0)} for r in holding_rows]
     nav_lookup = {r[0]: float(r[2] or 0) for r in holding_rows if r[2]}
+    name_lookup = {r[0]: r[3] for r in holding_rows}
 
     total_invested = sum(abs(t["amount"]) for t in transactions if not t["is_redemption"])
     total_redeemed = sum(abs(t["amount"]) for t in transactions if t["is_redemption"])
@@ -3161,7 +3340,7 @@ def get_portfolio_performance(authorization: Optional[str] = _Header(default=Non
         if len(cash_flows) >= 2:
             xirr_val = compute_xirr(cash_flows)
 
-    # Per-fund XIRR
+    # Per-fund XIRR — keyed by scheme_code, with fund name included
     per_fund = {}
     scheme_codes = list({t["scheme_code"] for t in transactions if t["scheme_code"]})
     for sc in scheme_codes:
@@ -3171,7 +3350,10 @@ def get_portfolio_performance(authorization: Optional[str] = _Header(default=Non
         if len(sc_flows) >= 2:
             xirr_sc = compute_xirr(sc_flows)
             if xirr_sc is not None:
-                per_fund[sc] = round(xirr_sc * 100, 2)
+                per_fund[sc] = {
+                    "xirr_pct": round(xirr_sc * 100, 2),
+                    "fund_name": name_lookup.get(sc, sc),
+                }
 
     return {
         "xirr_pct": round(xirr_val * 100, 2) if xirr_val is not None else None,
