@@ -193,6 +193,14 @@ async function getCoreSatellite(coreIndex, horizon) {
   return null;
 }
 
+const fmtINR = (n) => isNaN(n) ? '—' : '₹' + Math.round(n).toLocaleString('en-IN');
+const fmtCr = (n) => {
+  if (isNaN(n) || n == null) return '—';
+  if (n >= 10000000) return `₹${(n / 10000000).toFixed(1)} Cr`;
+  if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L`;
+  return fmtINR(n);
+};
+
 const G = {
   bg: "#090C11", sur: "#10151F", elv: "#161D2C",
   bord: "rgba(255,255,255,0.07)", bordG: "rgba(212,175,55,0.22)",
@@ -575,6 +583,10 @@ export default function App() {
   const [goalCustomCorpus, setGoalCustomCorpus] = useState('');
   const [goalCustomYears, setGoalCustomYears] = useState('');
   const [goalCustomCagr, setGoalCustomCagr] = useState('');
+  const [goalInflation, setGoalInflation] = useState('6');
+  const [searlySip, setSEarlySip] = useState('5000');
+  const [searlyRetire, setSEarlyRetire] = useState('60');
+  const [searlyCagr, setSEarlyCagr] = useState('12');
   const [pfFunds, setPfFunds] = useState([]);
   const [pfSearch, setPfSearch] = useState('');
   const [pfResults, setPfResults] = useState([]);
@@ -3070,6 +3082,8 @@ useEffect(() => {
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(99,179,237,0.08)", border:"1px solid rgba(99,179,237,0.35)", color:"#63B3ED" }} onClick={() => { setPrevScreen("hero"); setIndexCompare(null); setIndexCompareError(null); setScreen("index_compare"); }}>📊 Index Fund Compare — Track the trackers</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(99,179,237,0.05)", border:"1px solid rgba(99,179,237,0.2)", color:"#63B3ED" }} onClick={() => { setPrevScreen("hero"); setCoreSat(null); setCoreSatError(null); setScreen("core_satellite"); }}>🎯 Core-Satellite Bouquet — Index core + active satellite</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.1)", color:G.slate, fontSize:13 }} onClick={() => { setPrevScreen("hero"); setScreen("learn-passive-active"); }}>📚 Passive vs Active — The evidence every investor needs</button>
+          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.05)", border:"1px solid rgba(212,175,55,0.2)", color:G.mist, fontSize:13 }} onClick={() => { setPrevScreen("hero"); setScreen("learn-compounding"); }}>🧮 Compounding & Investor Psychology — Why behaviour beats fund selection</button>
+          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.08)", border:"1px solid rgba(212,175,55,0.3)", color:G.gold, fontSize:13, fontWeight:600 }} onClick={() => { setPrevScreen("hero"); setScreen("golden_rules"); }}>📜 Golden Rules of Mutual Fund Investing</button>
           <p className="note">{lang === 'hi' ? HI_HERO.note : "Research & education only · Not investment advice · Past performance does not guarantee future returns\nAll fund data sourced from AMFI · No commission earned on any recommendation · fundguldasta.com"}</p>
         </div>
       </div>
@@ -3081,13 +3095,7 @@ useEffect(() => {
   if (screen === "calculators") {
     document.title = "Investment Calculators — FundGuldasta";
 
-    const fmtINR = (n) => isNaN(n) ? '—' : '₹' + Math.round(n).toLocaleString('en-IN');
-    const fmtCr = (n) => {
-      if (isNaN(n) || n === 0) return '—';
-      if (n >= 10000000) return '₹' + (n/10000000).toFixed(2) + ' Cr';
-      if (n >= 100000) return '₹' + (n/100000).toFixed(2) + ' L';
-      return fmtINR(n);
-    };
+    // fmtINR and fmtCr defined at module level
 
     // ── SIP maths ──
     const sipYrsN = parseFloat(sipCalcYears) || 0;
@@ -3154,11 +3162,12 @@ useEffect(() => {
             </div>
 
             {/* Tabs */}
-            <div style={{ display:"flex", background:G.sur, border:`1px solid ${G.bord}`, borderRadius:10, overflow:"hidden", marginBottom:24 }}>
-              <TabBtn id="sip" label="📈 SIP Calculator" />
-              <TabBtn id="goals" label="🎯 Goal Planner" />
-              <TabBtn id="tax" label="🧾 Tax Calculator" />
+            <div style={{ display:"flex", background:G.sur, border:`1px solid ${G.bord}`, borderRadius:10, overflow:"hidden", marginBottom:24, flexWrap:"wrap" }}>
+              <TabBtn id="sip" label="📈 SIP" />
+              <TabBtn id="goals" label="🎯 Goals" />
+              <TabBtn id="tax" label="🧾 Tax" />
               <TabBtn id="retirement" label="🏖️ Retirement" />
+              <TabBtn id="start_early" label="⏳ Start Early" />
             </div>
           </div>
 
@@ -3469,6 +3478,40 @@ useEffect(() => {
                         </div>
                         <div style={{ marginTop:10, fontSize:10, color:G.mist, lineHeight:1.6 }}>
                           Each goal SIP is calculated independently. In practice you may overlap SIPs into the same fund depending on horizon alignment. Consult a financial planner for actual allocation. Projections assume constant CAGR and do not account for LTCG tax.
+                        </div>
+                      </div>
+
+                      {/* Inflation reality check */}
+                      <div style={{ marginTop:16, background:"rgba(224,85,85,0.06)", border:"1px solid rgba(224,85,85,0.2)", borderRadius:12, padding:"16px 20px" }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+                          <span style={{ color:"#E05555", fontSize:13, fontWeight:700 }}>Inflation Reality Check</span>
+                          <span style={{ fontSize:10, color:G.mist }}>Are your corpus targets inflation-adjusted?</span>
+                        </div>
+                        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12, flexWrap:"wrap" }}>
+                          <span style={{ fontSize:12, color:G.slate }}>Assumed inflation:</span>
+                          {[4,5,6,7,8].map(v => (
+                            <button key={v} onClick={() => setGoalInflation(String(v))} style={{ padding:"3px 10px", borderRadius:6, fontSize:11, cursor:"pointer", fontFamily:"Outfit,sans-serif", border:`1px solid ${parseFloat(goalInflation)===v ? "#E05555" : G.bord}`, background:parseFloat(goalInflation)===v ? "rgba(224,85,85,0.1)" : "transparent", color:parseFloat(goalInflation)===v ? "#E05555" : G.mist }}>{v}%</button>
+                          ))}
+                        </div>
+                        <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                          {goalBuckets.map((b,idx) => {
+                            if (!b.corpus || !b.years) return null;
+                            const inflAdj = b.corpus * Math.pow(1 + parseFloat(goalInflation)/100, b.years);
+                            const realPow = b.corpus / Math.pow(1 + parseFloat(goalInflation)/100, b.years);
+                            const shortHorizon = b.years <= 3;
+                            return (
+                              <div key={b.id} style={{ fontSize:11, color:G.fog, lineHeight:1.7 }}>
+                                <span style={{ color:G.mist }}>{b.icon} {b.label}:</span>{' '}
+                                Your ₹{fmtCr(b.corpus)} target in {b.years}yr buys what{' '}
+                                <span style={{ color:"#27AE78", fontFamily:"JetBrains Mono,monospace" }}>₹{fmtCr(Math.round(realPow/100000)*100000)}</span> buys today at {goalInflation}% inflation.
+                                {shortHorizon && <span style={{ color:"#F0A500" }}> ⚠ {b.years}yr horizon — consider debt funds, not equity, for this goal.</span>}
+                              </div>
+                            );
+                          }).filter(Boolean)}
+                          {goalBuckets.length === 0 && <div style={{ fontSize:11, color:G.mist }}>Add goals above to see the inflation impact on each target.</div>}
+                        </div>
+                        <div style={{ marginTop:8, fontSize:10, color:G.mist, lineHeight:1.6 }}>
+                          Golden Rule: Your corpus target should be in today's rupees. At {goalInflation}% inflation, ₹1 Cr today equals ₹{(Math.pow(1+parseFloat(goalInflation)/100,10)).toFixed(1)} Cr in 10 years. If your goal is {goalInflation}yr away, your target has already shrunk by {(100 - 100/Math.pow(1+parseFloat(goalInflation)/100,10)).toFixed(0)}% in real purchasing power. <strong style={{ color:"#F0A500" }}>Always plan in today's rupees, not future rupees.</strong>
                         </div>
                       </div>
                     </div>
@@ -3832,6 +3875,90 @@ useEffect(() => {
                       </span>
                     </div>
                   )}
+                </div>
+              );
+            })()}
+
+            {/* ── START EARLY TAB ── */}
+            {calcTab === 'start_early' && (() => {
+              const sipN = parseFloat(searlySip) || 5000;
+              const retireN = Math.max(40, Math.min(80, parseInt(searlyRetire) || 60));
+              const cagrN = parseFloat(searlyCagr) || 12;
+              const startAges = [22, 25, 30, 35, 40];
+              const sipCorpus = (startAge) => {
+                const years = retireN - startAge;
+                if (years <= 0) return 0;
+                const rm = cagrN / 100 / 12;
+                const nm = years * 12;
+                return rm === 0 ? sipN * nm : sipN * ((Math.pow(1 + rm, nm) - 1) / rm) * (1 + rm);
+              };
+              const base = sipCorpus(22);
+              return (
+                <div>
+                  <p style={{ color:G.slate, fontSize:13, marginBottom:20 }}>
+                    The single most powerful investment decision is when you start — not which fund you pick. This calculator shows you the irreversible cost of every year you wait.
+                  </p>
+                  <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:14, padding:24, marginBottom:24 }}>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:16, marginBottom:4 }}>
+                      <div>
+                        <div style={{ fontSize:11, color:G.slate, marginBottom:6 }}>Monthly SIP (₹)</div>
+                        <input type="number" value={searlySip} onChange={e => setSEarlySip(e.target.value)} style={{ width:"100%", boxSizing:"border-box", background:G.elv, border:`1px solid ${G.bord}`, borderRadius:8, padding:"9px 12px", color:G.white, fontFamily:"JetBrains Mono,monospace", fontSize:14, outline:"none" }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize:11, color:G.slate, marginBottom:6 }}>Target retirement age</div>
+                        <input type="number" value={searlyRetire} onChange={e => setSEarlyRetire(e.target.value)} style={{ width:"100%", boxSizing:"border-box", background:G.elv, border:`1px solid ${G.bord}`, borderRadius:8, padding:"9px 12px", color:G.white, fontFamily:"JetBrains Mono,monospace", fontSize:14, outline:"none" }} />
+                      </div>
+                      <div>
+                        <div style={{ fontSize:11, color:G.slate, marginBottom:6 }}>Expected CAGR (%)</div>
+                        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                          {[10,12,14,16].map(v => (
+                            <button key={v} onClick={() => setSEarlyCagr(String(v))} style={{ flex:1, padding:"9px 0", borderRadius:8, fontSize:13, cursor:"pointer", fontFamily:"Outfit,sans-serif", border:`1px solid ${parseFloat(searlyCagr)===v ? G.bordG : G.bord}`, background:parseFloat(searlyCagr)===v ? "rgba(212,175,55,0.12)" : "transparent", color:parseFloat(searlyCagr)===v ? G.gold : G.mist, fontWeight:600 }}>{v}%</button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ display:"flex", flexDirection:"column", gap:12, marginBottom:24 }}>
+                    {startAges.map((age, idx) => {
+                      const corpus = sipCorpus(age);
+                      const years = retireN - age;
+                      const invested = years > 0 ? sipN * years * 12 : 0;
+                      const wealthCreated = corpus - invested;
+                      const costVsBase = base - corpus;
+                      const pct = base > 0 ? (corpus / base) * 100 : 0;
+                      const barColor = idx === 0 ? '#27AE78' : idx === 1 ? '#4A8FE0' : idx === 2 ? G.gold : idx === 3 ? '#F0A500' : '#E05555';
+                      if (years <= 0) return null;
+                      return (
+                        <div key={age} style={{ background:G.sur, border:`1px solid ${idx===0 ? 'rgba(39,174,120,0.3)' : G.bord}`, borderRadius:12, padding:"16px 20px" }}>
+                          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10, flexWrap:"wrap", gap:8 }}>
+                            <div>
+                              <span style={{ color:G.white, fontSize:14, fontWeight:700 }}>Start at age {age}</span>
+                              <span style={{ color:G.mist, fontSize:11, marginLeft:10 }}>{years} years of investing</span>
+                              {idx === 0 && <span style={{ marginLeft:8, fontSize:10, color:'#27AE78', background:'rgba(39,174,120,0.12)', border:'1px solid rgba(39,174,120,0.3)', borderRadius:4, padding:'2px 7px', fontWeight:700 }}>EARLIEST</span>}
+                            </div>
+                            <div style={{ textAlign:"right" }}>
+                              <div style={{ color:barColor, fontSize:20, fontWeight:800, fontFamily:"JetBrains Mono,monospace" }}>{fmtCr(Math.round(corpus/100000)*100000)}</div>
+                              <div style={{ fontSize:10, color:G.mist }}>final corpus</div>
+                            </div>
+                          </div>
+                          <div style={{ background:G.elv, borderRadius:6, height:8, marginBottom:8 }}>
+                            <div style={{ width:`${Math.min(100,pct)}%`, height:'100%', background:barColor, borderRadius:6, transition:'width .5s' }} />
+                          </div>
+                          <div style={{ display:"flex", gap:20, flexWrap:"wrap", fontSize:11, color:G.mist }}>
+                            <span>Invested: <span style={{ color:G.fog, fontFamily:"JetBrains Mono,monospace" }}>{fmtCr(Math.round(invested/100000)*100000)}</span></span>
+                            <span>Compounding gain: <span style={{ color:'#27AE78', fontFamily:"JetBrains Mono,monospace" }}>{fmtCr(Math.round(wealthCreated/100000)*100000)}</span></span>
+                            {idx > 0 && costVsBase > 0 && <span style={{ color:'#E05555' }}>Cost of waiting: <span style={{ fontFamily:"JetBrains Mono,monospace", fontWeight:700 }}>−{fmtCr(Math.round(costVsBase/100000)*100000)}</span></span>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div style={{ background:"rgba(212,175,55,0.06)", border:"1px solid rgba(212,175,55,0.2)", borderRadius:12, padding:"16px 20px", fontSize:12, color:G.fog, lineHeight:1.8 }}>
+                    <strong style={{ color:G.gold, display:"block", marginBottom:6 }}>Why the last years build the most wealth</strong>
+                    Over 60% of the terminal corpus in a 30-year SIP accumulates in the final 10 years. This is because each year's compounding works on a larger base. Starting 5 years later doesn't cost you 5 years of contributions — it costs you the most powerful 5 years of compounding at the end. <strong style={{ color:"#F0A500" }}>No fund selection decision will ever compensate for starting late.</strong>
+                  </div>
                 </div>
               );
             })()}
@@ -4232,6 +4359,209 @@ useEffect(() => {
           </div>
         </div>
       </>
+    );
+  }
+
+  // ── COMPOUNDING & INVESTOR PSYCHOLOGY ─────────────────────────────────────
+  if (screen === "learn_compounding" || screen === "learn-compounding") {
+    document.title = "Compounding & Investor Psychology — FundGuldasta";
+    const crashes = [
+      { year:"2008 (Global Financial Crisis)", fall:"-60%", recovery:"~24 months", action:"Stayed invested: ₹10L → ₹57L by 2018 (Nifty 500)", panic:"Exited at bottom: locked in -60% loss, missed entire recovery" },
+      { year:"2011 (Europe Debt Crisis)", fall:"-28%", recovery:"~18 months", action:"Stayed invested: full recovery + continued compounding", panic:"Exited: locked in -28%, missed 2012–14 bull run" },
+      { year:"2015–16 (China slowdown)", fall:"-24%", recovery:"~12 months", action:"Stayed invested: Nifty 500 delivered ~14% CAGR over next 5yr", panic:"Exited: missed the recovery that started immediately after" },
+      { year:"2020 (COVID crash)", fall:"-38% in 6 weeks", recovery:"~6 months", action:"Stayed invested (or increased SIP): portfolio 2x'd by 2021", panic:"Exited: missed the fastest market recovery in Indian history" },
+    ];
+    const wealthCurve = (() => {
+      const sip = 10000, cagr = 0.12, years = 25;
+      const buckets = [];
+      for (let y = 5; y <= years; y += 5) {
+        const rm = cagr/12, nm = y*12;
+        const corpus = sip * ((Math.pow(1+rm,nm)-1)/rm) * (1+rm);
+        const invested = sip * nm;
+        buckets.push({ y, corpus, invested, gain: corpus - invested });
+      }
+      return buckets;
+    })();
+    const maxCorpus = wealthCurve[wealthCurve.length - 1].corpus;
+    return (
+      <LearnPage title="Compounding & Investor Psychology" subtitle="Why your behaviour matters more than any fund you pick — and how to protect yourself from yourself.">
+        <LearnCard title="The compounding acceleration curve">
+          <p style={{ fontSize:13, color:G.fog, lineHeight:1.8, marginBottom:16 }}>
+            ₹10,000/month SIP at 12% CAGR. Watch how slowly wealth builds early — then accelerates. <strong style={{ color:G.gold }}>Over 60% of the final corpus builds in the last 8 years.</strong> This is why early redemption is financially devastating: you endure all the volatility and forfeit most of the compounding.
+          </p>
+          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+            {wealthCurve.map((b,i) => {
+              const isAccelZone = b.y >= 20;
+              const barW = (b.corpus / maxCorpus) * 100;
+              const gainW = (b.gain / maxCorpus) * 100;
+              return (
+                <div key={b.y} style={{ display:"flex", alignItems:"center", gap:12 }}>
+                  <div style={{ width:36, fontSize:11, color:isAccelZone ? G.gold : G.mist, fontFamily:"JetBrains Mono,monospace", flexShrink:0 }}>Yr {b.y}</div>
+                  <div style={{ flex:1, background:G.elv, borderRadius:6, height:22, overflow:"hidden", position:"relative" }}>
+                    <div style={{ position:"absolute", left:0, top:0, height:"100%", width:`${barW}%`, background: isAccelZone ? "rgba(212,175,55,0.35)" : "rgba(74,143,224,0.25)", borderRadius:6, transition:"width .4s" }} />
+                    <div style={{ position:"absolute", left:0, top:0, height:"100%", width:`${gainW}%`, background: isAccelZone ? "rgba(212,175,55,0.6)" : "rgba(74,143,224,0.4)", borderRadius:6 }} />
+                    {isAccelZone && <div style={{ position:"absolute", right:6, top:0, height:"100%", display:"flex", alignItems:"center", fontSize:9, color:G.gold, fontWeight:700, letterSpacing:".05em" }}>WEALTH ACCELERATION ZONE</div>}
+                  </div>
+                  <div style={{ width:80, textAlign:"right", flexShrink:0 }}>
+                    <div style={{ fontSize:12, fontFamily:"JetBrains Mono,monospace", color:isAccelZone ? G.gold : G.fog, fontWeight:isAccelZone?700:400 }}>{fmtCr(Math.round(b.corpus/100000)*100000)}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ marginTop:12, fontSize:11, color:G.mist, lineHeight:1.6 }}>
+            Lighter bar = total invested. Darker bar = compounding gain. The gold zone (year 20+) is where your money works hardest. Exiting at year 15 means you get ₹{fmtCr(Math.round(wealthCurve[2].corpus/100000)*100000)} instead of ₹{fmtCr(Math.round(wealthCurve[4].corpus/100000)*100000)}.
+          </div>
+        </LearnCard>
+
+        <LearnCard title="The cost of missing the 10 best trading days">
+          <p style={{ fontSize:13, color:G.fog, lineHeight:1.8, marginBottom:12 }}>
+            Markets deliver most of their gains in short, unpredictable bursts. Investors who try to time the market almost always miss these days — usually because they exited during the panic that preceded them.
+          </p>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
+            {[
+              { label:"Fully invested (20yr)", corpus:"₹96L", color:"#27AE78", note:"12% CAGR" },
+              { label:"Miss best 10 days", corpus:"₹48L", color:G.gold, note:"~8% CAGR" },
+              { label:"Miss best 20 days", corpus:"₹26L", color:"#F0A500", note:"~5% CAGR" },
+              { label:"Miss best 30 days", corpus:"₹15L", color:"#E05555", note:"~2% CAGR" },
+            ].map(item => (
+              <div key={item.label} style={{ background:G.elv, borderRadius:10, padding:"12px 16px", border:`1px solid rgba(255,255,255,0.06)` }}>
+                <div style={{ fontSize:11, color:G.mist, marginBottom:4 }}>{item.label}</div>
+                <div style={{ fontFamily:"JetBrains Mono,monospace", fontSize:20, fontWeight:700, color:item.color }}>{item.corpus}</div>
+                <div style={{ fontSize:10, color:G.mist }}>{item.note} · ₹10L lumpsum</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ fontSize:11, color:G.mist, lineHeight:1.7 }}>
+            The 10 best days in any 20-year period cluster around the 10 worst days — they happen during and immediately after crashes. An investor who exits during fear almost always misses the recovery entirely. Missing 30 best days reduces your final corpus by <strong style={{ color:"#E05555" }}>84%</strong>.
+          </div>
+        </LearnCard>
+
+        <LearnCard title="Volatility is not risk — permanent loss is risk">
+          <p style={{ fontSize:13, color:G.fog, lineHeight:1.8, marginBottom:12 }}>
+            A fund that falls 40% in a bear market and recovers to 15% CAGR over 15 years carried <em>no real risk</em> for the patient investor. The only thing that made it risky was selling at the bottom. Permanent loss of capital happens in three scenarios: fraud, concentration in a structurally failing sector, or selling during temporary drawdowns.
+          </p>
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            {crashes.map(c => (
+              <div key={c.year} style={{ background:G.elv, borderRadius:10, padding:"14px 16px", border:"1px solid rgba(255,255,255,0.06)" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:8, flexWrap:"wrap" }}>
+                  <span style={{ fontSize:12, fontWeight:700, color:G.white }}>{c.year}</span>
+                  <span style={{ fontSize:11, color:"#E05555", fontFamily:"JetBrains Mono,monospace", fontWeight:700 }}>{c.fall}</span>
+                  <span style={{ fontSize:11, color:G.mist }}>Recovery: {c.recovery}</span>
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+                  <div style={{ fontSize:11, color:"#27AE78", lineHeight:1.6, background:"rgba(39,174,120,0.06)", borderRadius:7, padding:"8px 10px" }}><strong>Stayed invested:</strong> {c.action}</div>
+                  <div style={{ fontSize:11, color:"#E05555", lineHeight:1.6, background:"rgba(224,85,85,0.06)", borderRadius:7, padding:"8px 10px" }}><strong>Panic sold:</strong> {c.panic}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </LearnCard>
+
+        <LearnCard title="The investor behaviour gap — the most expensive mistake in finance">
+          <p style={{ fontSize:13, color:G.fog, lineHeight:1.8, marginBottom:12 }}>
+            DALBAR studies consistently show a 3–5% annual gap between what a fund delivers and what the average investor actually earns — because investors buy after markets have risen (buying high) and sell after markets fall (selling low).
+          </p>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:12 }}>
+            <div style={{ background:"rgba(39,174,120,0.07)", border:"1px solid rgba(39,174,120,0.2)", borderRadius:10, padding:"16px 18px" }}>
+              <div style={{ fontSize:11, color:G.mist, marginBottom:6 }}>Fund delivered (20yr)</div>
+              <div style={{ fontFamily:"JetBrains Mono,monospace", fontSize:28, fontWeight:800, color:"#27AE78" }}>14% CAGR</div>
+              <div style={{ fontSize:11, color:G.mist, marginTop:4 }}>₹5K/mo SIP → ₹1.20 Cr</div>
+            </div>
+            <div style={{ background:"rgba(224,85,85,0.07)", border:"1px solid rgba(224,85,85,0.2)", borderRadius:10, padding:"16px 18px" }}>
+              <div style={{ fontSize:11, color:G.mist, marginBottom:6 }}>Average investor got (20yr)</div>
+              <div style={{ fontFamily:"JetBrains Mono,monospace", fontSize:28, fontWeight:800, color:"#E05555" }}>10% CAGR</div>
+              <div style={{ fontSize:11, color:G.mist, marginTop:4 }}>₹5K/mo SIP → ₹76L (37% less)</div>
+            </div>
+          </div>
+          <div style={{ fontSize:12, color:G.fog, lineHeight:1.8 }}>
+            The gap is entirely behavioural. The fund did its job. The investor didn't. <strong style={{ color:G.gold }}>Three rules that protect you: (1) Automate your SIP — remove human judgment from the contribution decision. (2) Never check your portfolio during a crash. (3) Set a 5-year "do not touch" rule for your equity allocation.</strong>
+          </div>
+        </LearnCard>
+
+        <div style={{ textAlign:"center", marginTop:24, display:"flex", gap:12, justifyContent:"center", flexWrap:"wrap" }}>
+          <button onClick={() => { setPrevScreen("learn-compounding"); setCalcPreFill(null); setCalcTab('start_early'); setScreen("calculators"); }} style={{ background:"rgba(212,175,55,0.12)", border:"1px solid rgba(212,175,55,0.4)", color:G.gold, borderRadius:8, padding:"10px 20px", cursor:"pointer", fontFamily:"Outfit,sans-serif", fontSize:14, fontWeight:600 }}>⏳ Start Early Calculator →</button>
+          <button onClick={() => { setPrevScreen("learn-compounding"); setScreen("golden_rules"); }} style={{ background:"rgba(212,175,55,0.06)", border:"1px solid rgba(212,175,55,0.2)", color:G.gold, borderRadius:8, padding:"10px 20px", cursor:"pointer", fontFamily:"Outfit,sans-serif", fontSize:13 }}>📜 All Golden Rules →</button>
+          <button onClick={() => setScreen(prevScreen)} style={{ background:"none", border:"1px solid rgba(255,255,255,0.1)", color:G.mist, borderRadius:8, padding:"10px 20px", cursor:"pointer", fontFamily:"Outfit,sans-serif", fontSize:13 }}>← Back</button>
+        </div>
+      </LearnPage>
+    );
+  }
+
+  // ── GOLDEN RULES OF MUTUAL FUND INVESTING ─────────────────────────────────
+  if (screen === "golden_rules") {
+    document.title = "Golden Rules of Mutual Fund Investing — FundGuldasta";
+    const RULE_IMPL = {
+      full:    { label:"Implemented", color:"#27AE78", bg:"rgba(39,174,120,0.1)",    border:"rgba(39,174,120,0.3)" },
+      partial: { label:"Partial",     color:"#F0A500", bg:"rgba(240,165,0,0.08)",    border:"rgba(240,165,0,0.3)" },
+      none:    { label:"Education",   color:"#63B3ED", bg:"rgba(99,179,237,0.08)",   border:"rgba(99,179,237,0.25)" },
+    };
+    const Badge = ({ st }) => { const s = RULE_IMPL[st]; return <span style={{ fontSize:9, fontWeight:700, letterSpacing:".07em", textTransform:"uppercase", background:s.bg, border:`1px solid ${s.border}`, color:s.color, borderRadius:4, padding:"2px 8px", flexShrink:0 }}>{s.label}</span>; };
+    const Section = ({ title }) => <div style={{ fontFamily:"Cormorant Garamond,serif", fontSize:20, color:G.gold, fontWeight:700, marginBottom:12, marginTop:32, borderBottom:`1px solid rgba(212,175,55,0.15)`, paddingBottom:8 }}>{title}</div>;
+    const Rule = ({ n, title, body, impl, feature }) => (
+      <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:12, padding:"16px 18px", marginBottom:10 }}>
+        <div style={{ display:"flex", alignItems:"flex-start", gap:12, marginBottom:8 }}>
+          <div style={{ fontFamily:"JetBrains Mono,monospace", fontSize:18, fontWeight:800, color:G.gold, flexShrink:0, lineHeight:1 }}>#{n}</div>
+          <div style={{ flex:1 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:8, flexWrap:"wrap", marginBottom:4 }}>
+              <span style={{ fontSize:13, fontWeight:700, color:G.white }}>{title}</span>
+              <Badge st={impl} />
+            </div>
+            <p style={{ fontSize:12, color:G.fog, lineHeight:1.75, margin:0 }}>{body}</p>
+            {feature && <div style={{ marginTop:8, fontSize:11, color:G.mist, fontStyle:"italic" }}>→ {feature}</div>}
+          </div>
+        </div>
+      </div>
+    );
+    return (
+      <div style={{ minHeight:"100vh", background:G.bg, fontFamily:"Outfit,sans-serif", padding:"48px 24px 88px" }}>
+        <div style={{ maxWidth:780, margin:"0 auto" }}>
+          <button onClick={() => setScreen(prevScreen)} style={{ background:"none", border:"none", color:G.mist, fontSize:13, cursor:"pointer", fontFamily:"Outfit,sans-serif", display:"flex", alignItems:"center", gap:6, padding:0, marginBottom:32 }}>← Back</button>
+          <div style={{ fontFamily:"Cormorant Garamond,serif", fontSize:38, color:G.white, fontWeight:700, marginBottom:8 }}>Golden Rules of Mutual Fund Investing</div>
+          <p style={{ fontSize:14, color:G.slate, lineHeight:1.7, marginBottom:8 }}>20 principles that have stood the test of time across every market cycle since Indian equity markets began. These are not opinions — they are evidence validated across 25+ years of data.</p>
+          <div style={{ display:"flex", gap:16, flexWrap:"wrap", marginBottom:32, fontSize:12 }}>
+            {Object.values(RULE_IMPL).map(s => <span key={s.label} style={{ color:s.color }}><span style={{ fontWeight:700 }}>■</span> {s.label} in FundGuldasta</span>)}
+          </div>
+
+          <Section title="I. The Compounding Principles" />
+          <Rule n={1} title="Time in market beats timing the market" impl="full" body="Markets deliver most returns in unpredictable short bursts. Missing the 10 best days in a 20-year period (which cluster around the worst days) reduces your corpus by 50%. Investors who exit during fear almost always miss the recovery. The only strategy that reliably works: stay invested through every cycle." feature="Historical SIP Backtest · Stress Test · Horizon Suitability Advisory" />
+          <Rule n={2} title="Start early — the cost of waiting is irreversible" impl="full" body="₹5,000/month started at age 25 becomes ₹1.75 Cr by age 55. The same SIP started at age 35 becomes ₹50L — a ₹1.25 Cr difference from a 10-year delay. No fund selection, no market timing, no active strategy can compensate for this arithmetic. The most powerful financial decision is when you begin." feature="Start Early Calculator (Calculators → Start Early tab)" />
+          <Rule n={3} title="The last years of compounding carry disproportionate wealth" impl="full" body="In a 25-year SIP, over 60% of the final corpus builds in the last 8 years. The first 15 years build the foundation; the last 10 years are where the wealth explosion happens. Early redemption means you endure all the volatility and forfeit most of the compounding. Never redeem equity before your goal date." feature="Compounding Curve visualization (Compounding & Psychology screen)" />
+
+          <Section title="II. The Cost Principles" />
+          <Rule n={4} title="Expense ratio compounds against you as powerfully as returns compound for you" impl="full" body="1% extra expense ratio costs you ₹28L on a ₹10L investment over 20 years. A fund at 0.10% ER vs 1.50% ER — same fund manager, same stocks — delivers radically different wealth outcomes at the end. Low cost is the only guaranteed alpha. The market cannot guarantee returns; low costs are certain." feature="ER shown on every fund · Cost Efficiency in Confidence Score · Index Fund Compare" />
+          <Rule n={5} title="Minimise transaction friction — taxes and exit loads silently erode wealth" impl="full" body="LTCG above ₹1.25L taxed at 12.5%. STCG at 20%. Every redemption, every fund switch triggers a tax event. Frequent rebalancing and performance-chasing carry a tax cost invisible in the NAV chart. The ideal holding behaviour: invest → stay invested → redeem only at goal date." feature="LTCG/STCG Calculator · Portfolio Tax Report · Rebalancing via SIP redirection (not redemption)" />
+          <Rule n={6} title="Direct plans over regular plans — always" impl="full" body="Regular plans pay 0.5–1.5% annual commission to distributors. On a ₹10L investment over 20 years, this commission silently transfers ₹20–30L from your wealth to the distributor — without any additional service or alpha. Direct plans are legally identical portfolios at lower cost. There is no argument for regular plans when direct plans exist." feature="Hard filter — only Direct plans enter FundGuldasta's engine. No regular plan is ever recommended." />
+
+          <Section title="III. The Risk Principles" />
+          <Rule n={7} title="Volatility is not risk — permanent loss of capital is risk" impl="full" body="A fund that fell 60% in 2008 and recovered to 18% CAGR by 2023 carried no real risk for the patient investor. Risk is: selling at the bottom, investing in fraudulent schemes, or concentrating in sectors that structurally fail. Temporary drawdowns are the price of long-term compounding. They become permanent only when you sell." feature="Crash Recovery Table (Compounding & Psychology screen) · Drawdown disclosures on archetypes · Stress Test" />
+          <Rule n={8} title="Diversification within equity has diminishing returns beyond a point" impl="full" body="3–5 category-diversified funds eliminate 90% of idiosyncratic fund risk. Adding an 8th or 10th fund adds near-zero diversification benefit while increasing complexity. Indian equity funds correlate at 0.85–0.95 — genuine diversification comes from category choice (large/mid/small/flexi), not fund count." feature="Correlation matrix (HARD_REJECT=0.95) · Overlap Analysis · Category diversity constraint in Bouquet Builder" />
+          <Rule n={9} title="Asset allocation determines 90% of long-term outcomes — fund selection determines 10%" impl="partial" body="Being 80% equity vs 60% equity over 20 years matters far more than whether you chose Mirae Asset over HDFC. The right asset allocation is set by your horizon, income stability, and genuine (not theoretical) risk tolerance. Within equity, category allocation matters next. Individual fund selection matters least." feature="Risk Profiler → Archetype recommendation · Note: equity/debt split guidance not yet built" />
+          <Rule n={10} title="Real risk tolerance is revealed in bear markets — not questionnaires" impl="full" body="Everyone believes they have high risk tolerance when markets are rising. 2008 (Nifty -60%), 2020 (Nifty -38% in 6 weeks) — these reveal actual behaviour. An investor who will sell at -35% should never be in a small-cap fund regardless of what they say in a quiz. Drawdowns of 50–60% in small/midcap are not unusual — they are historically normal." feature="Bear market scenario in Risk Profiler quiz · Drawdown disclosures on every archetype card · Stress Test" />
+
+          <Section title="IV. The Behavioural Principles" />
+          <Rule n={11} title="The investor's behaviour is the biggest performance drag — not the fund" impl="full" body="DALBAR studies show a persistent 3–5% annual gap: funds deliver 14%, investors get 9–10%. The gap is entirely behavioural — buying after markets rise (paying peak prices) and selling after markets fall (locking in losses). Automating SIP removes the contribution decision. A 'do not touch' discipline protects the compounding." feature="Behaviour Gap illustration (Compounding & Psychology screen) · No recency-biased rankings · Drawdown disclosures" />
+          <Rule n={12} title="SIP beats lumpsum psychologically — and equals it mathematically over long volatile periods" impl="full" body="SIP eliminates market timing paralysis. It forces buying more units when prices fall (rupee cost averaging). Mathematically, in a trending-up market, lumpsum wins slightly; in volatile/sideways markets, SIP wins. Behaviourally, SIP always wins — because people actually execute it rather than waiting for the 'right time' that never comes." feature="SIP Calculator (all modes) · Historical SIP Backtest · Both SIP and lumpsum modes in bouquet curation" />
+          <Rule n={13} title="Never confuse recent performance with future performance" impl="full" body="The fund that returned 40% last year was in a sector that had its best period. Mean reversion is one of the most robust empirical phenomena in finance. SPIVA India shows 85–90% of large cap active funds underperform over 10 years — yet retail investors consistently chase the previous year's top performers. Last year's winner is frequently next year's average." feature="Engine uses 5/7/10yr rolling returns — never 1yr · SPIVA evidence in Passive vs Active education · Survivorship bias disclosure" />
+          <Rule n={14} title="Rebalancing is a discipline, not a one-time event" impl="full" body="A 60% equity bouquet drifts to 80% after a 3-year bull market. The discipline of rebalancing back — selling outperformers, buying underperformers — is deeply counterintuitive but structurally sound. Annual calendar rebalancing + 5-point threshold trigger. SIP redirection preferred (no tax event vs selling units)." feature="Rebalancing Guidelines in bouquet detail · Per-fund target weight table · AI Rebalancing Drift tool" />
+
+          <Section title="V. The Selection Principles" />
+          <Rule n={15} title="Consistency beats brilliance — always" impl="full" body="A fund delivering 13% CAGR with low variance across all market cycles is more valuable than one delivering 18% in bull markets and -5% in bear markets. Rolling return consistency over 10+ years is the most honest measure of a fund manager's skill versus luck. One spectacular year proves nothing about skill." feature="Return Consistency = 25% of Fund Score · Rolling Consistency = 30% of Confidence Score · Rolling returns analysis" />
+          <Rule n={16} title="AUM matters at extremes — too large kills alpha in small/midcap" impl="full" body="₹500Cr+ AUM floor ensures liquidity and survival. But beyond ₹25,000Cr in small-cap or ₹40,000Cr in midcap, the manager cannot deploy capital efficiently into smaller companies — the core source of alpha in these segments. Very large small-cap funds structurally become closet index funds. Watch for size-creep." feature="₹500Cr AUM hard filter · AUM upper-bound warning for small/midcap in Fund Intelligence screen" />
+          <Rule n={17} title="Manager continuity matters more than manager fame" impl="full" body="When the fund manager who built the 10-year track record leaves, that track record becomes historical fiction. The fund's future depends entirely on the incoming manager's philosophy, process, and relationship with the portfolio companies. Manager change is the most underweighted risk in retail mutual fund selection." feature="Manager Stability = 15% of Fund Score · AMFI-verified manager data · Manager change email alerts" />
+          <Rule n={18} title="Category fit before fund selection — always" impl="full" body="Choosing the right SEBI category for your goal and horizon matters more than picking the best fund within a category. A great small-cap fund is wrong for a 5-year goal. A great liquid fund is wrong for a 20-year wealth goal. Category determines your risk-return profile; fund selection fine-tunes it. Category first, fund second." feature="SEBI category diversity in Bouquet Builder · Goal Bouquet matches category to horizon · 15+ SEBI categories covered in Advisor" />
+
+          <Section title="VI. The Goal Architecture Principles" />
+          <Rule n={19} title="One goal, one portfolio — never mix objectives" impl="full" body="Blending an emergency fund, a 10-year education goal, and a 25-year retirement corpus into a single portfolio is structurally wrong. Each goal has a different horizon, a different required return, a different risk tolerance, and a different rebalancing rule. Mixing them contaminates all three. One goal = one dedicated bouquet." feature="Goal Bouquet (Screen 2) — one bouquet per goal · Multi-goal planner with per-goal SIP calculation · Saved bouquets" />
+          <Rule n={20} title="Your corpus target must be in today's rupees — always adjust for inflation" impl="full" body="₹1 Cr sounds like a retirement corpus. At 6% inflation over 20 years, ₹1 Cr in 2044 has the purchasing power of ₹31L today. Planning for ₹1 Cr nominal in 20 years means planning to live on today's equivalent of ₹31L — a severe underestimate. Always state your goal in today's rupees and let the calculator inflate it forward." feature="Retirement Calculator (inflation-adjusted) · Inflation Reality Check in Goal Planner · Goal Planner inflation toggle" />
+
+          <div style={{ textAlign:"center", marginTop:40, display:"flex", gap:12, justifyContent:"center", flexWrap:"wrap" }}>
+            <button onClick={() => { setPrevScreen("golden_rules"); setScreen("learn-compounding"); }} style={{ background:"rgba(212,175,55,0.08)", border:"1px solid rgba(212,175,55,0.3)", color:G.gold, borderRadius:8, padding:"10px 20px", cursor:"pointer", fontFamily:"Outfit,sans-serif", fontSize:13 }}>🧮 Compounding & Psychology →</button>
+            <button onClick={() => { setPrevScreen("golden_rules"); setCalcPreFill(null); setCalcTab('start_early'); setScreen("calculators"); }} style={{ background:"rgba(212,175,55,0.06)", border:"1px solid rgba(212,175,55,0.2)", color:G.gold, borderRadius:8, padding:"10px 20px", cursor:"pointer", fontFamily:"Outfit,sans-serif", fontSize:13 }}>⏳ Start Early Calculator →</button>
+            <button onClick={() => setScreen(prevScreen)} style={{ background:"none", border:"1px solid rgba(255,255,255,0.1)", color:G.mist, borderRadius:8, padding:"10px 20px", cursor:"pointer", fontFamily:"Outfit,sans-serif", fontSize:13 }}>← Back</button>
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -5031,6 +5361,17 @@ useEffect(() => {
                           <div style={{ marginTop:10, padding:"8px 12px", background:"rgba(240,165,0,0.08)", border:"1px solid rgba(240,165,0,0.2)", borderRadius:8, fontSize:12, color:"#F0A500", lineHeight:1.6 }}>
                             ⚠ {a.nav_count < 100 ? "Very limited" : "Partial"} price history ({a.nav_count} records). Scores computed from available data — treat with caution. A fund with 3+ years of data gives more reliable signals.
                           </div>
+                        )}
+                        {rm.aum_crores != null && (
+                          (a.sebi_category || '').toLowerCase().includes('small cap') && rm.aum_crores > 25000 ? (
+                            <div style={{ marginTop:10, padding:"8px 12px", background:"rgba(240,165,0,0.08)", border:"1px solid rgba(240,165,0,0.2)", borderRadius:8, fontSize:12, color:"#F0A500", lineHeight:1.6 }}>
+                              ⚠ AUM Size Risk: At ₹{Math.round(rm.aum_crores/1000)}K Cr, this small-cap fund may face deployment constraints. Large AUM in small cap reduces the manager's ability to take meaningful positions in smaller companies — the core source of small-cap alpha. Historical evidence shows diminishing alpha for small-cap funds above ₹20,000–25,000 Cr.
+                            </div>
+                          ) : (a.sebi_category || '').toLowerCase().includes('mid cap') && rm.aum_crores > 40000 ? (
+                            <div style={{ marginTop:10, padding:"8px 12px", background:"rgba(240,165,0,0.08)", border:"1px solid rgba(240,165,0,0.2)", borderRadius:8, fontSize:12, color:"#F0A500", lineHeight:1.6 }}>
+                              ⚠ AUM Size Risk: At ₹{Math.round(rm.aum_crores/1000)}K Cr, this mid-cap fund's size may limit its agility. Very large mid-cap funds can develop closet-indexing behaviour, reducing the active alpha that justifies their higher expense ratio.
+                            </div>
+                          ) : null
                         )}
                       </div>
                       {/* Composite score circle */}
