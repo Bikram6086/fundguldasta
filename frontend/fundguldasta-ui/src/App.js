@@ -3077,9 +3077,6 @@ useEffect(() => {
             </div>
           )}
           <button className="btn-p" disabled={!isValid} onClick={handleFind}>{tr("Curate My Bouquets →","मेरे गुलदस्ता तैयार करें →")}</button>
-          {/* Standalone: Find My Risk Profile */}
-          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.04)", border:"1px solid rgba(212,175,55,0.2)", color:G.mist }} onClick={() => { handleQuizReset(); setQuizModal(true); }}>{tr("🎯 Find My Risk Profile", HI_HERO.btnRisk)}</button>
-
           {/* Group: Bouquets & Strategies */}
           <button className="byob-entry" style={{ marginTop: 8, display:'flex', justifyContent:'space-between', alignItems:'center', background:"rgba(212,175,55,0.07)", border:"1px solid rgba(212,175,55,0.25)" }} onClick={() => setHeroGroupOpen(heroGroupOpen === 'bouquets' ? null : 'bouquets')}>
             <span>🗂 Bouquets &amp; Strategies</span><span style={{fontSize:11,color:G.slate}}>{heroGroupOpen === 'bouquets' ? '▲' : '▼'}</span>
