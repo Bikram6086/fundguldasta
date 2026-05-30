@@ -813,7 +813,8 @@ export default function App() {
       if (result.status === 'cooldown') {
         setNavRefreshMsg({ type: 'warn', text: result.message });
       } else {
-        setNavRefreshMsg({ type: 'ok', text: `Data refreshed — NAV through: ${result.nav_data_through}` });
+        const inserted = result.records_inserted != null ? ` · ${result.records_inserted} new records` : '';
+        setNavRefreshMsg({ type: 'ok', text: `NAV updated through ${result.nav_data_through}${inserted}` });
         const fdata = await getFreshness().catch(() => null);
         if (fdata) setFreshness(fdata);
       }
@@ -6931,7 +6932,7 @@ useEffect(() => {
                         disabled={navRefreshing}
                         title="Fetch latest NAV data from AMFI"
                       >
-                        {navRefreshing ? "⟳" : "⟳"} {navRefreshing ? "Refreshing..." : "Refresh Data"}
+                        <span>⟳</span> {navRefreshing ? "Refreshing..." : "Refresh Data"}
                       </button>
                       <span style={{color:G.mist,fontSize:11}}>{secCollapsed.freshness?'▶':'▼'}</span>
                     </span>

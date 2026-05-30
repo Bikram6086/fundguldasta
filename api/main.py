@@ -986,6 +986,14 @@ def get_freshness(archetype_id: str):
 
     cursor.execute("SELECT MAX(nav_date) FROM nav_data")
     max_nav_date = (cursor.fetchone() or [None])[0]
+
+    # Use actual data tables — more accurate than pipeline_log entries
+    cursor.execute("SELECT MAX(price_date) FROM benchmark_data")
+    max_bench_date = (cursor.fetchone() or [None])[0]
+
+    cursor.execute("SELECT MAX(computation_date) FROM bouquet_cache")
+    max_cache_date = (cursor.fetchone() or [None])[0]
+
     cursor.close()
     conn.close()
 
@@ -1013,19 +1021,18 @@ def get_freshness(archetype_id: str):
             return 'warn'
         return 'stale'
 
-    nav_date  = max_nav_date
-    nav_pipe  = pipeline_map.get('nav_ingestion')
-    bench_date = pipeline_map.get('benchmark_ingestion')
-    mgr_date  = pipeline_map.get('manager_change_detection')
-    cat_date  = pipeline_map.get('manager_ingestion')
-    cache_date = pipeline_map.get('precompute')
+    nav_date   = max_nav_date
+    bench_date = max_bench_date   # from benchmark_data table directly
+    cache_date = max_cache_date   # from bouquet_cache table directly
+    mgr_date   = pipeline_map.get('manager_change_detection')
+    cat_date   = pipeline_map.get('manager_ingestion')
 
     # Nav and benchmark: daily cadence (weekdays). Allow 3 days for weekends.
     nav_status   = stale_status(nav_date,   3)
     bench_status = stale_status(bench_date, 3)
-    # Manager and category: weekly cadence (SID documents update infrequently).
-    mgr_status  = stale_status(mgr_date,  7)
-    cat_status  = stale_status(cat_date,  7)
+    # Manager and category: SID documents change rarely — 14-day cadence is appropriate.
+    mgr_status  = stale_status(mgr_date,  14)
+    cat_status  = stale_status(cat_date,  14)
     # Bouquet cache: daily cadence (rebuilt after each NAV update).
     cache_status = stale_status(cache_date, 3)
 
@@ -1097,6 +1104,61 @@ def get_freshness(archetype_id: str):
         'overallHealth': overall,
         'nextHoldingsUpdate': '7 days',
     }
+
+@app.post("/api/pipeline/trigger-nav")
+def trigger_nav_pipeline():
+    """Manually trigger NAV ingestion. Cooldown: 2 hours between runs."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # Check cooldown: successful run within the last 2 hours
+    cursor.execute("""
+        SELECT MAX(completed_at) FROM pipeline_log
+        WHERE pipeline_name = 'nav_ingestion' AND status = 'success'
+        AND completed_at > NOW() - INTERVAL '2 hours'
+    """)
+    recent = cursor.fetchone()[0]
+
+    if recent:
+        cursor.execute("SELECT MAX(nav_date) FROM nav_data")
+        max_nav = cursor.fetchone()[0]
+        cursor.close()
+        conn.close()
+        return {
+            'status': 'cooldown',
+            'message': 'NAV data was refreshed recently. Next manual refresh available after 2-hour cooldown.',
+            'nav_data_through': str(max_nav) if max_nav else None,
+        }
+
+    cursor.close()
+    conn.close()
+
+    try:
+        from data.nav_ingestion import fetch_nav_data, parse_nav_data, insert_nav_records, log_pipeline as nav_log
+        raw = fetch_nav_data()
+        records = parse_nav_data(raw)
+        inserted, _ = insert_nav_records(records)
+        nav_log('success', inserted)
+
+        conn2 = get_db()
+        cursor2 = conn2.cursor()
+        cursor2.execute("SELECT MAX(nav_date) FROM nav_data")
+        max_nav = cursor2.fetchone()[0]
+        cursor2.close()
+        conn2.close()
+
+        return {
+            'status': 'ok',
+            'nav_data_through': str(max_nav) if max_nav else None,
+            'records_inserted': inserted,
+        }
+    except Exception as e:
+        try:
+            from data.nav_ingestion import log_pipeline as nav_log
+            nav_log('failed', 0, str(e))
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"NAV ingestion failed: {e}")
 
 @app.get("/api/pipeline/status")
 def get_pipeline_status():
