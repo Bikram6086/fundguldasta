@@ -890,6 +890,16 @@ class GoalBouquetRequest(BaseModel):
     target_cagr: float = 16.0
 
 
+@app.get("/api/bouquets/index")
+def index_bouquets_endpoint():
+    """Returns all curated index (passive) bouquets with performance data."""
+    from engine.index_bouquet import get_index_bouquets as _get_index_bouquets
+    try:
+        return {'bouquets': _get_index_bouquets()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/api/bouquets/goal")
 def curate_goal_bouquet(request: GoalBouquetRequest):
     """

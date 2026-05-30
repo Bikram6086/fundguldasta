@@ -518,6 +518,9 @@ export default function App() {
   const [cbSelectedSwaps, setCbSelectedSwaps] = useState(new Set());
   const [pwaPrompt, setPwaPrompt] = useState(null);
   const [heroGroupOpen, setHeroGroupOpen] = useState(null);
+  const [indexBouquets, setIndexBouquets] = useState(null);
+  const [indexBouquetsLoading, setIndexBouquetsLoading] = useState(false);
+  const [indexBouquetsError, setIndexBouquetsError] = useState(null);
   const [user, setUser] = useState(null);
   const [authModal, setAuthModal] = useState(false);
   const [authTab, setAuthTab] = useState("login");
@@ -3087,6 +3090,7 @@ useEffect(() => {
               <button className="byob-entry" style={{ marginTop:6 }} onClick={() => setScreen("custom_builder")}>{tr("✎ Build Your Own Bouquet", HI_HERO.btnBYOB)}</button>
               <button className="byob-entry" style={{ marginTop:6, background:"rgba(212,175,55,0.1)", border:"1px solid rgba(212,175,55,0.4)", color:G.gold, fontWeight:700 }} onClick={() => { setGoalResult(null); setGoalError(null); setGoalFromPlanner(null); setScreen("goal_bouquet"); }}>🎯 Build for My Goal — bouquet for your exact target</button>
               <button className="byob-entry" style={{ marginTop:6, background:"rgba(99,179,237,0.05)", border:"1px solid rgba(99,179,237,0.2)", color:"#63B3ED" }} onClick={() => { setPrevScreen("hero"); setCoreSat(null); setCoreSatError(null); setScreen("core_satellite"); }}>🎯 Core-Satellite — Index core + active satellite</button>
+              <button className="byob-entry" style={{ marginTop:6, background:"rgba(39,174,120,0.07)", border:"1px solid rgba(39,174,120,0.25)", color:"#27AE78" }} onClick={() => { setPrevScreen("hero"); setIndexBouquets(null); setScreen("index_bouquets"); }}>📊 Index Bouquets — Curated passive portfolios by horizon</button>
             </div>
           )}
 
@@ -4189,6 +4193,148 @@ useEffect(() => {
           <button onClick={() => setScreen(prevScreen)} style={{ background:"none", border:"1px solid rgba(255,255,255,0.1)", color:G.mist, borderRadius:8, padding:"10px 20px", cursor:"pointer", fontFamily:"Outfit,sans-serif", fontSize:13 }}>← Back</button>
         </div>
       </LearnPage>
+    );
+  }
+
+  // ── INDEX BOUQUETS ──────────────────────────────────────────────────────
+  if (screen === "index_bouquets") {
+    document.title = "Index Bouquets — FundGuldasta";
+
+    if (!indexBouquets && !indexBouquetsLoading) {
+      setIndexBouquetsLoading(true);
+      apiCall('GET', '/api/bouquets/index')
+        .then(data => { setIndexBouquets(data.bouquets || []); setIndexBouquetsLoading(false); })
+        .catch(e => { setIndexBouquetsError('Could not load index bouquets.'); setIndexBouquetsLoading(false); });
+    }
+
+    const simpleBouquet = (indexBouquets || []).find(b => b.type === 'simple');
+    const detailedBouquets = (indexBouquets || []).filter(b => b.type === 'detailed');
+
+    const fmt1dp = v => v != null ? v.toFixed(1) + '%' : '—';
+    const fmtTer = v => v != null ? v.toFixed(2) + '%' : '—';
+
+    const AllocationBar = ({ funds }) => (
+      <div style={{ marginTop: 14 }}>
+        {/* Stacked weight bar */}
+        <div style={{ display:'flex', height:8, borderRadius:4, overflow:'hidden', marginBottom:10 }}>
+          {funds.map((f, i) => {
+            const colors = ['rgba(212,175,55,0.8)','rgba(99,179,237,0.8)','rgba(39,174,120,0.8)','rgba(224,85,85,0.8)'];
+            return <div key={i} style={{ flex: f.weight, background: colors[i % colors.length] }} />;
+          })}
+        </div>
+        {funds.map((f, i) => (
+          <div key={i} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'5px 0', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <div style={{ width:8, height:8, borderRadius:2, background:['rgba(212,175,55,0.8)','rgba(99,179,237,0.8)','rgba(39,174,120,0.8)','rgba(224,85,85,0.8)'][i%4], flexShrink:0 }} />
+              <div>
+                <div style={{ fontSize:12, color:'rgba(255,255,255,0.8)' }}>{f.short_name}</div>
+                <div style={{ fontSize:10, color:'rgba(255,255,255,0.4)' }}>{f.index} · TER {fmtTer(f.ter)} · {f.role}</div>
+              </div>
+            </div>
+            <div style={{ textAlign:'right', flexShrink:0 }}>
+              <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:14, color:'rgba(212,175,55,0.9)', fontWeight:600 }}>{f.weight}%</div>
+              <div style={{ fontSize:10, color:'rgba(255,255,255,0.3)' }}>3yr {fmt1dp(f.cagr_3y)}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+
+    const BouquetCard = ({ b, highlight }) => (
+      <div style={{ background: highlight ? 'rgba(39,174,120,0.04)' : 'rgba(255,255,255,0.02)', border: `1px solid ${highlight ? 'rgba(39,174,120,0.25)' : 'rgba(255,255,255,0.08)'}`, borderRadius:16, padding:'22px 24px', marginBottom:16 }}>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12, marginBottom:6 }}>
+          <div>
+            <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:4 }}>
+              <span style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:20, color:'#fff', fontWeight:600 }}>{b.name}</span>
+              {highlight && <span style={{ fontSize:10, background:'rgba(39,174,120,0.15)', border:'1px solid rgba(39,174,120,0.35)', borderRadius:4, padding:'2px 8px', color:'#27AE78', fontWeight:700, letterSpacing:'.06em' }}>SIMPLE</span>}
+              <span style={{ fontSize:11, background:`${b.color}18`, border:`1px solid ${b.color}44`, borderRadius:6, padding:'2px 10px', color:b.color, fontWeight:600 }}>{b.horizon_label}</span>
+            </div>
+            <div style={{ fontSize:12, color:'rgba(255,255,255,0.45)', lineHeight:1.5 }}>{b.subtitle}</div>
+          </div>
+          <div style={{ textAlign:'right', flexShrink:0 }}>
+            <div style={{ fontSize:10, color:'rgba(255,255,255,0.3)', marginBottom:2 }}>Blended TER</div>
+            <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:18, color:b.color, fontWeight:700 }}>{fmtTer(b.weighted_ter)}</div>
+          </div>
+        </div>
+
+        <AllocationBar funds={b.funds} />
+
+        <div style={{ display:'flex', gap:16, marginTop:14, flexWrap:'wrap' }}>
+          {[['3yr CAGR', b.composite_cagr_3y], ['5yr CAGR', b.composite_cagr_5y]].map(([label, val]) => (
+            <div key={label} style={{ background:'rgba(255,255,255,0.03)', borderRadius:8, padding:'8px 14px', textAlign:'center' }}>
+              <div style={{ fontSize:10, color:'rgba(255,255,255,0.35)', marginBottom:2 }}>{label} (composite)</div>
+              <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:16, color: val != null ? '#27AE78' : 'rgba(255,255,255,0.3)', fontWeight:600 }}>{fmt1dp(val)}</div>
+            </div>
+          ))}
+          <div style={{ background:'rgba(255,255,255,0.03)', borderRadius:8, padding:'8px 14px', textAlign:'center' }}>
+            <div style={{ fontSize:10, color:'rgba(255,255,255,0.35)', marginBottom:2 }}>Funds</div>
+            <div style={{ fontFamily:"'JetBrains Mono',monospace", fontSize:16, color:'rgba(255,255,255,0.6)', fontWeight:600 }}>{b.funds.length}</div>
+          </div>
+        </div>
+
+        <div style={{ marginTop:14, fontSize:11, color:'rgba(255,255,255,0.35)', lineHeight:1.7, padding:'10px 12px', background:'rgba(255,255,255,0.02)', borderRadius:8, borderLeft:`2px solid ${b.color}55` }}>
+          {b.rationale}
+        </div>
+        {b.drawdown_note && (
+          <div style={{ marginTop:8, fontSize:11, color:'#F0A500', background:'rgba(240,165,0,0.05)', border:'1px solid rgba(240,165,0,0.2)', borderRadius:6, padding:'6px 12px' }}>
+            ⚠ {b.drawdown_note}
+          </div>
+        )}
+      </div>
+    );
+
+    return (
+      <>
+        <style>{css}</style>
+        <div style={{ minHeight:'100vh', background:'#0A0C12', fontFamily:'Outfit,sans-serif' }}>
+          <div style={{ maxWidth:820, margin:'0 auto', padding:'28px 24px 80px' }}>
+            <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:32 }}>
+              <button onClick={() => setScreen(prevScreen)} style={{ background:'none', border:'1px solid rgba(255,255,255,0.1)', borderRadius:8, padding:'5px 14px', color:'rgba(255,255,255,0.5)', fontSize:12, cursor:'pointer', fontFamily:'Outfit,sans-serif' }}>← Back</button>
+              <div>
+                <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:28, color:'#fff', fontWeight:700, lineHeight:1.1 }}>Index Bouquets</div>
+                <div style={{ fontSize:12, color:'rgba(255,255,255,0.4)', marginTop:2 }}>Curated passive portfolios · No manager risk · Low cost · Evidence-based</div>
+              </div>
+            </div>
+
+            <div style={{ background:'rgba(39,174,120,0.06)', border:'1px solid rgba(39,174,120,0.2)', borderRadius:12, padding:'14px 18px', marginBottom:28, fontSize:12, color:'rgba(255,255,255,0.55)', lineHeight:1.8 }}>
+              <strong style={{ color:'#27AE78' }}>Why passive?</strong> Over 15-year periods, approximately 80–90% of actively managed equity funds in India underperform their benchmark index after costs. Index funds remove manager risk, minimise costs, and guarantee you capture the market return — which has compounded at 12–15% annually over 25 years.
+              The only variables that matter here are <em>which index</em> to track, <em>how cheaply</em>, and <em>for how long</em>.
+            </div>
+
+            {indexBouquetsLoading && (
+              <div style={{ textAlign:'center', padding:'60px 0', color:'rgba(255,255,255,0.4)' }}>
+                <div className="gen-spinner" style={{ margin:'0 auto 16px' }} />
+                Loading index bouquets...
+              </div>
+            )}
+            {indexBouquetsError && (
+              <div style={{ color:'#E05555', background:'rgba(224,85,85,0.08)', border:'1px solid rgba(224,85,85,0.2)', borderRadius:10, padding:'14px 18px', marginBottom:16 }}>
+                {indexBouquetsError}
+              </div>
+            )}
+
+            {indexBouquets && (
+              <>
+                <div style={{ fontSize:10, letterSpacing:'.12em', textTransform:'uppercase', color:'rgba(212,175,55,0.7)', fontWeight:700, marginBottom:12 }}>Simple Portfolio</div>
+                {simpleBouquet && <BouquetCard b={simpleBouquet} highlight={true} />}
+
+                <div style={{ fontSize:10, letterSpacing:'.12em', textTransform:'uppercase', color:'rgba(212,175,55,0.7)', fontWeight:700, margin:'28px 0 12px' }}>Detailed Portfolios — By Horizon</div>
+                <div style={{ fontSize:11, color:'rgba(255,255,255,0.35)', marginBottom:16, lineHeight:1.6 }}>
+                  Each bouquet uses the best-in-class fund for each index slot, selected by lowest TER and longest verified track record.
+                  All CAGR figures are historical — past performance does not guarantee future returns.
+                </div>
+                {detailedBouquets.map(b => <BouquetCard key={b.id} b={b} highlight={false} />)}
+
+                <div style={{ marginTop:24, padding:'16px 20px', background:'rgba(255,255,255,0.02)', border:'1px solid rgba(255,255,255,0.06)', borderRadius:12, fontSize:11, color:'rgba(255,255,255,0.3)', lineHeight:1.8 }}>
+                  <strong style={{ color:'rgba(255,255,255,0.5)' }}>Fund selection methodology:</strong> For each index slot, the fund with the longest verified NAV history and lowest TER among direct-plan index funds tracking that index was selected.
+                  TER values are sourced from AMFI (May 2026). CAGR figures are computed from AMFI NAV data.
+                  This is research and education only — not investment advice.
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </>
     );
   }
 
