@@ -9,10 +9,12 @@ DB_CONFIG = get_db_config()
 
 # Yahoo Finance tickers for Indian indices
 BENCHMARKS = {
-    'NIFTY50':      ('^NSEI',   'Nifty 50'),
-    'NIFTY500':     ('^CRSLDX', 'Nifty 500'),
-    'NIFTYMID150':  ('^NSEMDCP50', 'Nifty Midcap 150'),
-    'NIFTYSML250':  ('^NSESMCP', 'Nifty Smallcap 250'),
+    'NIFTY50':      ('^NSEI',      'Nifty 50'),
+    'NIFTY500':     ('^CRSLDX',   'Nifty 500'),
+    'NIFTYMID150':  ('^NSEMDCP50','Nifty Midcap 150'),
+    'NIFTYSML250':  ('^NSESMCP',  'Nifty Smallcap 250'),
+    'NIFTYNXT50':   ('^NSMIDCP',  'Nifty Next 50'),
+    'SENSEX':       ('^BSESN',    'BSE Sensex'),
 }
 
 def fetch_index_data(ticker, start_date='2006-01-01'):

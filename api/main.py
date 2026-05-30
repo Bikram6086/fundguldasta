@@ -3224,3 +3224,64 @@ def get_tax_report(
         "note": "Based on FIFO lot matching of CAS transactions. Verify with your CA before filing.",
         "has_data": len(fund_reports) > 0,
     }
+
+
+# ---------------------------------------------------------------------------
+# INDEX FUND COMPARISON  (Priority 26)
+# ---------------------------------------------------------------------------
+
+_index_compare_cache: dict = {}
+_index_compare_lock = threading.Lock()
+_INDEX_COMPARE_TTL = 4 * 3600  # 4 hours
+
+@app.get("/api/index-funds/compare")
+def get_index_fund_compare():
+    """
+    Return tracking error, tracking difference, and key metrics
+    for all curated index fund groups.
+    Cached in memory for 4 hours — computation takes ~3-5s.
+    """
+    import time
+    now = time.time()
+    with _index_compare_lock:
+        cached = _index_compare_cache.get("data")
+        ts = _index_compare_cache.get("ts", 0)
+        if cached is not None and (now - ts) < _INDEX_COMPARE_TTL:
+            return {"groups": cached, "cached": True, "aum_note": "approx May 2026"}
+
+    try:
+        from engine.index_fund_metrics import get_all_index_comparisons
+        groups = get_all_index_comparisons()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Index comparison error: {e}")
+
+    with _index_compare_lock:
+        _index_compare_cache["data"] = groups
+        _index_compare_cache["ts"] = now
+
+    return {"groups": groups, "cached": False, "aum_note": "approx May 2026"}
+
+
+@app.get("/api/index-funds/core-satellite")
+def get_core_satellite(
+    core_index: str = Query(default="nifty50", description="Index group id for core"),
+    horizon: int = Query(default=7, description="Horizon years for satellite scoring"),
+):
+    """
+    Return a core-satellite portfolio suggestion.
+    Core: lowest tracking-error fund from chosen index at 55%.
+    Satellite: top 3 active mid/small cap funds from computed_metrics at 45%.
+    """
+    valid_indices = {"nifty50", "niftynxt50", "sensex"}
+    if core_index not in valid_indices:
+        raise HTTPException(status_code=400, detail=f"core_index must be one of {valid_indices}")
+    if horizon not in (5, 7, 10):
+        raise HTTPException(status_code=400, detail="horizon must be 5, 7, or 10")
+
+    try:
+        from engine.index_fund_metrics import get_core_satellite_suggestion
+        result = get_core_satellite_suggestion(core_index=core_index, satellite_horizon=horizon)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Core-satellite error: {e}")
+
+    return result

@@ -82,6 +82,11 @@ check_feature "Backtest API call"                    "backtest"
 check_feature "Overlap / correlation display"        "avgCorrelation"
 check_feature "Confidence score display"             "confidence"
 check_feature "Stress test display"                  "stressTest"
+check_feature "Index Fund Comparison screen"         "index-fund-comparison-screen"
+check_feature "Passive vs Active education screen"   "learn-passive-active"
+check_feature "Core-Satellite Bouquet screen"        "core-satellite-bouquet"
+check_feature "Index comparison API function"        "getIndexComparison"
+check_feature "Core-satellite API function"          "getCoreSatellite"
 
 if [ "$FP_FAIL" -gt 0 ]; then
     echo ""
@@ -102,7 +107,7 @@ echo "  Feature fingerprint: OK ($FP_TOTAL/$FP_TOTAL features present)"
 echo ""
 echo "[ App.js size floor... ]"
 APPJS_LINES=$(wc -l < "$APPJS")
-MIN_LINES=4000   # App.js is ~4600 lines as of May 2026; floor gives 13% headroom
+MIN_LINES=5200   # App.js is ~5600 lines as of May 2026; floor gives ~7% headroom
 if [ "$APPJS_LINES" -lt "$MIN_LINES" ]; then
     echo ""
     echo "✗ APP.JS TOO SHORT — push blocked."

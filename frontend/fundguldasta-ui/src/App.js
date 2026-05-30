@@ -179,6 +179,20 @@ async function getFreshness() {
   return null;
 }
 
+async function getIndexComparison() {
+  if (USE_LIVE_DATA) {
+    return apiCall("GET", "/api/index-funds/compare");
+  }
+  return null;
+}
+
+async function getCoreSatellite(coreIndex, horizon) {
+  if (USE_LIVE_DATA) {
+    return apiCall("GET", `/api/index-funds/core-satellite?core_index=${coreIndex}&horizon=${horizon}`);
+  }
+  return null;
+}
+
 const G = {
   bg: "#090C11", sur: "#10151F", elv: "#161D2C",
   bord: "rgba(255,255,255,0.07)", bordG: "rgba(212,175,55,0.22)",
@@ -428,6 +442,13 @@ export default function App() {
   const [goalCagr, setGoalCagr] = useState("14");
   const [goalYrs, setGoalYrs] = useState("10");
   const [goalFromPlanner, setGoalFromPlanner] = useState(null);
+  const [indexCompare, setIndexCompare] = useState(null);
+  const [indexCompareLoading, setIndexCompareLoading] = useState(false);
+  const [indexCompareError, setIndexCompareError] = useState(null);
+  const [coreSat, setCoreSat] = useState(null);
+  const [coreSatLoading, setCoreSatLoading] = useState(false);
+  const [coreSatError, setCoreSatError] = useState(null);
+  const [coreSatHorizon, setCoreSatHorizon] = useState(7);
   const [selectedArch, setSelectedArch] = useState(null);
   const [bStep, setBStep] = useState(0);
   const [bAns, setBAns] = useState({});
@@ -3046,6 +3067,9 @@ useEffect(() => {
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.08)", border:"1px solid rgba(212,175,55,0.25)" }} onClick={() => { setAdvisorMessages([]); setAdvisorInput(""); setScreen("advisor"); }}>💬 Guldasta Advisor — Ask anything about Indian MF</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(99,179,237,0.06)", border:"1px solid rgba(99,179,237,0.3)", color:"#63B3ED" }} onClick={() => { setFiSearch(''); setFiResults([]); setFiAnalysis(null); setFiError(''); setScreen("fund_intel"); }}>🔬 Fund Intelligence — Deep-analyse any mutual fund</button>
           <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.1)", border:"1px solid rgba(212,175,55,0.4)", color:G.gold, fontWeight:700 }} onClick={() => { setGoalResult(null); setGoalError(null); setGoalFromPlanner(null); setScreen("goal_bouquet"); }}>🎯 Build for My Goal — One bouquet built for your exact target</button>
+          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(99,179,237,0.08)", border:"1px solid rgba(99,179,237,0.35)", color:"#63B3ED" }} onClick={() => { setIndexCompare(null); setIndexCompareError(null); setScreen("index_compare"); }}>📊 Index Fund Compare — Track the trackers</button>
+          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(99,179,237,0.05)", border:"1px solid rgba(99,179,237,0.2)", color:"#63B3ED" }} onClick={() => { setCoreSat(null); setCoreSatError(null); setScreen("core_satellite"); }}>🎯 Core-Satellite Bouquet — Index core + active satellite</button>
+          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.1)", color:G.slate, fontSize:13 }} onClick={() => setScreen("learn-passive-active")}>📚 Passive vs Active — The evidence every investor needs</button>
           <p className="note">{lang === 'hi' ? HI_HERO.note : "Research & education only · Not investment advice · Past performance does not guarantee future returns\nAll fund data sourced from AMFI · No commission earned on any recommendation · fundguldasta.com"}</p>
         </div>
       </div>
@@ -3971,6 +3995,235 @@ useEffect(() => {
     );
   }
 
+  // ── PASSIVE VS ACTIVE EDUCATION ────────────────────────────────────────
+  if (screen === "learn-passive-active") {
+    document.title = "Passive vs Active Investing — FundGuldasta";
+    return (
+      <LearnPage title="Passive vs Active Investing" subtitle="What the evidence says — and where each approach earns its place in your portfolio.">
+        <LearnCard title="What is passive investing?">
+          A passive fund (index fund or ETF) simply buys every stock in a chosen index — Nifty 50, Sensex, Nifty Next 50 — in the same proportion as the index. No fund manager picks stocks. The fund's only job is to track the index as closely as possible. Cost is minimal: direct plan expense ratios are typically <strong>0.10–0.20% per year</strong> for Nifty 50 funds. Returns equal benchmark returns minus costs.
+        </LearnCard>
+        <LearnCard title="What does SPIVA India tell us?">
+          SPIVA (S&P Indices vs Active) publishes annual scorecards showing what percentage of active funds underperform their benchmark. <strong>India large cap (Nifty 50 / Sensex) over 10 years: 85–90% of active funds underperform.</strong> This is not a temporary trend — it has persisted across market cycles. In a market where this many professionals with Bloomberg terminals fail to beat the index, the argument for paying 1–1.5% in active expenses for large cap funds is very weak.
+        </LearnCard>
+        <LearnCard title="Why does large cap active struggle?">
+          The Nifty 50 is highly liquid, heavily researched, and dominated by institutions. Every major fund manager is analysing the same 50 companies. When information is widely available and instantly priced in, consistent outperformance becomes statistically improbable. Large cap active funds also have to overcome their own expense ratio — they need to beat the index by 1%+ just to match net returns. Fewer than 15% manage this consistently over a decade.
+        </LearnCard>
+        <LearnCard title="Where active management still has an edge">
+          <strong>Mid cap and small cap segments are different.</strong> These companies are less researched, less liquid, and more opaque. A good fund manager with on-the-ground knowledge can identify companies before the market catches on. The historical evidence supports this: top-quartile mid cap and small cap active funds have meaningfully outperformed their benchmarks over 7–10 year periods. The alpha opportunity is genuine — but so is the risk of picking the wrong fund. This is where deep fund analysis (like FundGuldasta's scoring engine) adds real value.
+        </LearnCard>
+        <LearnCard title="Tracking error vs tracking difference — what matters">
+          <strong>Tracking Error (TE)</strong>: annualised standard deviation of daily difference between fund returns and index returns. A low TE means the fund hugs the index closely. For Nifty 50 funds: TE of 0.10–0.30% is excellent. Above 0.50% suggests operational slippage. <strong>Tracking Difference (TD)</strong>: fund CAGR minus index CAGR over 1/3/5 years. Ideally negative (fund slightly lags index) due to expenses, but close to zero means the fund is doing its job. A large negative TD means excessive drag beyond costs — a red flag.
+        </LearnCard>
+        <LearnCard title="The core-satellite framework">
+          The most evidence-based approach for most investors combines both: <strong>Core (50–60%)</strong> — a low-cost Nifty 50 or Sensex index fund. Guaranteed to capture large cap market returns with minimal cost drag. <strong>Satellite (40–50%)</strong> — 2–4 high-conviction active funds in mid cap, small cap, or flexi cap where the manager has a genuine track record of alpha generation. This framework captures the best of both: cost efficiency where markets are efficient, active alpha where they aren't.
+        </LearnCard>
+        <LearnCard title="FundGuldasta's view">
+          We believe investors who want simplicity and are disciplined about costs should use index funds for large cap exposure. Investors with longer horizons (7+ years) who want to capture the mid/small cap alpha opportunity should use a core-satellite approach. We provide Index Fund Compare (to pick the best tracker) and Core-Satellite Bouquet (to combine index core with scored active satellite) as research tools. Everything is direct plans, zero commission, and education-only — the decision is always yours.
+        </LearnCard>
+        <div style={{ textAlign:"center", marginTop:24, display:"flex", gap:12, justifyContent:"center", flexWrap:"wrap" }}>
+          <button onClick={() => { setIndexCompare(null); setIndexCompareError(null); setScreen("index_compare"); }} style={{ background:"rgba(99,179,237,0.12)", border:"1px solid rgba(99,179,237,0.4)", color:"#63B3ED", borderRadius:8, padding:"10px 20px", cursor:"pointer", fontFamily:"Outfit,sans-serif", fontSize:14, fontWeight:600 }}>📊 Index Fund Compare →</button>
+          <button onClick={() => { setCoreSat(null); setCoreSatError(null); setScreen("core_satellite"); }} style={{ background:"rgba(212,175,55,0.08)", border:"1px solid rgba(212,175,55,0.3)", color:G.gold, borderRadius:8, padding:"10px 20px", cursor:"pointer", fontFamily:"Outfit,sans-serif", fontSize:14, fontWeight:600 }}>🎯 Core-Satellite Bouquet →</button>
+          <button onClick={() => setScreen("hero")} style={{ background:"none", border:"1px solid rgba(255,255,255,0.1)", color:G.mist, borderRadius:8, padding:"10px 20px", cursor:"pointer", fontFamily:"Outfit,sans-serif", fontSize:13 }}>← Back</button>
+        </div>
+      </LearnPage>
+    );
+  }
+
+  // ── INDEX FUND COMPARISON ───────────────────────────────────────────────
+  if (screen === "index-fund-comparison-screen" || screen === "index_compare") {
+    document.title = "Index Fund Compare — FundGuldasta";
+    if (!indexCompare && !indexCompareLoading) {
+      setIndexCompareLoading(true);
+      getIndexComparison()
+        .then(data => { setIndexCompare(data); setIndexCompareLoading(false); })
+        .catch(err => { setIndexCompareError("Could not load comparison data."); setIndexCompareLoading(false); });
+    }
+    const teColor = (te) => {
+      if (te === null || te === undefined) return G.mist;
+      if (te <= 0.25) return "#48BB78";
+      if (te <= 0.5)  return "#ECC94B";
+      return "#FC8181";
+    };
+    const tdColor = (td) => {
+      if (td === null || td === undefined) return G.mist;
+      if (td >= -0.1) return "#48BB78";
+      if (td >= -0.5) return "#ECC94B";
+      return "#FC8181";
+    };
+    return (
+      <>
+        <style>{css}</style>
+        <div style={{ minHeight:"100vh", background:G.bg, color:G.fg, fontFamily:"Outfit,sans-serif", padding:"0 0 60px" }}>
+          <div style={{ maxWidth:900, margin:"0 auto", padding:"32px 20px 0" }}>
+            <button onClick={() => setScreen("hero")} style={{ background:"none", border:"none", color:G.mist, fontSize:13, cursor:"pointer", marginBottom:16 }}>← Back</button>
+            <h1 style={{ fontFamily:"Cormorant Garamond,serif", fontSize:28, color:G.gold, margin:"0 0 4px" }}>Index Fund Compare</h1>
+            <p style={{ color:G.slate, fontSize:14, margin:"0 0 8px" }}>Track the trackers — which index fund actually delivers the index return?</p>
+            <div style={{ fontSize:11, color:G.mist, background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.07)", borderRadius:8, padding:"8px 14px", marginBottom:24 }}>
+              <strong style={{ color:G.slate }}>TE</strong> = Tracking Error (lower = tighter index tracking) &nbsp;|&nbsp;
+              <strong style={{ color:G.slate }}>TD</strong> = Tracking Difference = Fund CAGR − Index CAGR (near-zero = good) &nbsp;|&nbsp;
+              <span style={{ color:"#48BB78" }}>Green</span> / <span style={{ color:"#ECC94B" }}>Amber</span> / <span style={{ color:"#FC8181" }}>Red</span> colour coding &nbsp;|&nbsp;
+              AUM approximate May 2026
+            </div>
+
+            {indexCompareLoading && <div style={{ textAlign:"center", padding:"60px 0", color:G.mist }}>Loading comparison data — computing tracking error for all groups…</div>}
+            {indexCompareError && <div style={{ color:"#FC8181", background:"rgba(252,129,129,0.06)", border:"1px solid rgba(252,129,129,0.3)", borderRadius:8, padding:"12px 16px" }}>{indexCompareError}</div>}
+
+            {indexCompare && indexCompare.groups && indexCompare.groups.map(group => (
+              <div key={group.group_id} style={{ marginBottom:36 }}>
+                <h2 style={{ fontFamily:"Cormorant Garamond,serif", fontSize:20, color:G.fg, margin:"0 0 12px", borderBottom:`1px solid ${G.bord}`, paddingBottom:8 }}>
+                  {group.group_name}
+                  <span style={{ fontSize:13, color:G.mist, fontFamily:"Outfit,sans-serif", fontWeight:400, marginLeft:12 }}>Benchmark: {group.benchmark_name}</span>
+                </h2>
+                <div style={{ overflowX:"auto" }}>
+                  <table style={{ width:"100%", borderCollapse:"collapse", fontSize:13 }}>
+                    <thead>
+                      <tr style={{ borderBottom:`1px solid ${G.bord}` }}>
+                        {["Fund","AUM","ER","1yr Ret","3yr Ret","5yr Ret","TE 1yr","TE 3yr","TD 1yr","TD 3yr"].map(h => (
+                          <th key={h} style={{ padding:"6px 10px", textAlign:"right", color:G.mist, fontSize:11, fontWeight:600, whiteSpace:"nowrap" }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {group.funds.map((f, fi) => (
+                        <tr key={f.scheme_code} style={{ borderBottom:`1px solid ${G.bord}`, background: fi % 2 === 0 ? "transparent" : "rgba(255,255,255,0.01)" }}>
+                          <td style={{ padding:"8px 10px", color:G.fg, minWidth:160 }}>{f.name}<br/><span style={{ fontSize:10, color:G.mist }}>{f.amc}</span></td>
+                          <td style={{ padding:"8px 10px", textAlign:"right", color:G.slate, whiteSpace:"nowrap" }}>₹{f.aum_cr ? (f.aum_cr >= 1000 ? (f.aum_cr/1000).toFixed(1)+"K" : f.aum_cr)+"Cr" : "—"}</td>
+                          <td style={{ padding:"8px 10px", textAlign:"right", color:G.slate }}>{f.er != null ? f.er.toFixed(2)+"%" : "—"}</td>
+                          <td style={{ padding:"8px 10px", textAlign:"right", color:G.slate, fontFamily:"JetBrains Mono,monospace" }}>{f.returns_1yr != null ? f.returns_1yr.toFixed(1)+"%" : "—"}</td>
+                          <td style={{ padding:"8px 10px", textAlign:"right", color:G.slate, fontFamily:"JetBrains Mono,monospace" }}>{f.returns_3yr != null ? f.returns_3yr.toFixed(1)+"%" : "—"}</td>
+                          <td style={{ padding:"8px 10px", textAlign:"right", color:G.slate, fontFamily:"JetBrains Mono,monospace" }}>{f.returns_5yr != null ? f.returns_5yr.toFixed(1)+"%" : "—"}</td>
+                          <td style={{ padding:"8px 10px", textAlign:"right", color:teColor(f.tracking_error_1yr), fontFamily:"JetBrains Mono,monospace", fontWeight:600 }}>{f.tracking_error_1yr != null ? f.tracking_error_1yr.toFixed(2)+"%" : "—"}</td>
+                          <td style={{ padding:"8px 10px", textAlign:"right", color:teColor(f.tracking_error_3yr), fontFamily:"JetBrains Mono,monospace", fontWeight:600 }}>{f.tracking_error_3yr != null ? f.tracking_error_3yr.toFixed(2)+"%" : "—"}</td>
+                          <td style={{ padding:"8px 10px", textAlign:"right", color:tdColor(f.tracking_diff_1yr), fontFamily:"JetBrains Mono,monospace" }}>{f.tracking_diff_1yr != null ? (f.tracking_diff_1yr > 0 ? "+" : "")+f.tracking_diff_1yr.toFixed(2)+"%" : "—"}</td>
+                          <td style={{ padding:"8px 10px", textAlign:"right", color:tdColor(f.tracking_diff_3yr), fontFamily:"JetBrains Mono,monospace" }}>{f.tracking_diff_3yr != null ? (f.tracking_diff_3yr > 0 ? "+" : "")+f.tracking_diff_3yr.toFixed(2)+"%" : "—"}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))}
+
+            {indexCompare && (
+              <div style={{ fontSize:11, color:G.mist, marginTop:8 }}>
+                All returns and tracking metrics computed from AMFI NAV data. Tracking error = annualised std dev of daily (fund − benchmark) returns.
+                Positive tracking difference means fund slightly outperformed benchmark (can happen due to dividend reinvestment assumptions).
+                AUM values are approximate — verify on AMC websites before investing. Research &amp; education only · Not investment advice.
+              </div>
+            )}
+
+            <div style={{ marginTop:24, display:"flex", gap:12, flexWrap:"wrap" }}>
+              <button onClick={() => { setCoreSat(null); setCoreSatError(null); setScreen("core_satellite"); }} style={{ background:"rgba(212,175,55,0.08)", border:"1px solid rgba(212,175,55,0.3)", color:G.gold, borderRadius:8, padding:"8px 16px", cursor:"pointer", fontFamily:"Outfit,sans-serif", fontSize:13, fontWeight:600 }}>🎯 Build Core-Satellite →</button>
+              <button onClick={() => setScreen("learn-passive-active")} style={{ background:"none", border:"1px solid rgba(255,255,255,0.1)", color:G.slate, borderRadius:8, padding:"8px 16px", cursor:"pointer", fontFamily:"Outfit,sans-serif", fontSize:13 }}>📚 Passive vs Active Guide</button>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  // ── CORE-SATELLITE BOUQUET ──────────────────────────────────────────────
+  if (screen === "core-satellite-bouquet" || screen === "core_satellite") {
+    document.title = "Core-Satellite Bouquet — FundGuldasta";
+    const csHorizonOptions = [5, 7, 10];
+    const handleCoreSatBuild = () => {
+      setCoreSatLoading(true);
+      setCoreSatError(null);
+      setCoreSat(null);
+      getCoreSatellite("nifty50", coreSatHorizon)
+        .then(data => { setCoreSat(data); setCoreSatLoading(false); })
+        .catch(() => { setCoreSatError("Could not load suggestion. Please try again."); setCoreSatLoading(false); });
+    };
+    return (
+      <>
+        <style>{css}</style>
+        <div style={{ minHeight:"100vh", background:G.bg, color:G.fg, fontFamily:"Outfit,sans-serif", padding:"0 0 60px" }}>
+          <div style={{ maxWidth:760, margin:"0 auto", padding:"32px 20px 0" }}>
+            <button onClick={() => setScreen("hero")} style={{ background:"none", border:"none", color:G.mist, fontSize:13, cursor:"pointer", marginBottom:16 }}>← Back</button>
+            <h1 style={{ fontFamily:"Cormorant Garamond,serif", fontSize:28, color:G.gold, margin:"0 0 4px" }}>Core-Satellite Bouquet</h1>
+            <p style={{ color:G.slate, fontSize:14, margin:"0 0 20px" }}>Guaranteed index returns for your core + active alpha from scored mid/small cap funds for your satellite.</p>
+
+            <div style={{ background:"rgba(255,255,255,0.02)", border:`1px solid ${G.bord}`, borderRadius:12, padding:"20px", marginBottom:24 }}>
+              <div style={{ marginBottom:16, fontSize:13, color:G.slate, lineHeight:1.7 }}>
+                <strong style={{ color:G.fg }}>Core (55%):</strong> A Nifty 50 index fund — the lowest tracking-error fund from our comparison screen. Cost: ~0.10–0.20% ER. Purpose: capture large cap market returns without active risk.<br/>
+                <strong style={{ color:G.fg }}>Satellite (45%):</strong> 3 top-scored active funds from our engine — mid cap, small cap, and flexi cap. These are segments where FundGuldasta's analysis shows consistent alpha generation by skilled managers.
+              </div>
+              <div style={{ display:"flex", alignItems:"center", gap:16, flexWrap:"wrap" }}>
+                <div>
+                  <div style={{ fontSize:11, color:G.mist, marginBottom:4 }}>Satellite scoring horizon</div>
+                  <div style={{ display:"flex", gap:8 }}>
+                    {csHorizonOptions.map(h => (
+                      <button key={h} onClick={() => setCoreSatHorizon(h)} style={{ background: coreSatHorizon === h ? "rgba(212,175,55,0.2)" : "rgba(255,255,255,0.04)", border: coreSatHorizon === h ? "1px solid rgba(212,175,55,0.6)" : "1px solid rgba(255,255,255,0.1)", color: coreSatHorizon === h ? G.gold : G.slate, borderRadius:6, padding:"6px 14px", cursor:"pointer", fontSize:13, fontFamily:"Outfit,sans-serif" }}>{h}yr</button>
+                    ))}
+                  </div>
+                </div>
+                <button onClick={handleCoreSatBuild} disabled={coreSatLoading} style={{ background: coreSatLoading ? "rgba(212,175,55,0.2)" : G.gold, color:"#0a0a0a", fontWeight:700, fontSize:14, border:"none", borderRadius:8, padding:"10px 24px", cursor: coreSatLoading ? "default" : "pointer", fontFamily:"Outfit,sans-serif" }}>
+                  {coreSatLoading ? "Building…" : "Build Suggestion →"}
+                </button>
+              </div>
+            </div>
+
+            {coreSatError && <div style={{ color:"#FC8181", background:"rgba(252,129,129,0.06)", border:"1px solid rgba(252,129,129,0.3)", borderRadius:8, padding:"12px 16px", marginBottom:16 }}>{coreSatError}</div>}
+
+            {coreSat && coreSat.core && (
+              <div>
+                <div style={{ marginBottom:20 }}>
+                  <div style={{ fontSize:11, color:"#63B3ED", textTransform:"uppercase", letterSpacing:".08em", marginBottom:8 }}>Core (55%) — Nifty 50 Index Fund</div>
+                  <div style={{ background:"rgba(99,179,237,0.04)", border:"1px solid rgba(99,179,237,0.2)", borderRadius:10, padding:"16px 20px" }}>
+                    <div style={{ fontFamily:"Cormorant Garamond,serif", fontSize:20, color:G.fg, marginBottom:4 }}>{coreSat.core.name}</div>
+                    <div style={{ display:"flex", gap:24, flexWrap:"wrap", fontSize:13, color:G.slate }}>
+                      <span>ER: <strong style={{ color:G.fg }}>{coreSat.core.er}%</strong></span>
+                      <span>AUM: <strong style={{ color:G.fg }}>₹{coreSat.core.aum_cr >= 1000 ? (coreSat.core.aum_cr/1000).toFixed(1)+"K" : coreSat.core.aum_cr}Cr</strong></span>
+                      <span>TE 3yr: <strong style={{ color:"#48BB78" }}>{coreSat.core.tracking_error_3yr}%</strong></span>
+                      <span>3yr Return: <strong style={{ color:G.fg }}>{coreSat.core.returns_3yr}%</strong></span>
+                    </div>
+                    <div style={{ fontSize:11, color:G.mist, marginTop:8 }}>AMC: {coreSat.core.amc} · Scheme: {coreSat.core.scheme_code}</div>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom:20 }}>
+                  <div style={{ fontSize:11, color:G.gold, textTransform:"uppercase", letterSpacing:".08em", marginBottom:8 }}>Satellite (45%) — Active Funds · Scored on {coreSat.satellite_horizon_years}yr horizon</div>
+                  {coreSat.satellite.map((s, si) => (
+                    <div key={s.scheme_code} style={{ background:"rgba(212,175,55,0.03)", border:`1px solid ${G.bord}`, borderRadius:10, padding:"14px 18px", marginBottom:10 }}>
+                      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", flexWrap:"wrap", gap:8 }}>
+                        <div>
+                          <div style={{ fontFamily:"Cormorant Garamond,serif", fontSize:18, color:G.fg, marginBottom:2 }}>{s.name.replace(/ - Direct Plan.*/i,'').replace(/ Direct Plan.*/i,'')}</div>
+                          <div style={{ fontSize:11, color:G.mist }}>{s.category} · Scheme: {s.scheme_code}</div>
+                        </div>
+                        <div style={{ textAlign:"right" }}>
+                          <div style={{ fontFamily:"JetBrains Mono,monospace", fontSize:20, color:G.gold, fontWeight:700 }}>{s.weight_pct}%</div>
+                          <div style={{ fontSize:10, color:G.mist }}>portfolio weight</div>
+                        </div>
+                      </div>
+                      <div style={{ display:"flex", gap:20, flexWrap:"wrap", fontSize:13, color:G.slate, marginTop:8 }}>
+                        <span>Fund Score: <strong style={{ color:G.fg }}>{s.fund_score}/100</strong></span>
+                        <span>CAGR ({coreSat.satellite_horizon_years}yr): <strong style={{ color:G.fg }}>{s.cagr_pct}%</strong></span>
+                        <span>Sharpe: <strong style={{ color:G.fg }}>{s.sharpe_ratio}</strong></span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ background:"rgba(212,175,55,0.05)", border:"1px solid rgba(212,175,55,0.2)", borderRadius:10, padding:"14px 18px", fontSize:13, color:G.slate, lineHeight:1.7, marginBottom:20 }}>
+                  <strong style={{ color:G.fg }}>Rationale:</strong> {coreSat.rationale}
+                </div>
+
+                <div style={{ fontSize:11, color:G.mist }}>
+                  Satellite fund selection is from FundGuldasta's scoring engine across the full eligible universe. Fund scores reflect return consistency, risk-adjusted quality, downside behaviour, manager stability, and cost efficiency. This is a research suggestion — not personalised advice. Verify direct plan scheme codes before investing. Research &amp; education only · Not investment advice.
+                </div>
+              </div>
+            )}
+            <div style={{ marginTop:24, display:"flex", gap:12, flexWrap:"wrap" }}>
+              <button onClick={() => { setIndexCompare(null); setIndexCompareError(null); setScreen("index_compare"); }} style={{ background:"rgba(99,179,237,0.08)", border:"1px solid rgba(99,179,237,0.3)", color:"#63B3ED", borderRadius:8, padding:"8px 16px", cursor:"pointer", fontFamily:"Outfit,sans-serif", fontSize:13 }}>📊 Index Fund Compare</button>
+              <button onClick={() => setScreen("learn-passive-active")} style={{ background:"none", border:"1px solid rgba(255,255,255,0.1)", color:G.slate, borderRadius:8, padding:"8px 16px", cursor:"pointer", fontFamily:"Outfit,sans-serif", fontSize:13 }}>📚 Passive vs Active Guide</button>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
   if (screen === "learn-direct-plans") {
     document.title = "Why Direct Plans Matter — FundGuldasta";
     return (
@@ -4106,6 +4359,9 @@ useEffect(() => {
                 <button className="footer-link" onClick={() => setScreen("learn-survivorship")}>Survivorship Bias</button>
                 <button className="footer-link" onClick={() => setScreen("learn-confidence")}>Confidence Score</button>
                 <button className="footer-link" onClick={() => setScreen("learn-direct-plans")}>Direct Plans</button>
+                <button className="footer-link" onClick={() => setScreen("learn-passive-active")}>Passive vs Active</button>
+                <button className="footer-link" onClick={() => { setIndexCompare(null); setIndexCompareError(null); setScreen("index_compare"); }}>Index Compare</button>
+                <button className="footer-link" onClick={() => { setCoreSat(null); setCoreSatError(null); setScreen("core_satellite"); }}>Core-Satellite</button>
               </div>
             </div>
             <div className="footer-legal">
