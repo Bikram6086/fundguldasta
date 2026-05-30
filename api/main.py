@@ -831,7 +831,7 @@ def curate_bouquets(request: CurateRequest):
             'steady':     {'label':'Steady Compounder',  'cagrRange':'10-13%', 'risk':'Low-Medium', 'color':'#4A8FE0', 'rgb':'74,143,224'},
             'balanced':   {'label':'Balanced Growther',  'cagrRange':'12-15%', 'risk':'Medium',     'color':'#27AE78', 'rgb':'39,174,120'},
             'aggressive': {'label':'Aggressive Achiever','cagrRange':'15-18%', 'risk':'Medium-High','color':'#F0A500', 'rgb':'240,165,0'},
-            'conviction': {'label':'High Conviction',    'cagrRange':'15-18%', 'risk':'High',       'color':'#E05555', 'rgb':'224,85,85'},
+            'conviction': {'label':'High Conviction',    'cagrRange':'16-19%', 'risk':'High',       'color':'#E05555', 'rgb':'224,85,85'},
         }
 
         ICONS = {'steady':'🔵','balanced':'🟢','aggressive':'🟡','conviction':'🔴'}
@@ -1513,7 +1513,7 @@ def _load_alt_from_cache(horizon_years: int, target_cagr: float) -> list | None:
         RISK = {'steady_r2': 'Low-Medium', 'balanced_r2': 'Medium',
                 'aggressive_r2': 'Medium-High', 'conviction_r2': 'High'}
         CAGR = {'steady_r2': '10-13%', 'balanced_r2': '12-15%',
-                'aggressive_r2': '15-18%', 'conviction_r2': '15-18%'}
+                'aggressive_r2': '15-18%', 'conviction_r2': '16-19%'}
         ICONS = {'steady_r2': 'B', 'balanced_r2': 'G', 'aggressive_r2': 'Y', 'conviction_r2': 'R'}
 
         archetypes = []

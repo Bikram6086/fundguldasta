@@ -1143,7 +1143,7 @@ useEffect(() => {
       const res = await apiSaveBouquet(token, {
         archetype_id: at.id,
         horizon_years: at.horizonYears || 7,
-        target_cagr: ({steady:12,balanced:13,aggressive:16,conviction:16})[at.id] || 14,
+        target_cagr: ({steady:12,balanced:13,aggressive:16,conviction:17})[at.id] || 14,
         name: `${at.label} · ${at.cagrRange}`,
       });
       setSavedList(prev => [res, ...prev]);
@@ -1197,7 +1197,7 @@ useEffect(() => {
     steady:    { label:"Steady Compounder", cagr:12, yrs:7,  color:"#4A8FE0", desc:"Large-cap dominant, lower volatility. Historically 10–13% CAGR over 7+ years. Expect ~25–30% drawdowns in severe market downturns." },
     balanced:  { label:"Balanced Growther",  cagr:13, yrs:7,  color:"#27AE78", desc:"Large and mid-cap mix. Historically 12–15% CAGR over 7+ years. Expect ~35–40% drawdowns — staying invested through downturns is essential." },
     aggressive:{ label:"Aggressive Achiever",cagr:16, yrs:7,  color:"#F0A500", desc:"Mid and small-cap driven. Historically 15–18% CAGR, but expect 40–50% drawdowns in bear markets. 7yr minimum horizon required." },
-    conviction:{ label:"High Conviction",    cagr:16, yrs:10, color:"#E05555", desc:"Concentrated mid/small cap allocation. Historically 15–18% CAGR, but expect 50–60% drawdowns. Only suitable for 10yr+ horizons with unwavering discipline." },
+    conviction:{ label:"High Conviction",    cagr:17, yrs:10, color:"#E05555", desc:"Concentrated mid/small cap allocation. Historically 16–19% CAGR, but expect 50–60% drawdowns. Only suitable for 10yr+ horizons with unwavering discipline." },
   };
   const quizRecommend = (score) =>
     score <= 9 ? "steady" : score <= 12 ? "balanced" : score <= 16 ? "aggressive" : "conviction";
@@ -6425,7 +6425,7 @@ useEffect(() => {
                         disabled={aiLoading || !aiQuestion.trim()}
                         style={{ marginTop: 8, width: '100%', padding: '8px', background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: 7, color: G.gold, fontSize: 12, cursor: 'pointer', fontFamily: 'Outfit,sans-serif', opacity: aiLoading || !aiQuestion.trim() ? 0.4 : 1 }}
                         onClick={() => {
-                          const fullQ = aiQuestion + '\n\nBased on this profile, which FundGuldasta archetype suits me best? The archetypes are: Steady Compounder (historically 10–13% CAGR, large-cap dominant, ~25–30% max drawdown), Balanced Growther (historically 12–15% CAGR, large+mid cap, ~35–40% max drawdown), Aggressive Achiever (historically 15–18% CAGR, mid+small cap, ~40–50% max drawdown, 7yr minimum), High Conviction (historically 15–18% CAGR concentrated mid/small, ~50–60% max drawdown, 10yr+ mandatory). Explain which archetype fits best and which to avoid, and why. Be honest about drawdown risk.';
+                          const fullQ = aiQuestion + '\n\nBased on this profile, which FundGuldasta archetype suits me best? The archetypes are: Steady Compounder (historically 10–13% CAGR, large-cap dominant, ~25–30% max drawdown), Balanced Growther (historically 12–15% CAGR, large+mid cap, ~35–40% max drawdown), Aggressive Achiever (historically 15–18% CAGR, mid+small cap, ~40–50% max drawdown, 7yr minimum), High Conviction (historically 16–19% CAGR concentrated mid/small, ~50–60% max drawdown, 10yr+ mandatory). Explain which archetype fits best and which to avoid, and why. Be honest about drawdown risk.';
                           handleAskAI(fullQ, 'general', {});
                           setAiToolOpen(null);
                         }}
