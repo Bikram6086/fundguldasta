@@ -1126,7 +1126,7 @@ useEffect(() => {
       const res = await apiSaveBouquet(token, {
         archetype_id: at.id,
         horizon_years: at.horizonYears || 7,
-        target_cagr: parseFloat(at.cagrRange) || 16,
+        target_cagr: ({steady:12,balanced:13,aggressive:16,conviction:16})[at.id] || 14,
         name: `${at.label} · ${at.cagrRange}`,
       });
       setSavedList(prev => [res, ...prev]);
@@ -1177,10 +1177,10 @@ useEffect(() => {
     { q: "Your primary financial goal is…", opts: ["Protect what I have","Grow steadily above FD","Beat inflation by a wide margin","Build maximum long-term wealth"], scores:[1,2,3,4] },
   ];
   const QUIZ_ARCHETYPES = {
-    steady:    { label:"Steady Compounder", cagr:14, yrs:7, color:"#4A8FE0", desc:"Low volatility, large-cap dominant. Suited for capital preservation with growth." },
-    balanced:  { label:"Balanced Growther",  cagr:15, yrs:7, color:"#27AE78", desc:"Balanced risk-reward. Mix of large and mid-cap. Resilient through cycles." },
-    aggressive:{ label:"Aggressive Achiever",cagr:17, yrs:7, color:"#F0A500", desc:"Mid and small-cap driven. Higher volatility, higher growth potential." },
-    conviction:{ label:"High Conviction",    cagr:19, yrs:7, color:"#E05555", desc:"Maximum growth orientation. Best for long horizons with high risk tolerance." },
+    steady:    { label:"Steady Compounder", cagr:12, yrs:7,  color:"#4A8FE0", desc:"Large-cap dominant, lower volatility. Historically 10–13% CAGR over 7+ years. Expect ~25–30% drawdowns in severe market downturns." },
+    balanced:  { label:"Balanced Growther",  cagr:13, yrs:7,  color:"#27AE78", desc:"Large and mid-cap mix. Historically 12–15% CAGR over 7+ years. Expect ~35–40% drawdowns — staying invested through downturns is essential." },
+    aggressive:{ label:"Aggressive Achiever",cagr:16, yrs:7,  color:"#F0A500", desc:"Mid and small-cap driven. Historically 15–18% CAGR, but expect 40–50% drawdowns in bear markets. 7yr minimum horizon required." },
+    conviction:{ label:"High Conviction",    cagr:16, yrs:10, color:"#E05555", desc:"Concentrated mid/small cap allocation. Historically 15–18% CAGR, but expect 50–60% drawdowns. Only suitable for 10yr+ horizons with unwavering discipline." },
   };
   const quizRecommend = (score) =>
     score <= 9 ? "steady" : score <= 12 ? "balanced" : score <= 16 ? "aggressive" : "conviction";
@@ -5578,6 +5578,9 @@ useEffect(() => {
                   <div style={{ fontSize: 12, fontWeight: 600, color: G.white, marginBottom: 4 }}>{at.label}</div>
                   <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 18, fontWeight: 500, color: at.color, marginBottom: 4 }}>{at.cagrRange}</div>
                   <div style={{ fontSize: 11, color: G.mist }}>{at.risk} Risk</div>
+                  <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 2, lineHeight: 1.4 }}>
+                    {({steady:'~25-30% max drawdown',balanced:'~35-40% max drawdown',aggressive:'~40-50% max drawdown',conviction:'~50-60% drawdown · 10yr+'})[at.id]}
+                  </div>
                   {at.cagrBuffer && (
                     <div style={{ fontSize: 10, color: at.cagrBuffer.includes('below') ? '#F0A500' : 'rgba(255,255,255,0.3)', marginTop: 3, lineHeight: 1.4 }}>{at.cagrBuffer}</div>
                   )}
@@ -5635,6 +5638,9 @@ useEffect(() => {
                         <div style={{ fontSize: 12, fontWeight: 600, color: G.white, marginBottom: 4 }}>{at.label}</div>
                         <div style={{ fontFamily: "JetBrains Mono,monospace", fontSize: 18, fontWeight: 500, color: at.color, marginBottom: 4 }}>{at.cagrRange}</div>
                         <div style={{ fontSize: 11, color: G.mist }}>{at.risk} Risk</div>
+                        <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.3)', marginTop: 2, lineHeight: 1.4 }}>
+                          {({steady:'~25-30% max drawdown',balanced:'~35-40% max drawdown',aggressive:'~40-50% max drawdown',conviction:'~50-60% drawdown · 10yr+'})[at.id]}
+                        </div>
                         {at.cagrBuffer && (
                           <div style={{ fontSize: 10, color: at.cagrBuffer.includes('below') ? '#F0A500' : 'rgba(255,255,255,0.3)', marginTop: 3, lineHeight: 1.4 }}>{at.cagrBuffer}</div>
                         )}
@@ -5687,9 +5693,14 @@ useEffect(() => {
 
           {a && (
             <>
+              {(a.id === 'aggressive' || a.id === 'conviction') && (
+                <div style={{ background: 'rgba(240,165,0,0.07)', border: '1px solid rgba(240,165,0,0.28)', borderRadius: 10, padding: '10px 16px', marginBottom: 16, fontSize: 12, color: '#F0A500', lineHeight: 1.6 }}>
+                  <strong>Drawdown Disclosure:</strong> This archetype holds mid and small-cap funds that can fall {a.id === 'conviction' ? '50–60%' : '40–50%'} during severe bear markets. {a.id === 'conviction' ? 'A 10-year minimum horizon is essential. ' : 'A 7-year minimum horizon is recommended. '}The historical CAGR range of {a.cagrRange} reflects long holding periods — short-term returns will vary significantly.
+                </div>
+              )}
               <div className="exec">
                 <div>
-                  <h3 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: G.white, marginBottom: 6 }}>{a.label} · {a.cagrRange} Historical CAGR</h3>
+                  <h3 style={{ fontFamily: "'Cormorant Garamond',serif", fontSize: 20, color: G.white, marginBottom: 6 }}>{a.label} · {a.cagrRange} Historical Range</h3>
                   <p style={{ fontSize: 13, color: G.slate, lineHeight: 1.6 }}>Research complete. Execute on a SEBI-registered platform — not here.</p>
                 </div>
                 <div className="exb" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -5892,7 +5903,7 @@ useEffect(() => {
                         disabled={aiLoading || !aiQuestion.trim()}
                         style={{ marginTop: 8, width: '100%', padding: '8px', background: 'rgba(212,175,55,0.1)', border: '1px solid rgba(212,175,55,0.3)', borderRadius: 7, color: G.gold, fontSize: 12, cursor: 'pointer', fontFamily: 'Outfit,sans-serif', opacity: aiLoading || !aiQuestion.trim() ? 0.4 : 1 }}
                         onClick={() => {
-                          const fullQ = aiQuestion + '\n\nBased on this profile, which of the 4 FundGuldasta archetypes (Steady Compounder 14-16% CAGR, Balanced Growther 15-17%, Aggressive Achiever 16-19%, High Conviction 18-22%) suits me best? Explain why in plain English. Also tell me which archetype to avoid and why.';
+                          const fullQ = aiQuestion + '\n\nBased on this profile, which FundGuldasta archetype suits me best? The archetypes are: Steady Compounder (historically 10–13% CAGR, large-cap dominant, ~25–30% max drawdown), Balanced Growther (historically 12–15% CAGR, large+mid cap, ~35–40% max drawdown), Aggressive Achiever (historically 15–18% CAGR, mid+small cap, ~40–50% max drawdown, 7yr minimum), High Conviction (historically 15–18% CAGR concentrated mid/small, ~50–60% max drawdown, 10yr+ mandatory). Explain which archetype fits best and which to avoid, and why. Be honest about drawdown risk.';
                           handleAskAI(fullQ, 'general', {});
                           setAiToolOpen(null);
                         }}
@@ -6507,7 +6518,7 @@ useEffect(() => {
                     <div className="coc pri">
                       <div style={{ fontSize: 11, color: G.mist, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 12 }}>This Bouquet</div>
                       <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 22, fontWeight: 500, color: G.gold, marginBottom: 5 }}>₹{a.comparator?.bouquetCorpus}L</div>
-                      <div style={{ fontSize: 11, color: G.mist }}>{a.cagrRange} historical CAGR</div>
+                      <div style={{ fontSize: 11, color: G.mist }}>{a.cagrRange} historical range</div>
                     </div>
                     <div className="coc">
                       <div style={{ fontSize: 11, color: G.mist, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 12 }}>Nifty 50 Index</div>
