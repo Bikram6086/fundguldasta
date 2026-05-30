@@ -3102,7 +3102,10 @@ useEffect(() => {
           )}
 
           {/* Direct: Calculate & Plan */}
-          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.06)" }} onClick={() => { setPrevScreen(screen); setCalcPreFill(null); setCalcTab('sip'); setScreen("calculators"); }}>{tr("📐 Calculate & Plan", HI_HERO.btnCalc)}</button>
+          <button className="byob-entry" style={{ marginTop: 8, background:"rgba(212,175,55,0.06)", flexDirection:'column', alignItems:'flex-start', gap:2 }} onClick={() => { setPrevScreen(screen); setCalcPreFill(null); setCalcTab('sip'); setScreen("calculators"); }}>
+            <span>{tr("📐 Calculate & Plan", HI_HERO.btnCalc)}</span>
+            <span style={{ fontSize:11, color:G.slate, fontWeight:400 }}>SIP · Goals · Tax · Retirement · Start Early</span>
+          </button>
 
           {/* Group: Learn & Advise */}
           <button className="byob-entry" style={{ marginTop: 8, display:'flex', justifyContent:'space-between', alignItems:'center', background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.1)", color:G.slate }} onClick={() => setHeroGroupOpen(heroGroupOpen === 'learn' ? null : 'learn')}>
