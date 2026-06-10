@@ -17,6 +17,7 @@ import os
 from datetime import datetime, date
 from dotenv import load_dotenv
 from engine.bouquet_builder import build_bouquet
+from engine.dynamic_archetypes import build_dynamic_archetype_bouquet
 from engine.confidence_scorer import compute_bouquet_confidence
 from engine.risk_metrics import compute_crash_performance, CRASH_PERIODS
 from engine.rolling_returns import get_nav_series
@@ -195,23 +196,23 @@ def run_precomputation(horizon_years=7, target_cagr=DEFAULT_TARGET_CAGR):
     for arch_id, arch_meta in ARCHETYPES.items():
         print(f"\nProcessing archetype: {arch_id.upper()}")
         try:
-            fund_weights = ARCHETYPE_FUNDS[arch_id]
-            fund_details = [
-                {
-                    "scheme_code": code,
-                    "weight": weight,
-                    "name": VERIFIED_FUNDS.get(code, {}).get("name", ""),
-                    "category": VERIFIED_FUNDS.get(code, {}).get("category", "Unknown"),
-                    "tier": VERIFIED_FUNDS.get(code, {}).get("tier", 1),
-                    "amc": VERIFIED_FUNDS.get(code, {}).get("amc", ""),
-                }
-                for code, weight in fund_weights
-            ]
-
-            bouquet = build_bouquet(arch_id, horizon_years, target_cagr)
+            bouquet = build_dynamic_archetype_bouquet(arch_id, horizon_years, target_cagr)
             if not bouquet:
                 print(f"  FAILED to build bouquet for {arch_id}")
                 continue
+
+            fund_weights = [(f['scheme_code'], f['weight']) for f in bouquet['funds']]
+            fund_details = [
+                {
+                    "scheme_code": f['scheme_code'],
+                    "weight":      f['weight'],
+                    "name":        f['name'],
+                    "category":    f['category'],
+                    "tier":        f.get('tier', 1),
+                    "amc":         f['amc'],
+                }
+                for f in bouquet['funds']
+            ]
 
             print(f"  Computing confidence score...")
             confidence = compute_bouquet_confidence(
@@ -297,18 +298,25 @@ def run_precomputation(horizon_years=7, target_cagr=DEFAULT_TARGET_CAGR):
 
     log_precompute_run('success', len(results))
 
+    # Collect all R1 fund codes for exclusion in the alternative bouquet round
+    r1_codes = list({
+        f['scheme_code']
+        for bouquet in results.values()
+        for f in bouquet.get('funds', [])
+    })
+
     import threading
     threading.Thread(
-        target=lambda: _run_alt_precompute_safe(horizon_years, target_cagr),
+        target=lambda: _run_alt_precompute_safe(horizon_years, target_cagr, r1_codes),
         daemon=True,
     ).start()
 
     return results
 
 
-def _run_alt_precompute_safe(horizon_years, target_cagr):
+def _run_alt_precompute_safe(horizon_years, target_cagr, r1_codes=None):
     try:
-        run_alternative_precomputation(horizon_years, target_cagr)
+        run_alternative_precomputation(horizon_years, target_cagr, r1_fund_codes=r1_codes)
     except Exception as e:
         print(f"  Alternative precompute background thread failed: {e}")
 
@@ -352,15 +360,19 @@ if __name__ == "__main__":
         raise
 
 
-def run_alternative_precomputation(horizon_years=7, target_cagr=16.0):
+def run_alternative_precomputation(horizon_years=7, target_cagr=16.0, r1_fund_codes: list | None = None):
     """
     Pre-compute round 2 alternative bouquets (excludes all Round 1 fund codes).
     Stores in bouquet_cache with archetype_ids like 'steady_r2'.
+    r1_fund_codes: list of scheme_codes selected in Round 1 (passed by run_precomputation).
+    Falls back to ARCHETYPE_FUNDS if not supplied (legacy path).
     """
     from engine.alternative_bouquet import build_alternative_round
 
-    excluded = [str(code) for codes in ARCHETYPE_FUNDS.values() for code, _ in codes]
-    excluded = list(set(excluded))
+    if r1_fund_codes:
+        excluded = list(set(str(c) for c in r1_fund_codes))
+    else:
+        excluded = list(set(str(code) for codes in ARCHETYPE_FUNDS.values() for code, _ in codes))
 
     print(f"\n{'='*60}")
     print(f"ALTERNATIVE PRECOMPUTE (Round 2)")
