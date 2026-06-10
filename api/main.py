@@ -2575,6 +2575,259 @@ async def fund_detail(scheme_code: str):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# ROLLING DISTRIBUTION — all rolling N-year CAGR windows for a fund
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/funds/{scheme_code}/rolling-distribution")
+async def fund_rolling_distribution(scheme_code: str, window_years: int = Query(default=3, ge=1, le=15)):
+    """
+    Return the full distribution of all rolling N-year CAGRs for a fund.
+    Steps every 30 days so ~12 windows per year.
+    Returns histogram buckets, percentiles, and beat-rates.
+    """
+    import numpy as np
+    from datetime import timedelta, date as _date_type
+    import bisect
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT nav_date, nav_value FROM nav_data WHERE scheme_code = %s ORDER BY nav_date ASC",
+            (scheme_code,)
+        )
+        rows = cur.fetchall()
+    finally:
+        cur.close()
+        conn.close()
+
+    if len(rows) < window_years * 200:
+        raise HTTPException(404, f"Insufficient NAV history for {window_years}yr rolling analysis")
+
+    sorted_dates = [r[0] for r in rows]
+    date_to_nav  = {r[0]: float(r[1]) for r in rows}
+
+    window_days = int(window_years * 365.25)
+    cagrs = []
+    step = timedelta(days=30)
+
+    start_dt = sorted_dates[0]
+    while True:
+        target_dt = start_dt + timedelta(days=window_days)
+        idx = bisect.bisect_left(sorted_dates, target_dt)
+        if idx >= len(sorted_dates):
+            break
+        end_dt = sorted_dates[idx]
+        actual_years = (end_dt - start_dt).days / 365.25
+        if actual_years >= window_years * 0.9:
+            nav_start = date_to_nav[start_dt]
+            nav_end   = date_to_nav[end_dt]
+            if nav_start > 0 and actual_years > 0:
+                cagr = round((nav_end / nav_start) ** (1 / actual_years) * 100 - 100, 2)
+                cagrs.append(cagr)
+        next_target = start_dt + step
+        idx2 = bisect.bisect_left(sorted_dates, next_target)
+        if idx2 >= len(sorted_dates):
+            break
+        start_dt = sorted_dates[idx2]
+
+    if not cagrs:
+        raise HTTPException(404, "No complete rolling windows found")
+
+    arr = np.array(cagrs)
+
+    # Histogram buckets
+    buckets = [
+        ("< 0%",   float(np.sum(arr < 0))),
+        ("0–5%",   float(np.sum((arr >= 0)  & (arr < 5)))),
+        ("5–10%",  float(np.sum((arr >= 5)  & (arr < 10)))),
+        ("10–15%", float(np.sum((arr >= 10) & (arr < 15)))),
+        ("15–20%", float(np.sum((arr >= 15) & (arr < 20)))),
+        ("20–25%", float(np.sum((arr >= 20) & (arr < 25)))),
+        ("> 25%",  float(np.sum(arr >= 25))),
+    ]
+    total = len(arr)
+    histogram = [{"bucket": b, "count": int(c), "pct": round(c / total * 100, 1)} for b, c in buckets]
+
+    return {
+        "scheme_code": scheme_code,
+        "window_years": window_years,
+        "total_windows": total,
+        "median_cagr":  round(float(np.median(arr)), 2),
+        "mean_cagr":    round(float(np.mean(arr)), 2),
+        "best_cagr":    round(float(np.max(arr)), 2),
+        "worst_cagr":   round(float(np.min(arr)), 2),
+        "pct_above_12": round(float(np.sum(arr >= 12) / total * 100), 1),
+        "pct_above_15": round(float(np.sum(arr >= 15) / total * 100), 1),
+        "pct_positive": round(float(np.sum(arr >= 0) / total * 100), 1),
+        "percentiles": {
+            "p10": round(float(np.percentile(arr, 10)), 2),
+            "p25": round(float(np.percentile(arr, 25)), 2),
+            "p50": round(float(np.percentile(arr, 50)), 2),
+            "p75": round(float(np.percentile(arr, 75)), 2),
+            "p90": round(float(np.percentile(arr, 90)), 2),
+        },
+        "histogram": histogram,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# BOUQUET GROWTH CHART — weighted NAV indexed to 100 vs Nifty 50
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/bouquets/{archetype_id}/growth-chart")
+def bouquet_growth_chart(archetype_id: str, horizon_years: int = Query(default=7)):
+    """
+    Returns a monthly series of weighted-average bouquet NAV (indexed to 100)
+    alongside Nifty 50 (also indexed to 100) from the same start date.
+    Horizon_years controls how far back we go.
+    """
+    from datetime import date as date_type, timedelta
+    from collections import defaultdict
+    import numpy as np
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Load bouquet fund weights from cache
+        cur.execute("""
+            SELECT funds_json FROM bouquet_cache
+            WHERE archetype_id = %s AND horizon_years = %s AND is_active = true
+            ORDER BY computation_date DESC LIMIT 1
+        """, (archetype_id, horizon_years))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(404, f"No cached bouquet for {archetype_id}/{horizon_years}yr")
+
+        funds_json = row[0] if isinstance(row[0], list) else json.loads(row[0])
+        equity_funds = [f for f in funds_json if f.get("category") != "International"]
+        intl_funds   = [f for f in funds_json if f.get("category") == "International"]
+
+        # Use only equity funds for the growth chart (international FOFs distort INR chart)
+        equity_weights = {str(f["scheme_code"]): float(f.get("weight", 20)) for f in equity_funds}
+        weight_sum = sum(equity_weights.values())
+        if weight_sum <= 0:
+            raise HTTPException(400, "No equity funds in bouquet")
+        equity_weights = {k: v / weight_sum * 100 for k, v in equity_weights.items()}
+
+        # Cutoff date
+        cutoff = date_type.today() - timedelta(days=int(horizon_years * 365.25))
+
+        # Fetch equity fund NAVs in one query
+        eq_codes = list(equity_weights.keys())
+        cur.execute("""
+            SELECT scheme_code, nav_date, nav_value
+            FROM nav_data
+            WHERE scheme_code = ANY(%s) AND nav_date >= %s
+            ORDER BY nav_date ASC
+        """, (eq_codes, cutoff))
+        nav_rows = cur.fetchall()
+
+        # Fetch Nifty 50
+        cur.execute("""
+            SELECT price_date, closing_value FROM benchmark_data
+            WHERE index_name = 'Nifty 50' AND price_date >= %s
+            ORDER BY price_date ASC
+        """, (cutoff,))
+        nifty_rows = cur.fetchall()
+
+    finally:
+        cur.close()
+        conn.close()
+
+    # Build per-fund NAV series
+    fund_series: dict = {}
+    for code, nav_date, nav_val in nav_rows:
+        code = str(code)
+        fund_series.setdefault(code, {})[nav_date] = float(nav_val)
+
+    if not fund_series or not nifty_rows:
+        raise HTTPException(404, "Insufficient NAV data for growth chart")
+
+    # Find common start date = latest inception among all equity funds (in our window)
+    earliest_per_fund = {code: min(dates.keys()) for code, dates in fund_series.items()}
+    common_start = max(earliest_per_fund.values())
+
+    # Collect all dates that all equity funds have data for (within the window, monthly)
+    all_fund_dates = {code: set(dates.keys()) for code, dates in fund_series.items()}
+    nifty_map = {r[0]: float(r[1]) for r in nifty_rows}
+
+    # Build monthly data points (last available date in each month)
+    monthly: dict = defaultdict(dict)
+    for code, dates_navs in fund_series.items():
+        for dt, nav in dates_navs.items():
+            if dt >= common_start:
+                key = dt.strftime("%Y-%m")
+                if key not in monthly or monthly[key].get(f"_dt_{code}", date_type.min) < dt:
+                    monthly[key][code] = nav
+                    monthly[key][f"_dt_{code}"] = dt
+
+    for dt, nav in nifty_map.items():
+        if dt >= common_start:
+            key = dt.strftime("%Y-%m")
+            if key not in monthly or monthly[key].get("_dt_n", date_type.min) < dt:
+                monthly[key]["nifty"] = nav
+                monthly[key]["_dt_n"] = dt
+
+    sorted_months = sorted(monthly.keys())
+    if len(sorted_months) < 6:
+        raise HTTPException(404, "Too few data points for growth chart")
+
+    # Get base values at common_start month
+    base_month = sorted_months[0]
+    base_navs = {code: monthly[base_month].get(code) for code in equity_weights}
+    base_nifty = monthly[base_month].get("nifty")
+    if not all(base_navs.values()) or not base_nifty:
+        raise HTTPException(404, "Missing base NAV data at start date")
+
+    # Build indexed series
+    data_points = []
+    for month in sorted_months:
+        m = monthly[month]
+        # Compute weighted bouquet index
+        bouquet_idx = 0.0
+        valid = True
+        for code, w in equity_weights.items():
+            nav = m.get(code)
+            if nav is None or base_navs[code] is None:
+                valid = False
+                break
+            bouquet_idx += (nav / base_navs[code]) * (w / 100.0)
+        nifty_val = m.get("nifty")
+        if not valid or nifty_val is None:
+            continue
+        data_points.append({
+            "m": month,
+            "b": round(bouquet_idx * 100, 2),
+            "n": round(nifty_val / base_nifty * 100, 2),
+        })
+
+    if len(data_points) < 6:
+        raise HTTPException(404, "Insufficient overlap between fund histories")
+
+    final_b = data_points[-1]["b"]
+    final_n = data_points[-1]["n"]
+    years_elapsed = len(data_points) / 12.0
+
+    bouquet_cagr = round((final_b / 100) ** (1 / years_elapsed) * 100 - 100, 2) if years_elapsed > 0 else None
+    nifty_cagr   = round((final_n / 100) ** (1 / years_elapsed) * 100 - 100, 2) if years_elapsed > 0 else None
+
+    return {
+        "archetype_id": archetype_id,
+        "horizon_years": horizon_years,
+        "start_month": data_points[0]["m"],
+        "end_month": data_points[-1]["m"],
+        "months": len(data_points),
+        "note": "International diversifier excluded — equity funds only, INR terms",
+        "data": data_points,
+        "final_bouquet_indexed": final_b,
+        "final_nifty_indexed": final_n,
+        "bouquet_cagr": bouquet_cagr,
+        "nifty_cagr": nifty_cagr,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # PRIORITY 14c — FUND ELIGIBILITY / "WHY NOT IN BOUQUET?" ENDPOINT
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -2852,6 +3105,157 @@ async def trigger_monthly_digests(x_admin_key: Optional[str] = None):
         raise HTTPException(403, "Forbidden")
     threading.Thread(target=run_monthly_digests, daemon=True).start()
     return {"ok": True, "message": "Monthly digest dispatch started"}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PORTFOLIO BOUQUET OVERLAP — compare user's CAS holdings to all archetypes
+# ══════════════════════════════════════════════════════════════════════════════
+
+class BouquetOverlapRequest(BaseModel):
+    holdings: list  # [{"scheme_code": "120505", "value": 50000, "allocation_pct": 25.0}]
+    horizon_years: int = 7
+
+@app.post("/api/portfolio/bouquet-overlap")
+def portfolio_bouquet_overlap(request: BouquetOverlapRequest):
+    """
+    For each active archetype, shows:
+    - Which funds the user already holds that appear in the bouquet
+    - AMC concentration that would result from combining user portfolio + bouquet
+    - Whether user holds any regular-plan equivalents of bouquet funds (detected by name similarity)
+    """
+    holdings = request.holdings
+    if not holdings:
+        raise HTTPException(400, "No holdings provided")
+
+    # Normalise holdings to allocation_pct
+    total_val = sum(float(h.get("value", 0)) for h in holdings)
+    user_alloc: dict = {}
+    for h in holdings:
+        code = str(h.get("scheme_code", ""))
+        if not code:
+            continue
+        pct = float(h.get("allocation_pct", 0)) or (float(h.get("value", 0)) / total_val * 100 if total_val else 0)
+        user_alloc[code] = round(pct, 2)
+
+    user_codes = set(user_alloc.keys())
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Load user fund metadata (including scheme_name for regular→direct detection)
+        all_codes = list(user_codes)
+        cur.execute("""
+            SELECT scheme_code, scheme_name, amc_name, plan_type
+            FROM fund_metadata WHERE scheme_code = ANY(%s)
+        """, (all_codes,))
+        user_meta = {r[0]: {"name": r[1], "amc": r[2], "plan_type": r[3]} for r in cur.fetchall()}
+
+        # Load all archetype bouquets for this horizon (latest per archetype)
+        cur.execute("""
+            SELECT DISTINCT ON (archetype_id) archetype_id, funds_json
+            FROM bouquet_cache
+            WHERE horizon_years = %s AND is_active = true
+              AND archetype_id IN ('steady','balanced','aggressive','conviction')
+            ORDER BY archetype_id, computation_date DESC
+        """, (request.horizon_years,))
+        archetypes_raw = cur.fetchall()
+
+        # Load bouquet fund metadata
+        bouquet_codes_all = set()
+        for _, fj in archetypes_raw:
+            flist = fj if isinstance(fj, list) else json.loads(fj)
+            for f in flist:
+                bouquet_codes_all.add(str(f.get("scheme_code", "")))
+
+        cur.execute("""
+            SELECT scheme_code, scheme_name, amc_name, plan_type
+            FROM fund_metadata WHERE scheme_code = ANY(%s)
+        """, (list(bouquet_codes_all),))
+        bouquet_meta = {r[0]: {"name": r[1], "amc": r[2], "plan_type": r[3]} for r in cur.fetchall()}
+
+    finally:
+        cur.close()
+        conn.close()
+
+    result = []
+    for arch_id, funds_json in archetypes_raw:
+        flist = funds_json if isinstance(funds_json, list) else json.loads(funds_json)
+        bouquet_weights = {str(f["scheme_code"]): float(f.get("weight", 20)) for f in flist}
+        bouquet_codes = set(bouquet_weights.keys())
+
+        # Overlapping funds (user holds AND in bouquet)
+        overlap_codes = user_codes & bouquet_codes
+        overlapping = []
+        for code in overlap_codes:
+            bm = bouquet_meta.get(code, {})
+            overlapping.append({
+                "scheme_code": code,
+                "name": bm.get("name", f"Fund {code}"),
+                "amc": bm.get("amc", ""),
+                "user_pct": user_alloc.get(code, 0),
+                "bouquet_pct": bouquet_weights.get(code, 0),
+            })
+        overlapping.sort(key=lambda x: -x["bouquet_pct"])
+
+        # AMC concentration: merge user (50% weight) + bouquet (50% weight)
+        amc_user: dict = {}
+        for code, pct in user_alloc.items():
+            amc = user_meta.get(code, {}).get("amc", "Unknown")
+            amc_user[amc] = amc_user.get(amc, 0) + pct
+
+        amc_bouquet: dict = {}
+        for code, w in bouquet_weights.items():
+            amc = bouquet_meta.get(code, {}).get("amc", "Unknown")
+            amc_bouquet[amc] = amc_bouquet.get(amc, 0) + w
+
+        # Blend 50/50 (user portfolio and bouquet each count as half the combined)
+        all_amcs = set(amc_user.keys()) | set(amc_bouquet.keys())
+        amc_combined = {}
+        for amc in all_amcs:
+            combined = (amc_user.get(amc, 0) * 0.5 + amc_bouquet.get(amc, 0) * 0.5)
+            if combined > 0:
+                amc_combined[amc] = round(combined, 1)
+        amc_combined = dict(sorted(amc_combined.items(), key=lambda x: -x[1]))
+
+        high_concentration = [
+            {"amc": amc, "combined_pct": pct, "level": "High" if pct > 30 else "Moderate"}
+            for amc, pct in amc_combined.items()
+            if pct > 20
+        ]
+
+        # Regular→direct upgrade detection: user holds regular plan of a bouquet fund
+        # Detect by stripping "direct" from bouquet fund names and checking similarity with user fund names
+        direct_upgrades = []
+        for b_code, bm in bouquet_meta.items():
+            if b_code not in bouquet_weights:
+                continue
+            b_name_clean = bm.get("name", "").lower().replace("direct", "").replace("-", " ").strip()
+            for u_code, um in user_meta.items():
+                if u_code in bouquet_codes:
+                    continue  # already in overlap, not an upgrade
+                if um.get("plan_type") == "Regular":
+                    u_name_clean = um.get("name", "").lower().replace("regular", "").replace("-", " ").strip()
+                    # Simple overlap check: 4+ common words
+                    b_words = set(b_name_clean.split())
+                    u_words = set(u_name_clean.split())
+                    common_words = b_words & u_words - {"fund", "plan", "growth", "option", "scheme"}
+                    if len(common_words) >= 3:
+                        direct_upgrades.append({
+                            "you_hold": {"scheme_code": u_code, "name": um.get("name"), "pct": user_alloc.get(u_code, 0)},
+                            "direct_plan": {"scheme_code": b_code, "name": bm.get("name"), "bouquet_pct": bouquet_weights.get(b_code, 0)},
+                        })
+
+        result.append({
+            "archetype_id": arch_id,
+            "overlapping_funds": overlapping,
+            "overlap_fund_count": len(overlap_codes),
+            "overlap_weight_pct": round(sum(bouquet_weights.get(c, 0) for c in overlap_codes), 1),
+            "amc_concentration_after": amc_combined,
+            "high_amc_concentration": high_concentration,
+            "direct_plan_upgrades": direct_upgrades,
+        })
+
+    return {"archetypes": result, "horizon_years": request.horizon_years}
 
 
 # ══════════════════════════════════════════════════════════════════════════════

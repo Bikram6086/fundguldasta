@@ -167,6 +167,28 @@ async function apiFundEligibility(schemeCode) {
   return res.json();
 }
 
+async function apiRollingDistribution(schemeCode, windowYears) {
+  const res = await fetch(`${API_BASE}/api/funds/${schemeCode}/rolling-distribution?window_years=${windowYears}`);
+  if (!res.ok) throw new Error("Rolling distribution not available");
+  return res.json();
+}
+
+async function apiBouquetGrowthChart(archetypeId, horizonYears) {
+  const res = await fetch(`${API_BASE}/api/bouquets/${archetypeId}/growth-chart?horizon_years=${horizonYears}`);
+  if (!res.ok) throw new Error("Growth chart data not available");
+  return res.json();
+}
+
+async function apiPortfolioBouquetOverlap(holdings, horizonYears) {
+  const res = await fetch(`${API_BASE}/api/portfolio/bouquet-overlap`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ holdings, horizon_years: horizonYears }),
+  });
+  if (!res.ok) throw new Error("Overlap analysis not available");
+  return res.json();
+}
+
 async function apiGetPreferences(token) {
   const res = await fetch(`${API_BASE}/api/user/preferences`, {
     headers: { "Authorization": `Bearer ${token}` },
@@ -574,6 +596,12 @@ export default function App() {
   const [, setFdCode] = useState(null);
   const [fdResult, setFdResult] = useState(null);
   const [fdLoading, setFdLoading] = useState(false);
+  const [rdData, setRdData] = useState(null);
+  const [rdWindow, setRdWindow] = useState(3);
+  const [growthData, setGrowthData] = useState({});
+  const [casOverlapData, setCasOverlapData] = useState(null);
+  const [casOverlapLoading, setCasOverlapLoading] = useState(false);
+  const [goalSipTarget, setGoalSipTarget] = useState('');
   // Priority 14 state
   const [quizModal, setQuizModal] = useState(false);
   const [quizStep, setQuizStep] = useState(0);
@@ -1222,11 +1250,14 @@ useEffect(() => {
   const handleFundDetail = async (code) => {
     setFdCode(code);
     setFdResult(null);
+    setRdData(null);
     setFdModal(true);
     setFdLoading(true);
     try {
       const result = await apiFundDetail(code);
       setFdResult(result);
+      // Fetch rolling distribution in parallel (3yr default)
+      apiRollingDistribution(code, 3).then(rd => setRdData(rd)).catch(() => {});
     } catch (e) { alert(e.message); }
     finally { setFdLoading(false); }
   };
@@ -1897,8 +1928,75 @@ useEffect(() => {
                             style={{ flex:1, padding:"10px 0", background:casSelected.size > 0 ? "rgba(212,175,55,0.15)" : G.elv, border:`1px solid ${casSelected.size > 0 ? "rgba(212,175,55,0.4)" : G.bord}`, borderRadius:8, color: casSelected.size > 0 ? G.gold : G.slate, fontSize:13, fontWeight:600, cursor: casSelected.size > 0 ? "pointer" : "not-allowed", fontFamily:"Outfit,sans-serif" }}>
                             Import {casSelected.size} Fund{casSelected.size !== 1 ? "s" : ""} to Analyser →
                           </button>
-                          <button onClick={() => { setCasResult(null); setCasSelected(new Set()); }} style={{ padding:"10px 18px", background:"none", border:`1px solid ${G.bord}`, borderRadius:8, color:G.slate, fontSize:13, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>Dismiss</button>
+                          <button onClick={() => { setCasResult(null); setCasSelected(new Set()); setCasOverlapData(null); }} style={{ padding:"10px 18px", background:"none", border:`1px solid ${G.bord}`, borderRadius:8, color:G.slate, fontSize:13, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>Dismiss</button>
                         </div>
+
+                        {/* ── Bouquet Compatibility Analysis ── */}
+                        {!casOverlapData && !casOverlapLoading && casResult?.holdings?.filter(h => h.scheme_code).length >= 1 && (
+                          <div style={{ marginTop:14 }}>
+                            <button onClick={async () => {
+                              setCasOverlapLoading(true);
+                              try {
+                                const holdings = casResult.holdings
+                                  .filter(h => h.scheme_code)
+                                  .map(h => ({ scheme_code: String(h.scheme_code), value: h.value || 0, allocation_pct: h.allocation_pct || 0 }));
+                                const d = await apiPortfolioBouquetOverlap(holdings, 7);
+                                setCasOverlapData(d);
+                              } catch { setCasOverlapData(null); }
+                              finally { setCasOverlapLoading(false); }
+                            }} style={{ width:"100%", padding:"10px 0", background:"rgba(99,179,237,0.08)", border:"1px solid rgba(99,179,237,0.25)", borderRadius:8, color:"#63B3ED", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                              Check Bouquet Compatibility →
+                            </button>
+                          </div>
+                        )}
+                        {casOverlapLoading && <div style={{ marginTop:14, textAlign:"center", color:G.mist, fontSize:12 }}>Analysing compatibility…</div>}
+                        {casOverlapData && (
+                          <div style={{ marginTop:16 }}>
+                            <div style={{ color:"#63B3ED", fontSize:12, fontWeight:700, letterSpacing:".08em", textTransform:"uppercase", marginBottom:10 }}>Bouquet Compatibility</div>
+                            {casOverlapData.archetypes.map(a => {
+                              const labels = { steady:"Steady Compounder", balanced:"Balanced Growther", aggressive:"Aggressive Achiever", conviction:"High Conviction" };
+                              const colors = { steady:"#4A8FE0", balanced:"#27AE78", aggressive:"#F0A500", conviction:"#E05555" };
+                              const col = colors[a.archetype_id] || G.gold;
+                              return (
+                                <div key={a.archetype_id} style={{ background:`rgba(${col === "#4A8FE0" ? "74,143,224" : col === "#27AE78" ? "39,174,120" : col === "#F0A500" ? "240,165,0" : "224,85,85"},0.05)`, border:`1px solid ${col}33`, borderRadius:8, padding:"12px 14px", marginBottom:8 }}>
+                                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:6 }}>
+                                    <div style={{ color:col, fontSize:12, fontWeight:700 }}>{labels[a.archetype_id] || a.archetype_id}</div>
+                                    {a.overlap_fund_count > 0
+                                      ? <span style={{ fontSize:11, color:G.am, background:"rgba(240,165,0,0.1)", borderRadius:4, padding:"2px 8px" }}>⚠ {a.overlap_fund_count} fund{a.overlap_fund_count !== 1 ? "s" : ""} already held ({a.overlap_weight_pct}% of bouquet)</span>
+                                      : <span style={{ fontSize:11, color:"#27AE78", background:"rgba(39,174,120,0.1)", borderRadius:4, padding:"2px 8px" }}>✓ No overlap</span>
+                                    }
+                                  </div>
+                                  {a.overlapping_funds.length > 0 && (
+                                    <div style={{ marginBottom:8 }}>
+                                      {a.overlapping_funds.map(f => (
+                                        <div key={f.scheme_code} style={{ fontSize:11, color:G.mist, display:"flex", justifyContent:"space-between", paddingLeft:8, borderLeft:"2px solid rgba(240,165,0,0.3)", marginBottom:3 }}>
+                                          <span style={{ color:G.fog }}>{f.name?.substring(0,50)}</span>
+                                          <span style={{ color:G.am, fontFamily:"JetBrains Mono,monospace", flexShrink:0, marginLeft:10 }}>You: {f.user_pct}% · Bouquet: {f.bouquet_pct}%</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {a.high_amc_concentration.length > 0 && (
+                                    <div style={{ fontSize:10, color:G.am, marginTop:4 }}>
+                                      AMC concentration if combined: {a.high_amc_concentration.map(c => `${c.amc} ${c.combined_pct}%`).join(" · ")}
+                                    </div>
+                                  )}
+                                  {a.direct_plan_upgrades.length > 0 && (
+                                    <div style={{ marginTop:6, padding:"6px 8px", background:"rgba(39,174,120,0.06)", border:"1px solid rgba(39,174,120,0.2)", borderRadius:6 }}>
+                                      <div style={{ fontSize:10, color:"#27AE78", fontWeight:600, marginBottom:4 }}>Direct Plan Upgrade</div>
+                                      {a.direct_plan_upgrades.slice(0,2).map((u, i) => (
+                                        <div key={i} style={{ fontSize:10, color:G.mist }}>You hold: <span style={{ color:G.fog }}>{u.you_hold.name?.substring(0,40)}</span> → Switch to direct: <span style={{ color:"#27AE78" }}>{u.direct_plan.name?.substring(0,40)}</span></div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                            <div style={{ fontSize:9, color:G.mist, marginTop:4, fontStyle:"italic" }}>
+                              Overlap analysis for 7yr horizon bouquets. AMC concentration = combined user portfolio + bouquet (50/50 blend). Not investment advice.
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -2848,6 +2946,65 @@ useEffect(() => {
               <div style={{ fontSize:10, color:G.mist, marginTop:10, fontStyle:"italic" }}>
                 Rolling returns use actual NAV data. Alpha = fund return − Nifty 50 return. For research only.
               </div>
+
+              {/* Rolling distribution chart */}
+              {(rdData || true) && (
+                <div style={{ marginTop:16, background:G.bg, borderRadius:10, padding:"14px 12px" }}>
+                  <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10, flexWrap:"wrap", gap:8 }}>
+                    <div style={{ fontSize:11, color:G.white, fontWeight:600 }}>Rolling Return Distribution</div>
+                    <div style={{ display:"flex", gap:6 }}>
+                      {[3,5].map(w => (
+                        <button key={w} onClick={async () => {
+                          setRdWindow(w);
+                          setRdData(null);
+                          try { const d = await apiRollingDistribution(fdResult?.scheme_code, w); setRdData(d); } catch {}
+                        }} style={{ padding:"3px 10px", borderRadius:6, fontSize:11, cursor:"pointer", fontFamily:"Outfit,sans-serif", border:`1px solid ${rdWindow===w ? G.bordG : G.bord}`, background: rdWindow===w ? "rgba(212,175,55,0.12)" : "transparent", color: rdWindow===w ? G.gold : G.mist }}>{w}yr</button>
+                      ))}
+                    </div>
+                  </div>
+                  {!rdData && <div style={{ textAlign:"center", color:G.mist, fontSize:12, padding:"12px 0" }}>Loading distribution…</div>}
+                  {rdData && (() => {
+                    const hist = rdData.histogram || [];
+                    const maxPct = Math.max(...hist.map(b => b.pct), 1);
+                    const bucketColors = ['#E05555','#F0A500','#F0A500','#27AE78','#27AE78','#4A8FE0','#4A8FE0'];
+                    return (
+                      <>
+                        <div style={{ display:"flex", alignItems:"flex-end", gap:4, height:80, marginBottom:6 }}>
+                          {hist.map((b, i) => (
+                            <div key={b.bucket} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:2 }}>
+                              <div style={{ fontSize:9, color:bucketColors[i], fontFamily:"JetBrains Mono,monospace" }}>{b.pct > 0 ? `${b.pct}%` : ""}</div>
+                              <div style={{ width:"100%", background:bucketColors[i], opacity: b.pct > 0 ? 0.85 : 0.15, borderRadius:"3px 3px 0 0", height:`${Math.max((b.pct / maxPct) * 60, b.pct > 0 ? 4 : 1)}px`, minHeight:1 }} />
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ display:"flex", gap:4 }}>
+                          {hist.map(b => (
+                            <div key={b.bucket} style={{ flex:1, textAlign:"center", fontSize:8, color:G.mist, lineHeight:1.2 }}>{b.bucket}</div>
+                          ))}
+                        </div>
+                        <div style={{ display:"flex", gap:16, flexWrap:"wrap", marginTop:10, paddingTop:10, borderTop:`1px solid ${G.bord}` }}>
+                          {[
+                            ["Median", `${rdData.median_cagr}%`, G.gold],
+                            ["Best", `${rdData.best_cagr}%`, "#27AE78"],
+                            ["Worst", `${rdData.worst_cagr}%`, "#E05555"],
+                            ["Beat 15%", `${rdData.pct_above_15}% of windows`, G.mist],
+                            ["Positive", `${rdData.pct_positive}% of windows`, G.mist],
+                            ["Windows", rdData.total_windows, G.mist],
+                          ].map(([lbl, val, col]) => (
+                            <div key={lbl}>
+                              <div style={{ fontSize:9, color:G.mist, marginBottom:2 }}>{lbl}</div>
+                              <div style={{ fontSize:12, color:col, fontFamily:"JetBrains Mono,monospace", fontWeight:600 }}>{val}</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div style={{ fontSize:9, color:G.mist, marginTop:8, fontStyle:"italic" }}>
+                          All {rdData.total_windows} rolling {rdWindow}-year windows · sampled monthly · shows every start date since inception
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
 
               {/* Direct Plan Invest Section */}
               <div style={{ marginTop:18, background:"rgba(39,174,120,0.05)", border:"1px solid rgba(39,174,120,0.15)", borderRadius:10, padding:"14px 16px" }}>
@@ -5604,6 +5761,116 @@ useEffect(() => {
                     </div>
                   </div>
                 )}
+
+                {/* ── Bouquet Growth Chart vs Nifty 50 ── */}
+                {(() => {
+                  const h = parseInt(goalYrs, 10) || 7;
+                  const chartKey = `goal_h${h}_c${parseInt(goalCagr,10) || 16}`;
+                  const gd = growthData[chartKey];
+                  if (!gd && !growthData[chartKey + '_loading']) {
+                    // Trigger fetch once
+                    setGrowthData(prev => ({ ...prev, [chartKey + '_loading']: true }));
+                    apiBouquetGrowthChart(`goal_h${h}_c${parseInt(goalCagr,10) || 16}`, h)
+                      .then(d => setGrowthData(prev => ({ ...prev, [chartKey]: d })))
+                      .catch(() => setGrowthData(prev => ({ ...prev, [chartKey]: null })));
+                  }
+                  if (!gd) return (
+                    <div style={{ padding:"16px", textAlign:"center", color:G.mist, fontSize:12, background:"rgba(255,255,255,0.02)", borderRadius:10, marginBottom:16 }}>
+                      Loading growth chart…
+                    </div>
+                  );
+                  const pts = gd.data || [];
+                  if (pts.length < 6) return null;
+                  const W = 560, H = 140, PL = 40, PT = 10, PR = 10, PB = 24;
+                  const CW = W - PL - PR, CH = H - PT - PB;
+                  const allVals = pts.flatMap(p => [p.b, p.n]);
+                  const minV = Math.min(...allVals) * 0.98, maxV = Math.max(...allVals) * 1.02;
+                  const range = maxV - minV || 1;
+                  const xP = (i) => PL + (i / (pts.length - 1)) * CW;
+                  const yP = (v) => PT + CH - ((v - minV) / range) * CH;
+                  const labelIdxs = [0, Math.floor(pts.length/2), pts.length-1].filter((v,i,a) => a.indexOf(v)===i);
+                  return (
+                    <div style={{ background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:10, padding:"16px 12px", marginBottom:16 }}>
+                      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+                        <div style={{ color:G.slate, fontSize:11, textTransform:"uppercase", letterSpacing:1 }}>Historical Growth · India Equity Component vs Nifty 50 (Indexed to 100)</div>
+                      </div>
+                      <svg viewBox={`0 0 ${W} ${H}`} style={{ width:"100%", height:"auto", display:"block" }}>
+                        <defs>
+                          <linearGradient id="gbGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={G.gold} stopOpacity="0.2" />
+                            <stop offset="100%" stopColor={G.gold} stopOpacity="0.01" />
+                          </linearGradient>
+                        </defs>
+                        <polygon points={[...pts.map((p,i) => `${xP(i)},${yP(p.b)}`), `${xP(pts.length-1)},${PT+CH}`, `${xP(0)},${PT+CH}`].join(" ")} fill="url(#gbGrad)" />
+                        <polyline points={pts.map((p,i) => `${xP(i)},${yP(p.b)}`).join(" ")} fill="none" stroke={G.gold} strokeWidth="2.5" />
+                        <polyline points={pts.map((p,i) => `${xP(i)},${yP(p.n)}`).join(" ")} fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="1.5" strokeDasharray="4,3" />
+                        {[minV, (minV+maxV)/2, maxV].map((v, vi) => (
+                          <text key={vi} x={PL-4} y={yP(v)+4} textAnchor="end" style={{ fontSize:8, fill:G.mist }}>{Math.round(v)}</text>
+                        ))}
+                        {labelIdxs.map(i => (
+                          <text key={i} x={xP(i)} y={H-4} textAnchor="middle" style={{ fontSize:8, fill:G.mist }}>{pts[i].m}</text>
+                        ))}
+                      </svg>
+                      <div style={{ display:"flex", gap:20, marginTop:8, flexWrap:"wrap" }}>
+                        {[
+                          ["This Bouquet (equity)", `${gd.bouquet_cagr}% CAGR`, G.gold],
+                          ["Nifty 50", `${gd.nifty_cagr}% CAGR`, "rgba(255,255,255,0.4)"],
+                          ["Alpha", `+${(gd.bouquet_cagr - gd.nifty_cagr).toFixed(1)}%/yr`, "#27AE78"],
+                          ["Period", `${gd.start_month} → ${gd.end_month}`, G.mist],
+                        ].map(([lbl, val, col]) => (
+                          <div key={lbl}>
+                            <div style={{ fontSize:9, color:G.mist }}>{lbl}</div>
+                            <div style={{ fontSize:12, color:col, fontFamily:"JetBrains Mono,monospace", fontWeight:600 }}>{val}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ fontSize:9, color:G.mist, marginTop:6, fontStyle:"italic" }}>International FOF excluded from chart (INR terms only). Past performance does not guarantee future results.</div>
+                    </div>
+                  );
+                })()}
+
+                {/* ── Required SIP Calculator ── */}
+                {(() => {
+                  const cagr = parseFloat(goalCagr) || 0;
+                  const h = parseInt(goalYrs, 10) || 0;
+                  const n = h * 12;
+                  const r = cagr / 100 / 12;
+                  const targetVal = parseFloat(goalSipTarget.replace(/,/g,'')) || 0;
+                  const requiredSip = (targetVal > 0 && r > 0 && n > 0)
+                    ? (targetVal * r) / ((Math.pow(1+r, n) - 1) * (1+r))
+                    : 0;
+                  const invested = requiredSip * n;
+                  return (
+                    <div style={{ background:"rgba(39,174,120,0.04)", border:"1px solid rgba(39,174,120,0.2)", borderRadius:10, padding:"16px 20px", marginBottom:16 }}>
+                      <div style={{ color:"#27AE78", fontSize:11, fontWeight:700, letterSpacing:".1em", textTransform:"uppercase", marginBottom:12 }}>Required SIP Calculator</div>
+                      <div style={{ display:"flex", gap:16, alignItems:"flex-end", flexWrap:"wrap" }}>
+                        <div>
+                          <div style={{ color:G.mist, fontSize:11, marginBottom:5 }}>Target Corpus (₹)</div>
+                          <input
+                            type="text" placeholder="e.g. 10000000"
+                            value={goalSipTarget}
+                            onChange={e => setGoalSipTarget(e.target.value)}
+                            style={{ background:"rgba(255,255,255,0.05)", border:"1px solid rgba(39,174,120,0.3)", borderRadius:8, color:"#27AE78", fontSize:18, fontFamily:"JetBrains Mono,monospace", padding:"8px 14px", width:160, outline:"none" }}
+                          />
+                        </div>
+                        <div style={{ paddingBottom:4 }}>
+                          <div style={{ fontSize:11, color:G.mist, marginBottom:2 }}>At {cagr}% CAGR · {h} years</div>
+                          {requiredSip > 0 ? (
+                            <>
+                              <div style={{ fontSize:22, color:"#27AE78", fontFamily:"JetBrains Mono,monospace", fontWeight:700 }}>₹{Math.ceil(requiredSip).toLocaleString('en-IN')}/mo</div>
+                              <div style={{ fontSize:11, color:G.mist, marginTop:3 }}>Total invested: ₹{Math.round(invested).toLocaleString('en-IN')} · Gain: ₹{Math.round(targetVal - invested).toLocaleString('en-IN')}</div>
+                            </>
+                          ) : (
+                            <div style={{ fontSize:13, color:G.mist, fontStyle:"italic" }}>Enter target corpus to see required monthly SIP</div>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ fontSize:9, color:G.mist, marginTop:8, fontStyle:"italic" }}>
+                        Assumes constant CAGR. Actual returns vary. For planning only — not a guarantee.
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div style={{ padding: "12px 16px", background: "rgba(255,255,255,0.02)", borderRadius: 10, fontSize: 11, color: G.mist, lineHeight: 1.7, marginBottom: 10 }}>
                   <strong style={{ color: G.slate }}>Scoring note:</strong> For funds launched post-2013 (when SEBI mandated direct plans), historical analysis uses the pre-existing regular plan NAV data where available — same fund, same manager, same portfolio, only higher expense ratio. The bouquet output always recommends <strong style={{ color: G.slate }}>direct plans only</strong> — you invest in the direct version; the regular plan history informs the quality analysis.
