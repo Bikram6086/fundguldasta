@@ -5676,7 +5676,7 @@ useEffect(() => {
                     <div key={f.scheme_code} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, background:G.elv, borderRadius:8, padding:"8px 12px" }}>
                       <div style={{ width:8, height:8, borderRadius:"50%", background: i===0 ? CMP_PURPLE : i===1 ? '#27AE78' : '#F0A500', flexShrink:0 }} />
                       <div style={{ flex:1, minWidth:0 }}>
-                        <div style={{ color:G.fog, fontSize:12, fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{f.scheme_name}</div>
+                        <div style={{ color:G.fog, fontSize:12, fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{f.name || f.scheme_name}</div>
                         <div style={{ color:G.slate, fontSize:10 }}>{f.scheme_code}</div>
                       </div>
                       <button onClick={() => { setCmpFunds(cmpFunds.filter((_,j) => j !== i)); setCmpResult(null); }}
@@ -5704,8 +5704,8 @@ useEffect(() => {
                               style={{ padding:"9px 14px", cursor:"pointer", borderBottom:`1px solid ${G.bord}` }}
                               onMouseEnter={e => e.currentTarget.style.background = "rgba(168,85,247,0.08)"}
                               onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                              <div style={{ color:G.fog, fontSize:12, fontWeight:600 }}>{f.scheme_name}</div>
-                              <div style={{ color:G.slate, fontSize:10, marginTop:1 }}>{f.amc_name} · {f.scheme_code}</div>
+                              <div style={{ color:G.fog, fontSize:12, fontWeight:600 }}>{f.name || f.scheme_name}</div>
+                              <div style={{ color:G.slate, fontSize:10, marginTop:1 }}>{f.amc || f.amc_name} · {f.scheme_code}</div>
                             </div>
                           ))}
                         </div>
