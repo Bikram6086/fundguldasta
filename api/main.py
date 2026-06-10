@@ -3539,3 +3539,296 @@ def get_core_satellite(
         raise HTTPException(status_code=500, detail=f"Core-satellite error: {e}")
 
     return result
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PRIORITY 31 — FUND COMPARISON
+# ══════════════════════════════════════════════════════════════════════════════
+
+_DIM_LABELS = {
+    "return_consistency_score": "Return Consistency",
+    "risk_adjusted_score":      "Risk-Adjusted Quality",
+    "downside_score":           "Downside Protection",
+    "manager_score":            "Manager Stability",
+    "portfolio_quality_score":  "Portfolio Quality",
+    "forward_context_score":    "Forward Context",
+}
+
+_DIM_WEIGHTS = {
+    "return_consistency_score": 25,
+    "risk_adjusted_score":      20,
+    "downside_score":           20,
+    "manager_score":            15,
+    "portfolio_quality_score":  10,
+    "forward_context_score":    10,
+}
+
+
+def _generate_verdict(funds: list, horizon_years: int) -> dict:
+    """
+    Produce a plain-language comparison verdict from scored fund dicts.
+    Returns {winner_code, winner_name, summary, dimension_winners, score_wins}.
+    """
+    if not funds:
+        return {}
+
+    dims = list(_DIM_LABELS.keys())
+
+    # Find per-dimension winners
+    dim_winners: dict = {}
+    for dim in dims:
+        vals = [(f["scheme_code"], float(f.get(dim) or 0)) for f in funds]
+        best_val = max(v for _, v in vals)
+        winners = [c for c, v in vals if v == best_val]
+        dim_winners[dim] = winners[0] if len(winners) == 1 else None  # None = tie
+
+    # Count dimension wins per fund
+    score_wins: dict = {f["scheme_code"]: 0 for f in funds}
+    for dim, winner_code in dim_winners.items():
+        if winner_code:
+            score_wins[winner_code] = score_wins.get(winner_code, 0) + 1
+
+    # Overall winner by composite score
+    overall_winner = max(funds, key=lambda f: float(f.get("fund_score") or 0))
+    w = overall_winner
+    losers = [f for f in funds if f["scheme_code"] != w["scheme_code"]]
+
+    # Build natural-language summary
+    w_name = w["scheme_name_short"]
+    horizon_label = f"{horizon_years}-year"
+
+    # Advantages: dimensions where winner leads all others
+    leading_dims = [
+        _DIM_LABELS[dim] for dim in dims
+        if dim_winners.get(dim) == w["scheme_code"]
+    ]
+
+    # Cost comparison
+    cheapest = min(funds, key=lambda f: float(f.get("expense_ratio") or 99))
+    cost_note = ""
+    if cheapest["scheme_code"] != w["scheme_code"] and cheapest.get("expense_ratio"):
+        cost_note = (
+            f" {cheapest['scheme_name_short']} has the lowest expense ratio "
+            f"({cheapest['expense_ratio']}%), which compounds meaningfully over long horizons."
+        )
+
+    # Drawdown comparison
+    safest = min(funds, key=lambda f: abs(float(f.get("max_drawdown_pct") or 0)))
+    drawdown_note = ""
+    if safest["scheme_code"] != w["scheme_code"]:
+        drawdown_note = (
+            f" {safest['scheme_name_short']} shows shallower drawdowns, "
+            f"making it better suited for risk-averse investors."
+        )
+
+    if leading_dims:
+        advantage_text = f"leads on {', '.join(leading_dims[:3])}"
+    else:
+        advantage_text = f"scores highest overall ({round(float(w.get('fund_score') or 0), 1)}/100)"
+
+    loser_names = " and ".join(f["scheme_name_short"] for f in losers)
+    compared_to = f" compared to {loser_names}" if loser_names else ""
+
+    summary = (
+        f"For a {horizon_label} horizon, {w_name} {advantage_text}{compared_to}. "
+        f"Its composite score of {round(float(w.get('fund_score') or 0), 1)}/100 "
+        f"reflects stronger risk-adjusted compounding over the chosen period."
+        f"{cost_note}{drawdown_note}"
+    )
+
+    return {
+        "winner_code":      w["scheme_code"],
+        "winner_name":      w_name,
+        "summary":          summary,
+        "dimension_winners": {dim: dim_winners[dim] for dim in dims},
+        "score_wins":       score_wins,
+    }
+
+
+@app.get("/api/funds/compare")
+def compare_funds(
+    codes: str = Query(..., description="Comma-separated scheme codes, 2–3 funds"),
+    horizon_years: int = Query(default=7, description="Scoring horizon: 5, 7, 10, 15"),
+):
+    """
+    Side-by-side comparison of 2–3 funds using FundGuldasta's scoring engine.
+    Returns composite + 6-dimension scores, risk metrics, manager data, and a
+    plain-language verdict.
+    """
+    raw_codes = [c.strip() for c in codes.split(",") if c.strip()]
+    if len(raw_codes) < 2:
+        raise HTTPException(status_code=400, detail="Provide at least 2 scheme codes.")
+    if len(raw_codes) > 3:
+        raise HTTPException(status_code=400, detail="Maximum 3 funds can be compared at once.")
+    if horizon_years not in (5, 7, 10, 15, 20):
+        raise HTTPException(status_code=400, detail="horizon_years must be 5, 7, 10, 15, or 20.")
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        # Fetch latest computed_metrics for each fund at the requested horizon
+        cur.execute(
+            """
+            SELECT DISTINCT ON (cm.scheme_code)
+                cm.scheme_code,
+                cm.horizon_years,
+                cm.fund_score,
+                cm.return_consistency_score,
+                cm.risk_adjusted_score,
+                cm.downside_score,
+                cm.manager_score,
+                cm.portfolio_quality_score,
+                cm.forward_context_score,
+                cm.cagr_pct,
+                cm.rolling_cagr_mean,
+                cm.rolling_cagr_std,
+                cm.sharpe_ratio,
+                cm.sortino_ratio,
+                cm.max_drawdown_pct,
+                cm.upside_capture,
+                cm.downside_capture,
+                fm.scheme_name,
+                fm.amc_name,
+                fm.sebi_category,
+                fm.expense_ratio,
+                fm.aum_crores,
+                fm.inception_date
+            FROM computed_metrics cm
+            JOIN fund_metadata fm ON fm.scheme_code = cm.scheme_code
+            WHERE cm.scheme_code = ANY(%s) AND cm.horizon_years = %s
+            ORDER BY cm.scheme_code, cm.computation_date DESC
+            """,
+            (raw_codes, horizon_years)
+        )
+        metric_rows = cur.fetchall()
+        metric_cols = [d[0] for d in cur.description]
+
+        # Fetch manager info
+        cur.execute(
+            """
+            SELECT fm2.scheme_code,
+                   STRING_AGG(fm2.manager_name, ', ' ORDER BY fm2.appointment_date) AS managers,
+                   MIN(fm2.appointment_date) AS earliest_appt
+            FROM fund_managers fm2
+            WHERE fm2.scheme_code = ANY(%s) AND fm2.is_current = true
+            GROUP BY fm2.scheme_code
+            """,
+            (raw_codes,)
+        )
+        mgr_rows = {r[0]: {"managers": r[1], "earliest_appt": r[2]} for r in cur.fetchall()}
+
+        # Fetch CAGR across horizons for each fund (5/7/10yr)
+        cur.execute(
+            """
+            SELECT DISTINCT ON (scheme_code, horizon_years) scheme_code, horizon_years, cagr_pct
+            FROM computed_metrics
+            WHERE scheme_code = ANY(%s) AND horizon_years IN (5, 7, 10)
+            ORDER BY scheme_code, horizon_years, computation_date DESC
+            """,
+            (raw_codes,)
+        )
+        cagr_multi: dict = {}
+        for r in cur.fetchall():
+            sc, h, cagr = r
+            if sc not in cagr_multi:
+                cagr_multi[sc] = {}
+            cagr_multi[sc][h] = float(cagr) if cagr else None
+
+        # Which bouquets include each fund?
+        cur.execute(
+            """
+            SELECT archetype_id, funds_json FROM bouquet_cache
+            WHERE is_active = true AND horizon_years = %s
+            ORDER BY computation_date DESC
+            """,
+            (horizon_years,)
+        )
+        bouquet_membership: dict = {sc: [] for sc in raw_codes}
+        import json as _json
+        for arch_id, funds_json in cur.fetchall():
+            try:
+                funds_list = _json.loads(funds_json)
+                for fd in funds_list:
+                    sc = str(fd.get("scheme_code", ""))
+                    if sc in bouquet_membership:
+                        bouquet_membership[sc].append(arch_id)
+            except Exception:
+                pass
+
+    finally:
+        cur.close()
+        conn.close()
+
+    # Build fund dicts
+    from datetime import date as _date
+    today = _date.today()
+    funds_out = []
+    found_codes = set()
+
+    for row in metric_rows:
+        d = dict(zip(metric_cols, row))
+        sc = d["scheme_code"]
+        found_codes.add(sc)
+
+        mgr_info = mgr_rows.get(sc, {})
+        appt = mgr_info.get("earliest_appt")
+        tenure_years = round((today - appt).days / 365.25, 1) if appt else None
+
+        short_name = (d["scheme_name"] or sc)
+        # Trim common suffixes for display
+        for suffix in [" - Direct Plan - Growth", " Direct Plan Growth",
+                       " Direct Growth", " - Direct - Growth", " Direct"]:
+            if short_name.endswith(suffix):
+                short_name = short_name[: -len(suffix)]
+                break
+
+        f = {
+            "scheme_code":              sc,
+            "scheme_name":              d["scheme_name"],
+            "scheme_name_short":        short_name,
+            "amc_name":                 d["amc_name"] or "",
+            "category":                 d["sebi_category"] or "",
+            "expense_ratio":            float(d["expense_ratio"]) if d["expense_ratio"] else None,
+            "aum_crores":               float(d["aum_crores"]) if d["aum_crores"] else None,
+            "inception_date":           str(d["inception_date"]) if d["inception_date"] else None,
+            "manager_names":            mgr_info.get("managers", ""),
+            "manager_tenure_years":     tenure_years,
+            # Primary horizon metrics
+            "fund_score":               float(d["fund_score"]) if d["fund_score"] else None,
+            "return_consistency_score": float(d["return_consistency_score"]) if d["return_consistency_score"] else None,
+            "risk_adjusted_score":      float(d["risk_adjusted_score"]) if d["risk_adjusted_score"] else None,
+            "downside_score":           float(d["downside_score"]) if d["downside_score"] else None,
+            "manager_score":            float(d["manager_score"]) if d["manager_score"] else None,
+            "portfolio_quality_score":  float(d["portfolio_quality_score"]) if d["portfolio_quality_score"] else None,
+            "forward_context_score":    float(d["forward_context_score"]) if d["forward_context_score"] else None,
+            # Returns
+            "cagr_pct":                 float(d["cagr_pct"]) if d["cagr_pct"] else None,
+            "rolling_cagr_mean":        float(d["rolling_cagr_mean"]) if d["rolling_cagr_mean"] else None,
+            "rolling_cagr_std":         float(d["rolling_cagr_std"]) if d["rolling_cagr_std"] else None,
+            "cagr_5y":                  cagr_multi.get(sc, {}).get(5),
+            "cagr_7y":                  cagr_multi.get(sc, {}).get(7),
+            "cagr_10y":                 cagr_multi.get(sc, {}).get(10),
+            # Risk
+            "sharpe_ratio":             float(d["sharpe_ratio"]) if d["sharpe_ratio"] else None,
+            "sortino_ratio":            float(d["sortino_ratio"]) if d["sortino_ratio"] else None,
+            "max_drawdown_pct":         float(d["max_drawdown_pct"]) if d["max_drawdown_pct"] else None,
+            "upside_capture":           float(d["upside_capture"]) if d["upside_capture"] else None,
+            "downside_capture":         float(d["downside_capture"]) if d["downside_capture"] else None,
+            # Context
+            "in_bouquets":              bouquet_membership.get(sc, []),
+        }
+        funds_out.append(f)
+
+    # Report any requested codes with no data
+    missing = [c for c in raw_codes if c not in found_codes]
+
+    verdict = _generate_verdict(funds_out, horizon_years)
+
+    return {
+        "funds":        funds_out,
+        "horizon_years": horizon_years,
+        "verdict":      verdict,
+        "missing_codes": missing,
+        "dimension_labels": _DIM_LABELS,
+        "dimension_weights": _DIM_WEIGHTS,
+    }

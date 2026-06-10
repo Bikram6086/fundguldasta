@@ -125,6 +125,13 @@ async function apiGetBenchmark(token) {
   return res.json();
 }
 
+async function apiFundCompare(codes, horizonYears) {
+  const url = `${API_BASE}/api/funds/compare?codes=${codes.join(',')}&horizon_years=${horizonYears}`;
+  const res = await fetch(url);
+  if (!res.ok) { const e = await res.json(); throw new Error(e.detail || "Comparison failed"); }
+  return res.json();
+}
+
 async function apiListSaved(token) {
   const res = await fetch(`${API_BASE}/api/user/saved-bouquets`, {
     headers: { "Authorization": `Bearer ${token}` },
@@ -539,6 +546,13 @@ export default function App() {
   const [indexBouquets, setIndexBouquets] = useState(null);
   const [indexBouquetsLoading, setIndexBouquetsLoading] = useState(false);
   const [indexBouquetsError, setIndexBouquetsError] = useState(null);
+  const [cmpFunds, setCmpFunds] = useState([]);
+  const [cmpHorizon, setCmpHorizon] = useState(7);
+  const [cmpResult, setCmpResult] = useState(null);
+  const [cmpLoading, setCmpLoading] = useState(false);
+  const [cmpError, setCmpError] = useState(null);
+  const [cmpSearch, setCmpSearch] = useState('');
+  const [cmpSearchResults, setCmpSearchResults] = useState([]);
   const [user, setUser] = useState(null);
   const [authModal, setAuthModal] = useState(false);
   const [authTab, setAuthTab] = useState("login");
@@ -3280,6 +3294,7 @@ useEffect(() => {
               <button className="byob-entry" style={{ marginTop:6, background:"rgba(212,175,55,0.08)", color:G.mist }} onClick={() => setScreen("portfolio")}>{tr("📊 Analyse My Portfolio", HI_HERO.btnPortfolio)}</button>
               <button className="byob-entry" style={{ marginTop:6, background:"rgba(99,179,237,0.06)", border:"1px solid rgba(99,179,237,0.3)", color:"#63B3ED" }} onClick={() => { setFiSearch(''); setFiResults([]); setFiAnalysis(null); setFiError(''); setScreen("fund_intel"); }}>🔬 Fund Intelligence — Deep-analyse any fund</button>
               <button className="byob-entry" style={{ marginTop:6, background:"rgba(99,179,237,0.08)", border:"1px solid rgba(99,179,237,0.35)", color:"#63B3ED" }} onClick={() => { setPrevScreen("hero"); setIndexCompare(null); setIndexCompareError(null); setScreen("index_compare"); }}>📊 Index Fund Compare — Track the trackers</button>
+              <button className="byob-entry" style={{ marginTop:6, background:"rgba(168,85,247,0.07)", border:"1px solid rgba(168,85,247,0.3)", color:"#A855F7" }} onClick={() => { setCmpFunds([]); setCmpResult(null); setCmpError(null); setCmpSearch(''); setCmpSearchResults([]); setScreen("fund_compare"); }}>⚖ Compare Funds — Side-by-side FundGuldasta scoring</button>
             </div>
           )}
 
@@ -5599,6 +5614,347 @@ useEffect(() => {
               </div>
             );
           })()}
+        </div>
+      </>
+    );
+  }
+
+  if (screen === "fund_compare") {
+    const CMP_PURPLE = '#A855F7';
+    const DIM_LABELS = {
+      return_consistency_score: "Return Consistency",
+      risk_adjusted_score:      "Risk-Adjusted Quality",
+      downside_score:           "Downside Protection",
+      manager_score:            "Manager Stability",
+      portfolio_quality_score:  "Portfolio Quality",
+      forward_context_score:    "Forward Context",
+    };
+    const DIM_WEIGHTS = {
+      return_consistency_score: 25, risk_adjusted_score: 20, downside_score: 20,
+      manager_score: 15, portfolio_quality_score: 10, forward_context_score: 10,
+    };
+    const DIMS = Object.keys(DIM_LABELS);
+    const BOUQUET_LABELS = { steady:'Steady Compounder', balanced:'Balanced Growther', aggressive:'Aggressive Achiever', conviction:'High Conviction' };
+    const scoreCol = (s) => s >= 80 ? '#27AE78' : s >= 65 ? '#F0A500' : s >= 50 ? G.white : '#E05555';
+    const winnerCode = cmpResult?.verdict?.winner_code;
+
+    const handleRunCompare = async () => {
+      if (cmpFunds.length < 2) { setCmpError("Add at least 2 funds to compare."); return; }
+      setCmpLoading(true); setCmpError(null); setCmpResult(null);
+      try {
+        const d = await apiFundCompare(cmpFunds.map(f => f.scheme_code), cmpHorizon);
+        setCmpResult(d);
+      } catch(e) { setCmpError(e.message); }
+      finally { setCmpLoading(false); }
+    };
+
+    return (
+      <>
+        <style>{css}</style>
+        <div style={{ minHeight:"100vh", background:G.bg, fontFamily:"Outfit,sans-serif", padding:24 }}>
+          <div style={{ maxWidth:960, margin:"0 auto" }}>
+
+            {/* Header */}
+            <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:24, flexWrap:"wrap" }}>
+              <button onClick={() => setScreen(prevScreen || "hero")} style={{ background:"none", border:`1px solid ${G.bord}`, borderRadius:8, padding:"5px 14px", color:G.slate, fontSize:12, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>← Back</button>
+              <div>
+                <div style={{ color:CMP_PURPLE, fontFamily:"Cormorant Garamond,serif", fontSize:28, fontWeight:700 }}>⚖ Compare Funds</div>
+                <div style={{ color:G.slate, fontSize:12, marginTop:2 }}>Side-by-side scoring on FundGuldasta's 6-dimension engine. Not just returns — quality.</div>
+              </div>
+            </div>
+
+            {/* Fund selector + horizon */}
+            <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderRadius:14, padding:20, marginBottom:20 }}>
+              <div style={{ display:"flex", alignItems:"flex-start", gap:16, flexWrap:"wrap" }}>
+
+                {/* Selected funds */}
+                <div style={{ flex:1, minWidth:220 }}>
+                  <div style={{ color:G.white, fontSize:13, fontWeight:600, marginBottom:10 }}>
+                    Funds to compare <span style={{ color:G.slate, fontWeight:400, fontSize:11 }}>({cmpFunds.length}/3)</span>
+                  </div>
+                  {cmpFunds.map((f, i) => (
+                    <div key={f.scheme_code} style={{ display:"flex", alignItems:"center", gap:8, marginBottom:8, background:G.elv, borderRadius:8, padding:"8px 12px" }}>
+                      <div style={{ width:8, height:8, borderRadius:"50%", background: i===0 ? CMP_PURPLE : i===1 ? '#27AE78' : '#F0A500', flexShrink:0 }} />
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ color:G.fog, fontSize:12, fontWeight:600, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{f.scheme_name}</div>
+                        <div style={{ color:G.slate, fontSize:10 }}>{f.scheme_code}</div>
+                      </div>
+                      <button onClick={() => { setCmpFunds(cmpFunds.filter((_,j) => j !== i)); setCmpResult(null); }}
+                        style={{ background:"none", border:"none", color:"#E05555", fontSize:14, cursor:"pointer", padding:"0 4px", lineHeight:1, flexShrink:0 }}>✕</button>
+                    </div>
+                  ))}
+                  {cmpFunds.length < 3 && (
+                    <div style={{ position:"relative" }}>
+                      <input value={cmpSearch}
+                        onChange={async e => {
+                          const q = e.target.value; setCmpSearch(q);
+                          if (q.length >= 2) { const r = await apiFundSearch(q); setCmpSearchResults(r); }
+                          else setCmpSearchResults([]);
+                        }}
+                        placeholder="Search and add a fund..."
+                        style={{ width:"100%", background:G.elv, border:`1px solid rgba(168,85,247,0.4)`, borderRadius:8, padding:"9px 12px", color:G.white, fontSize:12, fontFamily:"Outfit,sans-serif", outline:"none", boxSizing:"border-box" }} />
+                      {cmpSearchResults.length > 0 && (
+                        <div style={{ position:"absolute", top:"100%", left:0, right:0, background:"#1a1a1a", border:`1px solid ${G.bord}`, borderRadius:8, zIndex:200, maxHeight:220, overflowY:"auto", marginTop:2 }}>
+                          {cmpSearchResults.slice(0,7).map(f => (
+                            <div key={f.scheme_code}
+                              onClick={() => {
+                                if (cmpFunds.some(x => x.scheme_code === f.scheme_code)) return;
+                                setCmpFunds([...cmpFunds, f]); setCmpSearch(''); setCmpSearchResults([]); setCmpResult(null);
+                              }}
+                              style={{ padding:"9px 14px", cursor:"pointer", borderBottom:`1px solid ${G.bord}` }}
+                              onMouseEnter={e => e.currentTarget.style.background = "rgba(168,85,247,0.08)"}
+                              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                              <div style={{ color:G.fog, fontSize:12, fontWeight:600 }}>{f.scheme_name}</div>
+                              <div style={{ color:G.slate, fontSize:10, marginTop:1 }}>{f.amc_name} · {f.scheme_code}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Horizon + Run */}
+                <div style={{ display:"flex", flexDirection:"column", gap:10, minWidth:160 }}>
+                  <div style={{ color:G.white, fontSize:13, fontWeight:600 }}>Scoring horizon</div>
+                  <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                    {[5,7,10,15].map(h => (
+                      <button key={h} onClick={() => { setCmpHorizon(h); setCmpResult(null); }}
+                        style={{ padding:"6px 14px", borderRadius:8, border: cmpHorizon===h ? `1px solid ${CMP_PURPLE}` : `1px solid ${G.bord}`, background: cmpHorizon===h ? "rgba(168,85,247,0.15)" : G.elv, color: cmpHorizon===h ? CMP_PURPLE : G.slate, fontSize:12, fontWeight: cmpHorizon===h ? 700 : 400, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                        {h}yr
+                      </button>
+                    ))}
+                  </div>
+                  <button onClick={handleRunCompare} disabled={cmpFunds.length < 2 || cmpLoading}
+                    style={{ marginTop:4, padding:"10px 0", background: cmpFunds.length >= 2 ? "linear-gradient(135deg,rgba(168,85,247,0.25),rgba(168,85,247,0.1))" : G.elv, border:`1px solid ${cmpFunds.length >= 2 ? CMP_PURPLE : G.bord}`, borderRadius:10, color: cmpFunds.length >= 2 ? CMP_PURPLE : G.slate, fontSize:13, fontWeight:700, cursor: cmpFunds.length >= 2 ? "pointer" : "not-allowed", fontFamily:"Outfit,sans-serif" }}>
+                    {cmpLoading ? "Analysing…" : "⚖ Compare Now"}
+                  </button>
+                </div>
+              </div>
+
+              {cmpError && <div style={{ color:"#FF6B6B", fontSize:12, marginTop:12 }}>{cmpError}</div>}
+              {!cmpResult && !cmpLoading && cmpFunds.length < 2 && (
+                <div style={{ color:G.mist, fontSize:11, marginTop:12 }}>Add 2 or 3 funds, choose a horizon, then click Compare Now.</div>
+              )}
+            </div>
+
+            {/* Results */}
+            {cmpResult && cmpResult.funds.length > 0 && (() => {
+              const funds = cmpResult.funds;
+              const FUND_COLORS = [CMP_PURPLE, '#27AE78', '#F0A500'];
+
+              const MetricRow = ({ label, values, winner, lowerBetter, format, note }) => {
+                const winnerIdx = winner ? funds.findIndex(f => f.scheme_code === winner) : -1;
+                return (
+                  <tr>
+                    <td style={{ padding:"9px 12px", color:G.slate, fontSize:11, whiteSpace:"nowrap", borderBottom:`1px solid ${G.bord}` }}>
+                      {label}{note && <span style={{ color:G.mist, fontSize:10, marginLeft:4 }}>{note}</span>}
+                    </td>
+                    {values.map((val, i) => {
+                      const isWinner = i === winnerIdx;
+                      return (
+                        <td key={i} style={{ padding:"9px 12px", textAlign:"center", borderBottom:`1px solid ${G.bord}`, background: isWinner ? `rgba(${FUND_COLORS[i] === CMP_PURPLE ? '168,85,247' : FUND_COLORS[i] === '#27AE78' ? '39,174,120' : '240,165,0'},0.07)` : "transparent" }}>
+                          <span style={{ color: isWinner ? FUND_COLORS[i] : G.fog, fontFamily:"JetBrains Mono,monospace", fontSize:12, fontWeight: isWinner ? 700 : 400 }}>
+                            {val ?? "—"}
+                          </span>
+                          {isWinner && <span style={{ color: FUND_COLORS[i], fontSize:9, marginLeft:4 }}>▲</span>}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              };
+
+              const ScoreRow = ({ dimKey }) => {
+                const vals = funds.map(f => f[dimKey]);
+                const maxVal = Math.max(...vals.filter(v => v != null));
+                const winnerIdx = vals.findIndex(v => v === maxVal && v != null);
+                const winnerCode = winnerIdx >= 0 ? funds[winnerIdx].scheme_code : null;
+                const weight = DIM_WEIGHTS[dimKey];
+                return (
+                  <tr>
+                    <td style={{ padding:"9px 12px", borderBottom:`1px solid ${G.bord}` }}>
+                      <div style={{ color:G.fog, fontSize:11 }}>{DIM_LABELS[dimKey]}</div>
+                      <div style={{ color:G.mist, fontSize:10 }}>{weight}% of score</div>
+                    </td>
+                    {funds.map((f, i) => {
+                      const val = f[dimKey];
+                      const isWinner = f.scheme_code === winnerCode;
+                      return (
+                        <td key={i} style={{ padding:"9px 12px", textAlign:"center", borderBottom:`1px solid ${G.bord}`, background: isWinner ? `rgba(${FUND_COLORS[i] === CMP_PURPLE ? '168,85,247' : FUND_COLORS[i] === '#27AE78' ? '39,174,120' : '240,165,0'},0.07)` : "transparent" }}>
+                          {val != null ? (
+                            <>
+                              <div style={{ color: scoreCol(val), fontFamily:"JetBrains Mono,monospace", fontSize:13, fontWeight: isWinner ? 700 : 500 }}>{val.toFixed(1)}</div>
+                              <div style={{ width:"100%", height:4, background:G.bord, borderRadius:2, marginTop:4 }}>
+                                <div style={{ height:"100%", borderRadius:2, background: scoreCol(val), width:`${Math.min(100, val)}%`, transition:"width 0.4s" }} />
+                              </div>
+                              {isWinner && <div style={{ color: FUND_COLORS[i], fontSize:9, marginTop:2 }}>▲ best</div>}
+                            </>
+                          ) : <span style={{ color:G.mist, fontSize:11 }}>—</span>}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              };
+
+              return (
+                <>
+                  {/* Fund header + bouquet badges */}
+                  <div style={{ display:"grid", gridTemplateColumns:`200px repeat(${funds.length}, 1fr)`, gap:0, background:G.sur, border:`1px solid ${G.bord}`, borderRadius:"14px 14px 0 0", overflow:"hidden", marginBottom:0 }}>
+                    <div style={{ padding:"14px 12px", borderRight:`1px solid ${G.bord}`, display:"flex", alignItems:"center" }}>
+                      <span style={{ color:G.slate, fontSize:11, fontWeight:600, letterSpacing:".06em", textTransform:"uppercase" }}>Fund</span>
+                    </div>
+                    {funds.map((f, i) => (
+                      <div key={f.scheme_code} style={{ padding:"14px 12px", borderRight: i < funds.length-1 ? `1px solid ${G.bord}` : "none", background: f.scheme_code === winnerCode ? `rgba(${FUND_COLORS[i] === CMP_PURPLE ? '168,85,247' : FUND_COLORS[i] === '#27AE78' ? '39,174,120' : '240,165,0'},0.05)` : "transparent" }}>
+                        <div style={{ display:"flex", alignItems:"center", gap:6, marginBottom:4 }}>
+                          <div style={{ width:10, height:10, borderRadius:"50%", background:FUND_COLORS[i], flexShrink:0 }} />
+                          {f.scheme_code === winnerCode && <span style={{ background:`rgba(${FUND_COLORS[i] === CMP_PURPLE ? '168,85,247' : FUND_COLORS[i] === '#27AE78' ? '39,174,120' : '240,165,0'},0.15)`, color:FUND_COLORS[i], fontSize:9, fontWeight:700, padding:"2px 6px", borderRadius:4 }}>TOP PICK</span>}
+                        </div>
+                        <div style={{ color:G.white, fontSize:12, fontWeight:700, lineHeight:1.4 }}>{f.scheme_name_short}</div>
+                        <div style={{ color:G.slate, fontSize:10, marginTop:2 }}>{f.amc_name}</div>
+                        <div style={{ color:G.mist, fontSize:10 }}>{f.category}</div>
+                        {f.in_bouquets.length > 0 && (
+                          <div style={{ marginTop:6, display:"flex", flexWrap:"wrap", gap:4 }}>
+                            {f.in_bouquets.slice(0,2).map(b => (
+                              <span key={b} style={{ background:"rgba(212,175,55,0.12)", color:G.gold, fontSize:9, padding:"2px 6px", borderRadius:4, fontWeight:600 }}>
+                                {BOUQUET_LABELS[b] || b}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Comparison table */}
+                  <div style={{ background:G.sur, border:`1px solid ${G.bord}`, borderTop:"none", borderRadius:"0 0 14px 14px", overflow:"hidden", marginBottom:20 }}>
+                    <table style={{ width:"100%", borderCollapse:"collapse" }}>
+                      <tbody>
+                        {/* ── Composite score ── */}
+                        <tr style={{ background:G.elv }}>
+                          <td colSpan={funds.length + 1} style={{ padding:"8px 12px", color:CMP_PURPLE, fontSize:11, fontWeight:700, letterSpacing:".07em", textTransform:"uppercase" }}>
+                            FundGuldasta Composite Score
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style={{ padding:"10px 12px", color:G.slate, fontSize:11, borderBottom:`1px solid ${G.bord}` }}>Overall Score <span style={{ color:G.mist, fontSize:10 }}>/100</span></td>
+                          {funds.map((f, i) => {
+                            const isWinner = f.scheme_code === winnerCode;
+                            return (
+                              <td key={i} style={{ padding:"10px 12px", textAlign:"center", borderBottom:`1px solid ${G.bord}`, background: isWinner ? `rgba(${FUND_COLORS[i] === CMP_PURPLE ? '168,85,247' : FUND_COLORS[i] === '#27AE78' ? '39,174,120' : '240,165,0'},0.08)` : "transparent" }}>
+                                <div style={{ color: f.fund_score != null ? scoreCol(f.fund_score) : G.mist, fontFamily:"JetBrains Mono,monospace", fontSize:22, fontWeight:700 }}>{f.fund_score != null ? f.fund_score.toFixed(1) : "—"}</div>
+                                {isWinner && <div style={{ color:FUND_COLORS[i], fontSize:10, marginTop:2, fontWeight:600 }}>▲ highest</div>}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                        {DIMS.map(dimKey => <ScoreRow key={dimKey} dimKey={dimKey} />)}
+
+                        {/* ── Returns ── */}
+                        <tr style={{ background:G.elv }}>
+                          <td colSpan={funds.length + 1} style={{ padding:"8px 12px", color:"#63B3ED", fontSize:11, fontWeight:700, letterSpacing:".07em", textTransform:"uppercase" }}>
+                            Historical Returns (CAGR)
+                          </td>
+                        </tr>
+                        <MetricRow label={`${cmpHorizon}yr CAGR`}
+                          values={funds.map(f => f.cagr_pct != null ? `${f.cagr_pct.toFixed(1)}%` : null)}
+                          winner={(() => { const vs = funds.map(f => f.cagr_pct ?? -999); const mx = Math.max(...vs); return funds[vs.indexOf(mx)]?.scheme_code; })()}
+                          format="pct" />
+                        <MetricRow label="Rolling Mean CAGR" note="(avg over all periods)"
+                          values={funds.map(f => f.rolling_cagr_mean != null ? `${f.rolling_cagr_mean.toFixed(1)}%` : null)}
+                          winner={(() => { const vs = funds.map(f => f.rolling_cagr_mean ?? -999); const mx = Math.max(...vs); return funds[vs.indexOf(mx)]?.scheme_code; })()} />
+                        <MetricRow label="Rolling Consistency" note="(lower std = more consistent)"
+                          values={funds.map(f => f.rolling_cagr_std != null ? `±${f.rolling_cagr_std.toFixed(1)}%` : null)}
+                          winner={(() => { const vs = funds.map(f => f.rolling_cagr_std ?? 999); const mn = Math.min(...vs); return funds[vs.indexOf(mn)]?.scheme_code; })()} lowerBetter />
+                        <MetricRow label="5yr CAGR"
+                          values={funds.map(f => f.cagr_5y != null ? `${f.cagr_5y.toFixed(1)}%` : null)}
+                          winner={(() => { const vs = funds.map(f => f.cagr_5y ?? -999); const mx = Math.max(...vs); return funds[vs.indexOf(mx)]?.scheme_code; })()} />
+                        <MetricRow label="7yr CAGR"
+                          values={funds.map(f => f.cagr_7y != null ? `${f.cagr_7y.toFixed(1)}%` : null)}
+                          winner={(() => { const vs = funds.map(f => f.cagr_7y ?? -999); const mx = Math.max(...vs); return funds[vs.indexOf(mx)]?.scheme_code; })()} />
+                        <MetricRow label="10yr CAGR"
+                          values={funds.map(f => f.cagr_10y != null ? `${f.cagr_10y.toFixed(1)}%` : null)}
+                          winner={(() => { const vs = funds.map(f => f.cagr_10y ?? -999); const mx = Math.max(...vs); return funds[vs.indexOf(mx)]?.scheme_code; })()} />
+
+                        {/* ── Risk ── */}
+                        <tr style={{ background:G.elv }}>
+                          <td colSpan={funds.length + 1} style={{ padding:"8px 12px", color:"#F0A500", fontSize:11, fontWeight:700, letterSpacing:".07em", textTransform:"uppercase" }}>
+                            Risk Metrics
+                          </td>
+                        </tr>
+                        <MetricRow label="Max Drawdown" note="(less negative = better)"
+                          values={funds.map(f => f.max_drawdown_pct != null ? `${f.max_drawdown_pct.toFixed(1)}%` : null)}
+                          winner={(() => { const vs = funds.map(f => f.max_drawdown_pct ?? -999); const mx = Math.max(...vs); return funds[vs.indexOf(mx)]?.scheme_code; })()} lowerBetter />
+                        <MetricRow label="Sharpe Ratio" note="(higher = better risk-adj return)"
+                          values={funds.map(f => f.sharpe_ratio != null ? f.sharpe_ratio.toFixed(3) : null)}
+                          winner={(() => { const vs = funds.map(f => f.sharpe_ratio ?? -999); const mx = Math.max(...vs); return funds[vs.indexOf(mx)]?.scheme_code; })()} />
+                        <MetricRow label="Sortino Ratio" note="(downside risk focus)"
+                          values={funds.map(f => f.sortino_ratio != null ? f.sortino_ratio.toFixed(3) : null)}
+                          winner={(() => { const vs = funds.map(f => f.sortino_ratio ?? -999); const mx = Math.max(...vs); return funds[vs.indexOf(mx)]?.scheme_code; })()} />
+                        <MetricRow label="Upside Capture" note="(vs benchmark)"
+                          values={funds.map(f => f.upside_capture != null ? `${f.upside_capture.toFixed(0)}%` : null)}
+                          winner={(() => { const vs = funds.map(f => f.upside_capture ?? -999); const mx = Math.max(...vs); return funds[vs.indexOf(mx)]?.scheme_code; })()} />
+                        <MetricRow label="Downside Capture" note="(lower = less loss in falls)"
+                          values={funds.map(f => f.downside_capture != null ? `${f.downside_capture.toFixed(0)}%` : null)}
+                          winner={(() => { const vs = funds.map(f => f.downside_capture ?? -999); const mn = Math.min(...vs); return funds[vs.indexOf(mn)]?.scheme_code; })()} lowerBetter />
+
+                        {/* ── Cost & Details ── */}
+                        <tr style={{ background:G.elv }}>
+                          <td colSpan={funds.length + 1} style={{ padding:"8px 12px", color:G.gold, fontSize:11, fontWeight:700, letterSpacing:".07em", textTransform:"uppercase" }}>
+                            Cost &amp; Details
+                          </td>
+                        </tr>
+                        <MetricRow label="Expense Ratio" note="(lower = better)"
+                          values={funds.map(f => f.expense_ratio != null ? `${f.expense_ratio.toFixed(2)}%` : null)}
+                          winner={(() => { const vs = funds.map(f => f.expense_ratio ?? 99); const mn = Math.min(...vs); return funds[vs.indexOf(mn)]?.scheme_code; })()} lowerBetter />
+                        <MetricRow label="AUM"
+                          values={funds.map(f => f.aum_crores != null ? `₹${(f.aum_crores/100).toFixed(0)}Cr` : null)}
+                          winner={null} />
+                        <MetricRow label="Manager(s)"
+                          values={funds.map(f => f.manager_names || "—")}
+                          winner={null} />
+                        <MetricRow label="Mgr Tenure" note="(current team)"
+                          values={funds.map(f => f.manager_tenure_years != null ? `${f.manager_tenure_years}y` : null)}
+                          winner={(() => { const vs = funds.map(f => f.manager_tenure_years ?? -1); const mx = Math.max(...vs); return funds[vs.indexOf(mx)]?.scheme_code; })()} />
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Verdict */}
+                  {cmpResult.verdict?.summary && (
+                    <div style={{ background:`rgba(168,85,247,0.07)`, border:`1px solid rgba(168,85,247,0.3)`, borderRadius:14, padding:24, marginBottom:20 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+                        <div style={{ color:CMP_PURPLE, fontFamily:"Cormorant Garamond,serif", fontSize:22, fontWeight:700 }}>FundGuldasta Verdict</div>
+                        <span style={{ background:`rgba(168,85,247,0.15)`, color:CMP_PURPLE, fontSize:11, fontWeight:700, padding:"3px 10px", borderRadius:6 }}>
+                          {cmpHorizon}yr · {cmpResult.verdict.winner_name}
+                        </span>
+                      </div>
+                      <div style={{ color:G.fog, fontSize:13, lineHeight:1.8 }}>{cmpResult.verdict.summary}</div>
+                      <div style={{ marginTop:16, display:"flex", gap:8, flexWrap:"wrap" }}>
+                        {funds.map((f, i) => (
+                          <div key={f.scheme_code} style={{ background:G.elv, borderRadius:8, padding:"8px 14px", display:"flex", alignItems:"center", gap:8 }}>
+                            <div style={{ width:8, height:8, borderRadius:"50%", background:FUND_COLORS[i] }} />
+                            <span style={{ color:G.mist, fontSize:11 }}>{f.scheme_name_short}</span>
+                            <span style={{ color:FUND_COLORS[i], fontFamily:"JetBrains Mono,monospace", fontSize:12, fontWeight:700 }}>{(cmpResult.verdict.score_wins || {})[f.scheme_code] || 0} wins</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ color:G.mist, fontSize:10, marginTop:12, lineHeight:1.6 }}>
+                        Scores computed on {cmpHorizon}-year horizon. Composite score = weighted average of 6 dimensions. Research only — not investment advice.
+                      </div>
+                    </div>
+                  )}
+
+                  {cmpResult.missing_codes?.length > 0 && (
+                    <div style={{ background:"rgba(232,160,0,0.06)", border:"1px solid rgba(232,160,0,0.2)", borderRadius:8, padding:"10px 14px", color:G.am, fontSize:11 }}>
+                      ⚠ No score data found for: {cmpResult.missing_codes.join(', ')}. These funds may not be in FundGuldasta's eligible universe.
+                    </div>
+                  )}
+                </>
+              );
+            })()}
+          </div>
         </div>
       </>
     );
