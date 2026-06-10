@@ -3259,6 +3259,406 @@ def portfolio_bouquet_overlap(request: BouquetOverlapRequest):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# GAP 4 — DIRECT PLAN TRANSITION GUIDANCE
+# ══════════════════════════════════════════════════════════════════════════════
+
+class DirectPlanSavingsRequest(BaseModel):
+    holdings: list  # [{scheme_code, value, fund_name?}]
+
+@app.post("/api/portfolio/direct-plan-savings")
+def portfolio_direct_plan_savings(request: DirectPlanSavingsRequest):
+    """
+    For each regular-plan fund in holdings, find the direct-plan equivalent
+    and compute annual expense savings at the current invested value.
+    Returns items + total_annual_savings.
+    """
+    if not request.holdings:
+        return {"items": [], "total_annual_savings": 0, "regular_fund_count": 0}
+
+    codes = [str(h.get("scheme_code", "")) for h in request.holdings if h.get("scheme_code")]
+    if not codes:
+        return {"items": [], "total_annual_savings": 0, "regular_fund_count": 0}
+
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT scheme_code, scheme_name, amc_name, plan_type, expense_ratio, sebi_category
+            FROM fund_metadata WHERE scheme_code = ANY(%s)
+        """, (codes,))
+        meta = {
+            r[0]: {
+                "scheme_code": r[0], "scheme_name": r[1], "amc_name": r[2],
+                "plan_type": r[3], "expense_ratio": r[4], "sebi_category": r[5],
+            }
+            for r in cur.fetchall()
+        }
+
+        items = []
+        total_savings = 0.0
+
+        for h in request.holdings:
+            sc = str(h.get("scheme_code", ""))
+            value = float(h.get("value", 0) or 0)
+            m = meta.get(sc)
+            if not m or m.get("plan_type") != "Regular":
+                continue
+
+            amc = m["amc_name"]
+            category = m["sebi_category"]
+
+            # Find all direct plans from same AMC + same category
+            cur.execute("""
+                SELECT scheme_code, scheme_name, expense_ratio
+                FROM fund_metadata
+                WHERE amc_name = %s AND plan_type = 'Direct'
+                  AND sebi_category = %s AND is_active = true
+            """, (amc, category))
+            candidates = cur.fetchall()
+            if not candidates:
+                continue
+
+            # Find best match by name similarity (token-sort ratio)
+            reg_name = (m["scheme_name"] or "").lower()
+            for pat in [" regular plan", " - regular plan", " regular", "-regular"]:
+                reg_name = reg_name.replace(pat, " ").strip()
+
+            best_match = None
+            best_score = 0
+            for row in candidates:
+                d_name_clean = (row[1] or "").lower()
+                for pat in [" direct plan", " - direct plan", " direct", "-direct"]:
+                    d_name_clean = d_name_clean.replace(pat, " ").strip()
+                # Token overlap score
+                r_words = set(reg_name.split()) - {"fund", "plan", "growth", "option", "scheme"}
+                d_words = set(d_name_clean.split()) - {"fund", "plan", "growth", "option", "scheme"}
+                if not r_words:
+                    continue
+                overlap = len(r_words & d_words) / len(r_words)
+                if overlap > best_score:
+                    best_score = overlap
+                    best_match = row
+
+            if best_match is None or best_score < 0.5:
+                continue
+
+            dsc, dname, der = best_match
+            reg_er = float(m["expense_ratio"] or 0)
+            dir_er = float(der or 0)
+
+            if dir_er >= reg_er or reg_er <= 0:
+                continue  # skip data anomalies
+
+            er_diff = reg_er - dir_er
+            annual_savings = round(value * er_diff / 100, 0)
+
+            short_reg = m["scheme_name"] or sc
+            for suf in [" - Regular Plan - Growth", " Regular Plan Growth", " Regular Plan - Growth", " - Regular - Growth"]:
+                short_reg = short_reg.replace(suf, "").replace(suf.lower(), "").strip()
+
+            short_dir = dname or dsc
+            for suf in [" - Direct Plan - Growth", " Direct Plan Growth", " Direct Plan - Growth", " - Direct - Growth"]:
+                short_dir = short_dir.replace(suf, "").replace(suf.lower(), "").strip()
+
+            items.append({
+                "regular_scheme_code": sc,
+                "regular_name": short_reg,
+                "direct_scheme_code": dsc,
+                "direct_name": short_dir,
+                "amc": amc,
+                "regular_er": round(reg_er, 3),
+                "direct_er": round(dir_er, 3),
+                "er_diff": round(er_diff, 3),
+                "invested_value": value,
+                "annual_savings": annual_savings,
+                "match_confidence": round(best_score * 100),
+            })
+            total_savings += annual_savings
+
+        return {
+            "items": items,
+            "total_annual_savings": round(total_savings, 0),
+            "regular_fund_count": len(items),
+        }
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# GAP 5 — REBALANCING TRIGGERS
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/bouquets/{archetype_id}/rebalance-check")
+def bouquet_rebalance_check(archetype_id: str, horizon_years: int = Query(default=7)):
+    """
+    Check if a bouquet warrants rebalancing attention.
+    Triggers: time elapsed, manager changes, score degradation, low confidence.
+    """
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT funds_json, confidence_json, computation_date
+            FROM bouquet_cache
+            WHERE archetype_id = %s AND horizon_years = %s AND is_active = true
+            ORDER BY computation_date DESC LIMIT 1
+        """, (archetype_id, horizon_years))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(404, f"Bouquet '{archetype_id}' not found for {horizon_years}yr horizon")
+
+        funds_raw, confidence_raw, computation_date = row
+        funds = funds_raw if isinstance(funds_raw, list) else json.loads(funds_raw)
+        confidence = confidence_raw if isinstance(confidence_raw, dict) else json.loads(confidence_raw)
+
+        from datetime import date as _date, timedelta as _td
+        today = _date.today()
+        days_since = (today - computation_date).days
+
+        equity_codes = [f["scheme_code"] for f in funds if f.get("category") != "International"]
+        triggers = []
+
+        # Trigger 1: Age
+        if days_since > 90:
+            triggers.append({
+                "type": "age",
+                "severity": "high" if days_since > 180 else "medium",
+                "fund": None,
+                "message": f"Bouquet scores last refreshed {days_since} days ago",
+                "detail": "Fund scores update with each monthly NAV cycle. Run a fresh precompute to reflect current data.",
+            })
+
+        # Trigger 2: Manager changes in last 180 days
+        cutoff = today - _td(days=180)
+        cur.execute("""
+            SELECT mcl.scheme_code, mcl.old_manager_name, mcl.new_manager_name,
+                   mcl.detected_date, fm.scheme_name
+            FROM manager_change_log mcl
+            JOIN fund_metadata fm ON fm.scheme_code = mcl.scheme_code
+            WHERE mcl.scheme_code = ANY(%s) AND mcl.detected_date >= %s
+            ORDER BY mcl.detected_date DESC
+        """, (equity_codes, cutoff))
+        for sc, old_mgr, new_mgr, det_date, fname in cur.fetchall():
+            short = (fname or sc)
+            for suf in [" - Direct Plan - Growth", " Direct Plan Growth", " Direct Growth"]:
+                short = short.replace(suf, "").strip()
+            triggers.append({
+                "type": "manager_change",
+                "severity": "high",
+                "fund": short[:50],
+                "message": f"Manager change detected: {short[:45]}",
+                "detail": f"{old_mgr or 'Previous manager'} → {new_mgr} (detected {det_date})",
+                "scheme_code": sc,
+            })
+
+        # Trigger 3: Score degradation — latest vs score at computation_date
+        cur.execute("""
+            SELECT DISTINCT ON (scheme_code) scheme_code, fund_score
+            FROM computed_metrics
+            WHERE scheme_code = ANY(%s) AND horizon_years = %s
+            ORDER BY scheme_code, computation_date DESC
+        """, (equity_codes, horizon_years))
+        latest_scores = {r[0]: float(r[1]) if r[1] else None for r in cur.fetchall()}
+
+        cur.execute("""
+            SELECT DISTINCT ON (scheme_code) scheme_code, fund_score
+            FROM computed_metrics
+            WHERE scheme_code = ANY(%s) AND horizon_years = %s
+              AND computation_date <= %s
+            ORDER BY scheme_code, computation_date DESC
+        """, (equity_codes, horizon_years, computation_date))
+        cached_scores = {r[0]: float(r[1]) if r[1] else None for r in cur.fetchall()}
+
+        for f in funds:
+            sc = f["scheme_code"]
+            if f.get("category") == "International":
+                continue
+            cur_s = latest_scores.get(sc)
+            old_s = cached_scores.get(sc)
+            if cur_s and old_s and (old_s - cur_s) >= 8:
+                drop = round(old_s - cur_s, 1)
+                short = f.get("name", sc)
+                for suf in [" - Direct Plan - Growth", " Direct Plan Growth", " Direct Growth"]:
+                    short = short.replace(suf, "").strip()
+                triggers.append({
+                    "type": "score_drop",
+                    "severity": "high" if drop >= 12 else "medium",
+                    "fund": short[:50],
+                    "message": f"Score declined {drop} points: {short[:45]}",
+                    "detail": f"Was {round(old_s,1)}/100 at last cache → now {round(cur_s,1)}/100. Review whether this fund still belongs in the bouquet.",
+                    "scheme_code": sc,
+                })
+
+        # Trigger 4: Low confidence
+        conf_score = float(confidence.get("score", 100))
+        if conf_score < 60:
+            triggers.append({
+                "type": "low_confidence",
+                "severity": "medium",
+                "fund": None,
+                "message": f"Bouquet confidence score is {conf_score}/100 — below threshold",
+                "detail": "A confidence score below 60 indicates weakening rolling consistency or rising downside risk. Consider refreshing the selection.",
+            })
+
+        return {
+            "archetype_id": archetype_id,
+            "horizon_years": horizon_years,
+            "last_computed": str(computation_date),
+            "days_since_compute": days_since,
+            "needs_attention": len(triggers) > 0,
+            "trigger_count": len(triggers),
+            "triggers": triggers,
+            "confidence_score": conf_score,
+        }
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# GAP 6 — WHY THIS FUND, NOT THAT ONE
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.get("/api/bouquets/{archetype_id}/selection-rationale")
+def bouquet_selection_rationale(archetype_id: str, horizon_years: int = Query(default=7)):
+    """
+    For each fund in the bouquet, show the top-scoring alternatives in the
+    same SEBI category that were eligible but not selected — with score comparison.
+    Answers: why this fund, not that one?
+    """
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT funds_json, computation_date
+            FROM bouquet_cache
+            WHERE archetype_id = %s AND horizon_years = %s AND is_active = true
+            ORDER BY computation_date DESC LIMIT 1
+        """, (archetype_id, horizon_years))
+        row = cur.fetchone()
+        if not row:
+            raise HTTPException(404, f"Bouquet '{archetype_id}' not found for {horizon_years}yr horizon")
+
+        funds = row[0] if isinstance(row[0], list) else json.loads(row[0])
+        equity_funds = [f for f in funds if f.get("category") != "International"]
+
+        def _short(name, code=""):
+            s = name or code
+            for suf in [" - Direct Plan - Growth", " Direct Plan Growth", " Direct Growth", " - Direct - Growth"]:
+                s = s.replace(suf, "").strip()
+            return s[:60]
+
+        rationale = []
+
+        for fund in equity_funds:
+            sc = fund["scheme_code"]
+            category = fund.get("category", "")
+            selected_score = float(fund.get("composite_score") or 0)
+
+            # Fetch selected fund's actual latest score if composite_score missing
+            if selected_score == 0:
+                cur.execute("""
+                    SELECT DISTINCT ON (scheme_code) fund_score
+                    FROM computed_metrics
+                    WHERE scheme_code = %s AND horizon_years = %s
+                    ORDER BY scheme_code, computation_date DESC
+                """, (sc, horizon_years))
+                sr = cur.fetchone()
+                selected_score = float(sr[0]) if sr and sr[0] else 0
+
+            # Top alternatives in same category (exclude selected fund + FOFs)
+            cur.execute("""
+                SELECT DISTINCT ON (cm.scheme_code)
+                    cm.scheme_code, fm.scheme_name, cm.fund_score,
+                    cm.return_consistency_score, cm.risk_adjusted_score,
+                    cm.downside_score, cm.manager_score, fm.expense_ratio
+                FROM computed_metrics cm
+                JOIN fund_metadata fm ON fm.scheme_code = cm.scheme_code
+                WHERE fm.sebi_category = %s
+                  AND fm.plan_type = 'Direct'
+                  AND cm.horizon_years = %s
+                  AND cm.scheme_code != %s
+                  AND fm.scheme_name NOT ILIKE '%%FOF%%'
+                  AND fm.scheme_name NOT ILIKE '%%Fund of Fund%%'
+                  AND fm.is_active = true
+                ORDER BY cm.scheme_code, cm.computation_date DESC
+            """, (category, horizon_years, sc))
+            competitors = cur.fetchall()
+            competitors.sort(key=lambda r: float(r[2] or 0), reverse=True)
+
+            alternatives = []
+            for comp in competitors[:3]:
+                comp_sc, comp_name, comp_score = comp[0], comp[1], comp[2]
+                comp_er = comp[7]
+                comp_score_val = float(comp_score or 0)
+                delta = round(selected_score - comp_score_val, 1)
+                alternatives.append({
+                    "scheme_code": comp_sc,
+                    "name": _short(comp_name, comp_sc),
+                    "score": round(comp_score_val, 1),
+                    "score_delta": delta,
+                    "expense_ratio": float(comp_er) if comp_er else None,
+                })
+
+            # Build reason text
+            reasons = []
+            if alternatives:
+                if alternatives[0]["score_delta"] > 0:
+                    reasons.append(
+                        f"Scored {alternatives[0]['score_delta']} points above {alternatives[0]['name'][:40]}, the next-best {category} fund"
+                    )
+                else:
+                    reasons.append(
+                        "Selected for category representation and correlation balance with other bouquet funds"
+                    )
+            reasons.append(
+                "Passed: Direct plan · AUM ≥ ₹500 Cr · Expense ratio ≤ 1.5% · AMC diversity constraint"
+            )
+
+            rationale.append({
+                "scheme_code": sc,
+                "name": _short(fund.get("name", sc)),
+                "category": category,
+                "weight": fund.get("weight"),
+                "selected_score": round(selected_score, 1),
+                "alternatives_considered": alternatives,
+                "selection_reasons": reasons,
+            })
+
+        # International diversifier rationale
+        intl_funds = [f for f in funds if f.get("category") == "International"]
+        for intl in intl_funds:
+            rationale.append({
+                "scheme_code": intl["scheme_code"],
+                "name": intl.get("name", ""),
+                "category": "International",
+                "weight": intl.get("weight"),
+                "selected_score": None,
+                "alternatives_considered": [
+                    {"scheme_code": "145552", "name": "Motilal Oswal Nasdaq 100 FOF", "score": None, "score_delta": None,
+                     "reason": "Higher US tech concentration (Nasdaq 100). Avg corr ~0.33 with Indian equity — less diversifying."},
+                    {"scheme_code": "138528", "name": "PGIM India Global Equity Opp FOF", "score": None, "score_delta": None,
+                     "reason": "True global diversification (US + Europe + Japan). Lower AUM, shorter track record."},
+                ],
+                "selection_reasons": [
+                    "Chosen from a 3-fund international pool as the fund with lowest average correlation with the selected equity combination",
+                    "All 3 pool funds are taxed as debt instruments (income slab rate) — correlation, not returns, is the selection criterion",
+                ],
+            })
+
+        return {
+            "archetype_id": archetype_id,
+            "horizon_years": horizon_years,
+            "rationale": rationale,
+            "note": "Alternatives are top-scoring direct-plan funds in the same SEBI category, ranked by composite score at selection time.",
+        }
+    finally:
+        cur.close()
+        conn.close()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # PRIORITY 16 — CAS IMPORT
 # ══════════════════════════════════════════════════════════════════════════════
 

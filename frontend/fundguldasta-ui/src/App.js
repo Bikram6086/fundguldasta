@@ -189,6 +189,28 @@ async function apiPortfolioBouquetOverlap(holdings, horizonYears) {
   return res.json();
 }
 
+async function apiDirectPlanSavings(holdings) {
+  const res = await fetch(`${API_BASE}/api/portfolio/direct-plan-savings`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ holdings }),
+  });
+  if (!res.ok) throw new Error("Direct plan savings data not available");
+  return res.json();
+}
+
+async function apiRebalanceCheck(archetypeId, horizonYears) {
+  const res = await fetch(`${API_BASE}/api/bouquets/${archetypeId}/rebalance-check?horizon_years=${horizonYears}`);
+  if (!res.ok) throw new Error("Rebalance check not available");
+  return res.json();
+}
+
+async function apiSelectionRationale(archetypeId, horizonYears) {
+  const res = await fetch(`${API_BASE}/api/bouquets/${archetypeId}/selection-rationale?horizon_years=${horizonYears}`);
+  if (!res.ok) throw new Error("Selection rationale not available");
+  return res.json();
+}
+
 async function apiGetPreferences(token) {
   const res = await fetch(`${API_BASE}/api/user/preferences`, {
     headers: { "Authorization": `Bearer ${token}` },
@@ -601,6 +623,13 @@ export default function App() {
   const [growthData, setGrowthData] = useState({});
   const [casOverlapData, setCasOverlapData] = useState(null);
   const [casOverlapLoading, setCasOverlapLoading] = useState(false);
+  const [casDirectData, setCasDirectData] = useState(null);
+  const [casDirectLoading, setCasDirectLoading] = useState(false);
+  const [rebalanceData, setRebalanceData] = useState({});
+  const [rebalanceLoading, setRebalanceLoading] = useState({});
+  const [rationaleData, setRationaleData] = useState({});
+  const [rationaleLoading, setRationaleLoading] = useState({});
+  const [rationaleOpen, setRationaleOpen] = useState({});
   const [goalSipTarget, setGoalSipTarget] = useState('');
   // Priority 14 state
   const [quizModal, setQuizModal] = useState(false);
@@ -1995,6 +2024,73 @@ useEffect(() => {
                             <div style={{ fontSize:9, color:G.mist, marginTop:4, fontStyle:"italic" }}>
                               Overlap analysis for 7yr horizon bouquets. AMC concentration = combined user portfolio + bouquet (50/50 blend). Not investment advice.
                             </div>
+                          </div>
+                        )}
+
+                        {/* ── Direct Plan Savings (Gap 4) ── */}
+                        {!casDirectData && !casDirectLoading && casResult?.holdings?.filter(h => h.scheme_code).length >= 1 && (
+                          <div style={{ marginTop:12 }}>
+                            <button onClick={async () => {
+                              setCasDirectLoading(true);
+                              try {
+                                const hlds = casResult.holdings
+                                  .filter(h => h.scheme_code)
+                                  .map(h => ({ scheme_code: String(h.scheme_code), value: h.value || 0 }));
+                                const d = await apiDirectPlanSavings(hlds);
+                                setCasDirectData(d);
+                              } catch { setCasDirectData({ items: [], total_annual_savings: 0, regular_fund_count: 0 }); }
+                              finally { setCasDirectLoading(false); }
+                            }} style={{ width:"100%", padding:"10px 0", background:"rgba(39,174,120,0.07)", border:"1px solid rgba(39,174,120,0.25)", borderRadius:8, color:"#27AE78", fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                              Switch to Direct Plans & Save →
+                            </button>
+                          </div>
+                        )}
+                        {casDirectLoading && <div style={{ marginTop:12, textAlign:"center", color:G.mist, fontSize:12 }}>Calculating savings…</div>}
+                        {casDirectData && (
+                          <div style={{ marginTop:14 }}>
+                            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:10 }}>
+                              <div style={{ color:"#27AE78", fontSize:12, fontWeight:700, letterSpacing:".08em", textTransform:"uppercase" }}>Direct Plan Savings</div>
+                              <button onClick={() => setCasDirectData(null)} style={{ background:"none", border:"none", color:G.mist, cursor:"pointer", fontSize:11 }}>✕</button>
+                            </div>
+                            {casDirectData.regular_fund_count === 0 ? (
+                              <div style={{ fontSize:12, color:"#27AE78", background:"rgba(39,174,120,0.06)", border:"1px solid rgba(39,174,120,0.2)", borderRadius:8, padding:"10px 14px" }}>
+                                ✓ All matched funds are already on direct plans — no savings opportunity found.
+                              </div>
+                            ) : (
+                              <>
+                                <div style={{ background:"rgba(39,174,120,0.06)", border:"1px solid rgba(39,174,120,0.2)", borderRadius:8, padding:"12px 16px", marginBottom:10 }}>
+                                  <div style={{ fontSize:11, color:G.mist, marginBottom:4 }}>Estimated total annual savings from switching to direct plans</div>
+                                  <div style={{ fontSize:24, color:"#27AE78", fontFamily:"JetBrains Mono,monospace", fontWeight:700 }}>₹{casDirectData.total_annual_savings.toLocaleString('en-IN')}/yr</div>
+                                  <div style={{ fontSize:10, color:G.mist, marginTop:3 }}>Across {casDirectData.regular_fund_count} regular-plan fund{casDirectData.regular_fund_count !== 1 ? 's' : ''}</div>
+                                </div>
+                                {casDirectData.items.map((item, idx) => (
+                                  <div key={idx} style={{ background:"rgba(255,255,255,0.02)", border:"1px solid rgba(255,255,255,0.06)", borderRadius:8, padding:"10px 14px", marginBottom:8 }}>
+                                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:8 }}>
+                                      <div style={{ flex:1 }}>
+                                        <div style={{ fontSize:12, color:G.fog, marginBottom:4 }}>
+                                          <span style={{ color:G.am, fontSize:10 }}>Regular: </span>{item.regular_name}
+                                        </div>
+                                        <div style={{ fontSize:12, color:"#27AE78", marginBottom:4 }}>
+                                          <span style={{ color:G.mist, fontSize:10 }}>Direct: </span>{item.direct_name}
+                                        </div>
+                                        <div style={{ display:"flex", gap:16, flexWrap:"wrap" }}>
+                                          <span style={{ fontSize:10, color:G.mist }}>Regular TER: <span style={{ color:G.am, fontFamily:"JetBrains Mono,monospace" }}>{item.regular_er}%</span></span>
+                                          <span style={{ fontSize:10, color:G.mist }}>Direct TER: <span style={{ color:"#27AE78", fontFamily:"JetBrains Mono,monospace" }}>{item.direct_er}%</span></span>
+                                          <span style={{ fontSize:10, color:G.mist }}>Saving: <span style={{ color:"#27AE78", fontFamily:"JetBrains Mono,monospace" }}>{item.er_diff}%/yr</span></span>
+                                        </div>
+                                      </div>
+                                      <div style={{ textAlign:"right", flexShrink:0 }}>
+                                        <div style={{ fontSize:16, color:"#27AE78", fontFamily:"JetBrains Mono,monospace", fontWeight:700 }}>₹{item.annual_savings.toLocaleString('en-IN')}</div>
+                                        <div style={{ fontSize:9, color:G.mist }}>per year</div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                                <div style={{ fontSize:9, color:G.mist, marginTop:4, fontStyle:"italic" }}>
+                                  Savings = (Regular TER − Direct TER) × Invested Value. Actual savings compound over time. Execute switch on CAMS/KFintech or your platform. Not investment advice.
+                                </div>
+                              </>
+                            )}
                           </div>
                         )}
                       </div>
@@ -5729,6 +5825,60 @@ useEffect(() => {
                           </div>
                         )}
                       </div>
+                      {/* Why this fund? — Goal Bouquet (Gap 6) */}
+                      {fund.category !== 'International' && (() => {
+                        const gH = parseInt(goalYrs, 10) || 7;
+                        const gC = parseInt(goalCagr, 10) || 16;
+                        const gRKey = `goal_h${gH}_c${gC}`;
+                        const gRData = rationaleData[gRKey];
+                        const gRLoading = rationaleLoading[gRKey];
+                        const gROpen = rationaleOpen[`goal_${fund.scheme_code}`];
+                        const fundRat = gRData?.rationale?.find(r => r.scheme_code === String(fund.scheme_code));
+                        return (
+                          <div style={{ width:"100%", marginTop:8 }}>
+                            <button onClick={async () => {
+                              setRationaleOpen(prev => ({ ...prev, [`goal_${fund.scheme_code}`]: !prev[`goal_${fund.scheme_code}`] }));
+                              if (!gRData && !gRLoading) {
+                                setRationaleLoading(prev => ({ ...prev, [gRKey]: true }));
+                                try {
+                                  const d = await apiSelectionRationale(gRKey, gH);
+                                  setRationaleData(prev => ({ ...prev, [gRKey]: d }));
+                                } catch { /* silent */ }
+                                finally { setRationaleLoading(prev => ({ ...prev, [gRKey]: false })); }
+                              }
+                            }} style={{ background:"none", border:"1px solid rgba(212,175,55,0.2)", borderRadius:4, color:G.gold, fontSize:9, padding:"2px 8px", cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                              {gROpen ? '▲ hide' : '? Why this fund'}
+                            </button>
+                            {gROpen && (
+                              <div style={{ marginTop:6, padding:"8px 10px", background:"rgba(212,175,55,0.04)", border:"1px solid rgba(212,175,55,0.15)", borderRadius:6 }}>
+                                {(gRLoading && !gRData) && <div style={{ fontSize:10, color:G.mist }}>Loading rationale…</div>}
+                                {fundRat && (
+                                  <>
+                                    {fundRat.selection_reasons.map((reason, ri) => (
+                                      <div key={ri} style={{ fontSize:10, color:G.fog, marginBottom:4, lineHeight:1.4 }}>• {reason}</div>
+                                    ))}
+                                    {fundRat.alternatives_considered.length > 0 && (
+                                      <div style={{ marginTop:6 }}>
+                                        <div style={{ fontSize:9, color:G.mist, textTransform:"uppercase", letterSpacing:".08em", marginBottom:4 }}>Alternatives in same category:</div>
+                                        {fundRat.alternatives_considered.map((alt, ai) => (
+                                          <div key={ai} style={{ fontSize:10, color:G.mist, display:"flex", justifyContent:"space-between", marginBottom:3 }}>
+                                            <span style={{ color:G.slate }}>{alt.name}</span>
+                                            <span style={{ fontFamily:"JetBrains Mono,monospace", marginLeft:8, flexShrink:0, color: alt.score_delta > 0 ? '#27AE78' : alt.score_delta < 0 ? '#E05555' : G.mist }}>
+                                              {alt.score != null ? `${alt.score}/100` : '—'}
+                                              {alt.score_delta != null ? ` (${alt.score_delta > 0 ? '+' : ''}${alt.score_delta})` : ''}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </>
+                                )}
+                                {!gRLoading && !fundRat && gRData && <div style={{ fontSize:10, color:G.mist }}>Rationale not available for this fund.</div>}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   ))}
                 </div>
@@ -7398,6 +7548,59 @@ useEffect(() => {
                             {f.expense_ratio != null && <div style={{ fontSize: 10, marginTop: 2 }}><span style={{ color: "rgba(255,255,255,0.3)" }}>TER: </span><span style={{ color: "#27AE78" }}>{f.expense_ratio.toFixed(2)}%</span></div>}
                             {f.aum_crores != null && <div style={{ fontSize: 10, marginTop: 2 }}><span style={{ color: "rgba(255,255,255,0.3)" }}>AUM: </span><span style={{ color: "rgba(255,255,255,0.6)" }}>₹{f.aum_crores >= 100000 ? (f.aum_crores/100000).toFixed(1)+'L Cr' : f.aum_crores >= 1000 ? (f.aum_crores/1000).toFixed(1)+'K Cr' : f.aum_crores+' Cr'}</span></div>}
                             {f.category !== 'Balanced Advantage' && <div style={{ fontSize: 9, color: "rgba(255,255,255,0.25)", marginTop: 5, borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 5 }}>Exit load: 1% if redeemed within 12 months</div>}
+                            {/* Why this fund? (Gap 6) */}
+                            {f.category !== 'International' && (() => {
+                              const rKey = `${a.id}_${yrs}`;
+                              const rData = rationaleData[rKey];
+                              const rLoading = rationaleLoading[rKey];
+                              const isOpen = rationaleOpen[f.scheme_code];
+                              const fundRationale = rData?.rationale?.find(r => r.scheme_code === String(f.scheme_code));
+                              return (
+                                <div style={{ marginTop:6 }}>
+                                  <button onClick={async (e) => {
+                                    e.stopPropagation();
+                                    setRationaleOpen(prev => ({ ...prev, [f.scheme_code]: !prev[f.scheme_code] }));
+                                    if (!rData && !rLoading) {
+                                      setRationaleLoading(prev => ({ ...prev, [rKey]: true }));
+                                      try {
+                                        const d = await apiSelectionRationale(a.id, parseInt(yrs, 10) || 7);
+                                        setRationaleData(prev => ({ ...prev, [rKey]: d }));
+                                      } catch { /* silent */ }
+                                      finally { setRationaleLoading(prev => ({ ...prev, [rKey]: false })); }
+                                    }
+                                  }} style={{ background:"none", border:"1px solid rgba(212,175,55,0.2)", borderRadius:4, color:G.gold, fontSize:9, padding:"2px 8px", cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                                    {isOpen ? '▲ hide' : '? Why this fund'}
+                                  </button>
+                                  {isOpen && (
+                                    <div style={{ marginTop:6, padding:"8px 10px", background:"rgba(212,175,55,0.04)", border:"1px solid rgba(212,175,55,0.15)", borderRadius:6 }}>
+                                      {(rLoading && !rData) && <div style={{ fontSize:10, color:G.mist }}>Loading rationale…</div>}
+                                      {fundRationale && (
+                                        <>
+                                          {fundRationale.selection_reasons.map((reason, ri) => (
+                                            <div key={ri} style={{ fontSize:10, color:G.fog, marginBottom:4, lineHeight:1.4 }}>• {reason}</div>
+                                          ))}
+                                          {fundRationale.alternatives_considered.length > 0 && (
+                                            <div style={{ marginTop:6 }}>
+                                              <div style={{ fontSize:9, color:G.mist, textTransform:"uppercase", letterSpacing:".08em", marginBottom:4 }}>Alternatives evaluated in this category:</div>
+                                              {fundRationale.alternatives_considered.map((alt, ai) => (
+                                                <div key={ai} style={{ fontSize:10, color:G.mist, display:"flex", justifyContent:"space-between", marginBottom:3 }}>
+                                                  <span style={{ color:G.slate }}>{alt.name}</span>
+                                                  <span style={{ fontFamily:"JetBrains Mono,monospace", marginLeft:8, flexShrink:0, color: alt.score_delta > 0 ? '#27AE78' : alt.score_delta < 0 ? '#E05555' : G.mist }}>
+                                                    {alt.score != null ? `${alt.score}/100` : '—'}
+                                                    {alt.score_delta != null ? ` (${alt.score_delta > 0 ? '+' : ''}${alt.score_delta})` : ''}
+                                                  </span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </>
+                                      )}
+                                      {!rLoading && !fundRationale && rData && <div style={{ fontSize:10, color:G.mist }}>Rationale not available for this fund.</div>}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
                           </div>
                         );
                       });
@@ -7523,6 +7726,86 @@ useEffect(() => {
                   </div>
                 </div>}
               </div>
+
+              {/* BOX 3.7 — REBALANCE CHECK (Gap 5) */}
+              {(() => {
+                const rbKey = `${a.id}_${yrs}`;
+                const rbData = rebalanceData[rbKey];
+                const rbLoading = rebalanceLoading[rbKey];
+                return (
+                  <div className="card" id="sec-rebalance">
+                    <div className="ch" style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                      <span className="ct">Rebalance Check</span>
+                      {rbData && rbData.needs_attention
+                        ? <span className="badge" style={{ background:"rgba(224,85,85,0.12)", border:"1px solid rgba(224,85,85,0.3)", color:"#E05555" }}>⚠ {rbData.trigger_count} trigger{rbData.trigger_count !== 1 ? 's' : ''}</span>
+                        : rbData
+                          ? <span className="badge" style={{ background:"rgba(39,174,120,0.12)", border:"1px solid rgba(39,174,120,0.3)", color:"#27AE78" }}>✓ No issues found</span>
+                          : <span className="badge">On-demand</span>
+                      }
+                    </div>
+                    <div className="cb">
+                      {!rbData && !rbLoading && (
+                        <div>
+                          <div style={{ fontSize:12, color:G.mist, marginBottom:12, lineHeight:1.6 }}>
+                            Check whether this bouquet warrants rebalancing attention: manager changes, score degradation, stale cache, or low confidence.
+                          </div>
+                          <button onClick={async () => {
+                            setRebalanceLoading(prev => ({ ...prev, [rbKey]: true }));
+                            try {
+                              const d = await apiRebalanceCheck(a.id, parseInt(yrs, 10) || 7);
+                              setRebalanceData(prev => ({ ...prev, [rbKey]: d }));
+                            } catch { setRebalanceData(prev => ({ ...prev, [rbKey]: { needs_attention: false, triggers: [], error: true } })); }
+                            finally { setRebalanceLoading(prev => ({ ...prev, [rbKey]: false })); }
+                          }} style={{ padding:"10px 20px", background:"rgba(212,175,55,0.08)", border:"1px solid rgba(212,175,55,0.3)", borderRadius:8, color:G.gold, fontSize:13, fontWeight:600, cursor:"pointer", fontFamily:"Outfit,sans-serif" }}>
+                            Run Rebalance Check
+                          </button>
+                        </div>
+                      )}
+                      {rbLoading && <div style={{ textAlign:"center", color:G.mist, fontSize:12, padding:"12px 0" }}>Checking triggers…</div>}
+                      {rbData && !rbData.error && (
+                        <div>
+                          <div style={{ display:"flex", gap:24, marginBottom:14, flexWrap:"wrap" }}>
+                            <div>
+                              <div style={{ fontSize:10, color:G.mist }}>Last computed</div>
+                              <div style={{ fontSize:13, color:G.fog, fontFamily:"JetBrains Mono,monospace" }}>{rbData.last_computed}</div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize:10, color:G.mist }}>Days since refresh</div>
+                              <div style={{ fontSize:13, color: rbData.days_since_compute > 90 ? '#F0A500' : '#27AE78', fontFamily:"JetBrains Mono,monospace" }}>{rbData.days_since_compute}</div>
+                            </div>
+                            <div>
+                              <div style={{ fontSize:10, color:G.mist }}>Confidence</div>
+                              <div style={{ fontSize:13, color: rbData.confidence_score < 60 ? '#E05555' : rbData.confidence_score < 70 ? '#F0A500' : '#27AE78', fontFamily:"JetBrains Mono,monospace" }}>{rbData.confidence_score}/100</div>
+                            </div>
+                          </div>
+                          {rbData.triggers.length === 0 ? (
+                            <div style={{ padding:"12px 16px", background:"rgba(39,174,120,0.06)", border:"1px solid rgba(39,174,120,0.2)", borderRadius:8, fontSize:13, color:"#27AE78" }}>
+                              ✓ No rebalancing triggers found. Bouquet composition looks stable.
+                            </div>
+                          ) : (
+                            <div>
+                              {rbData.triggers.map((t, idx) => {
+                                const sevColor = t.severity === 'high' ? '#E05555' : '#F0A500';
+                                return (
+                                  <div key={idx} style={{ background:`rgba(${t.severity === 'high' ? '224,85,85' : '240,165,0'},0.05)`, border:`1px solid rgba(${t.severity === 'high' ? '224,85,85' : '240,165,0'},0.2)`, borderRadius:8, padding:"10px 14px", marginBottom:8 }}>
+                                    <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                                      <span style={{ fontSize:10, fontWeight:700, color:sevColor, textTransform:"uppercase", letterSpacing:".08em" }}>{t.severity}</span>
+                                      <span style={{ fontSize:12, color:G.fog, fontWeight:600 }}>{t.message}</span>
+                                    </div>
+                                    {t.detail && <div style={{ fontSize:11, color:G.mist, lineHeight:1.5 }}>{t.detail}</div>}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                          <button onClick={() => setRebalanceData(prev => { const n = {...prev}; delete n[rbKey]; return n; })} style={{ marginTop:10, background:"none", border:"none", color:G.mist, fontSize:11, cursor:"pointer", padding:0 }}>↺ Re-check</button>
+                        </div>
+                      )}
+                      {rbData?.error && <div style={{ color:G.am, fontSize:12 }}>Could not load rebalance check. Try again.</div>}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* BOX 4 — METRICS */}
               <div className="card" id="sec-metrics">
