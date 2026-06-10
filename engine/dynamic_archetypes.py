@@ -1,14 +1,21 @@
 """
 FUNDGULDASTA — DYNAMIC ARCHETYPE BOUQUET BUILDER
 =================================================
-Replaces the hardcoded 13-fund archetype compositions with funds
-algorithmically selected from the full 271-fund scored universe.
+Selects the best bouquet for each archetype from the full 271-fund
+scored universe (computed_metrics). No hardcoded fund compositions.
 
-Each archetype defines a category allocation profile and dimension
-boosts. The engine queries computed_metrics, applies archetype-
-specific scoring, runs correlation-aware selection, and returns the
-same dict structure as legacy build_bouquet() — fully precompute-
-compatible with no frontend changes required.
+Steady and Balanced archetypes include a correlation-optimised
+international diversifier from a curated pool of overseas equity FOFs.
+International funds are outside the India equity scoring universe but
+provide genuine low-correlation diversification when Indian markets
+are tepid — the fund chosen is whichever minimises average correlation
+with the 4 selected India equity funds.
+
+Aggressive and Conviction archetypes are pure India equity conviction
+plays — no international slot.
+
+Returns the same dict structure as legacy build_bouquet() — fully
+precompute.py-compatible, no frontend or API changes required.
 """
 
 import psycopg2
@@ -25,16 +32,70 @@ DB_CONFIG = get_db_config()
 MAX_CORRELATION = 0.92
 TOP_N_PER_CATEGORY = 5
 
-# SEBI categories treated as equity (exclude Equity Savings — too conservative at 10-35% eq)
+# ── International Diversifier Pool ───────────────────────────────────────────
+# Three funds curated for genuine geographic diversification.
+# All are direct-plan growth, established AMCs, sufficient NAV history.
+# Tax note: Indian FOFs investing in overseas ETFs/funds are taxed as
+# debt instruments — income slab rate applies regardless of holding period.
+# The platform shows intlTaxWarning on archetypes that include these.
+INTL_DIVERSIFIER_POOL = [
+    {
+        'scheme_code': '145552',
+        'name':        'Motilal Oswal Nasdaq 100 Fund of Fund',
+        'amc_name':    'Motilal Oswal',
+        'category':    'International',
+        'sub_type':    'US Tech Index',
+        'nav_since':   '2018-12',
+        'aum_crores':  6200.0,
+        'expense_ratio': 0.35,
+        # Tracks Nasdaq 100 — Apple, Microsoft, Nvidia, Alphabet, Meta.
+        # Correlation with Indian equity ~0.33 — primary diversifier.
+    },
+    {
+        'scheme_code': '118551',
+        'name':        'Franklin U.S. Opportunities Equity Active Fund of Funds',
+        'amc_name':    'Franklin Templeton',
+        'category':    'International',
+        'sub_type':    'US Equity Active',
+        'nav_since':   '2013-01',
+        'aum_crores':  None,
+        'expense_ratio': None,
+        # Actively managed US growth equity. Longest US fund track record
+        # in India (since Jan 2013). Broader than Nasdaq — less tech concentrated.
+    },
+    {
+        'scheme_code': '138528',
+        'name':        'PGIM India Global Equity Opportunities Fund of Fund',
+        'amc_name':    'PGIM India',
+        'category':    'International',
+        'sub_type':    'Global Equity',
+        'nav_since':   '2016-03',
+        'aum_crores':  None,
+        'expense_ratio': None,
+        # Invests globally (US + non-US developed: Europe, Japan, etc.).
+        # True geographic diversification beyond US-only funds.
+        # PGIM/Prudential: institutional global equity mandate.
+    },
+]
+
+INTL_CODES = [f['scheme_code'] for f in INTL_DIVERSIFIER_POOL]
+INTL_BY_CODE = {f['scheme_code']: f for f in INTL_DIVERSIFIER_POOL}
+
+# ── SEBI equity categories included in the scored universe ───────────────────
+# Equity Savings excluded (10-35% equity — too conservative for bouquets).
 EQUITY_CATEGORIES = frozenset({
     'Large Cap', 'Mid Cap', 'Small Cap', 'Flexi Cap', 'Multi Cap',
     'Large & Mid Cap', 'ELSS', 'Focused', 'Value', 'Contra',
     'Balanced Advantage', 'Aggressive Hybrid',
 })
 
+# ── Per-archetype selection profiles ─────────────────────────────────────────
 ARCHETYPE_PROFILES = {
     'steady': {
-        # Low-medium risk. Large cap stability + flexi flexibility + hybrid buffer.
+        # Low-medium risk. Large cap stability + flexi + hybrid buffer.
+        # Includes 1 international diversifier slot (18% weight).
+        'equity_fund_count': 4,          # 4 equity + 1 international = 5 total
+        'intl_slot_weight':  18,         # % allocated to international diversifier
         'category_weights': {
             'Large Cap':          30,
             'Flexi Cap':          25,
@@ -44,7 +105,6 @@ ARCHETYPE_PROFILES = {
             'Value':              10,
             'Large & Mid Cap':    10,
         },
-        # Downside protection and risk-adjusted quality weighted higher
         'dim_boosts': {
             'dim_downside':    1.8,
             'dim_risk_adj':    1.4,
@@ -52,11 +112,13 @@ ARCHETYPE_PROFILES = {
             'dim_manager':     1.0,
         },
         'exclude_categories': {'Small Cap', 'Focused'},
-        # Combo must contain at least one fund from each required category
         'required_categories': [{'Large Cap'}, {'Flexi Cap', 'Multi Cap', 'Large & Mid Cap'}],
     },
     'balanced': {
         # Medium risk. Diversified across large/mid/small/hybrid.
+        # Includes 1 international diversifier slot (13% weight).
+        'equity_fund_count': 4,          # 4 equity + 1 international = 5 total
+        'intl_slot_weight':  13,
         'category_weights': {
             'Large Cap':         20,
             'Flexi Cap':         20,
@@ -75,6 +137,9 @@ ARCHETYPE_PROFILES = {
     },
     'aggressive': {
         # Medium-high risk. Mid/small cap dominant, return maximising.
+        # Pure India equity — no international.
+        'equity_fund_count': 5,
+        'intl_slot_weight':  0,
         'category_weights': {
             'Mid Cap':         35,
             'Small Cap':       35,
@@ -92,6 +157,9 @@ ARCHETYPE_PROFILES = {
     },
     'conviction': {
         # High risk. Concentrated small cap + focused. Pure score maximiser.
+        # Pure India equity — no international.
+        'equity_fund_count': 5,
+        'intl_slot_weight':  0,
         'category_weights': {
             'Small Cap': 45,
             'Mid Cap':   25,
@@ -108,6 +176,8 @@ ARCHETYPE_PROFILES = {
     },
 }
 
+
+# ── Internal helpers ──────────────────────────────────────────────────────────
 
 def _load_scored_universe(horizon_years: int) -> list[dict]:
     conn = psycopg2.connect(**DB_CONFIG)
@@ -133,6 +203,8 @@ def _load_scored_universe(horizon_years: int) -> list[dict]:
           AND cm.fund_score IS NOT NULL
           AND fm.is_active = true
           AND fm.scheme_name NOT ILIKE '%%US Bluechip%%'
+          AND fm.scheme_name NOT ILIKE '%%FOF%%'
+          AND fm.scheme_name NOT ILIKE '%%Fund of Fund%%'
           AND (fm.fund_type IS NULL OR fm.fund_type NOT ILIKE '%%overseas%%')
         ORDER BY cm.scheme_code, cm.computation_date DESC
     """, (horizon_years,))
@@ -243,14 +315,12 @@ def _select_candidates(scored_funds: list, profile: dict) -> list:
     seen = set()
     candidates = []
 
-    # Priority categories first
     for cat in sorted(cat_weights, key=lambda c: cat_weights[c], reverse=True):
         for fund in by_cat.get(cat, [])[:TOP_N_PER_CATEGORY]:
             if fund['scheme_code'] not in seen:
                 candidates.append(fund)
                 seen.add(fund['scheme_code'])
 
-    # Fill with remaining equity categories as fallback
     fallback = ['Flexi Cap', 'Large Cap', 'Mid Cap', 'Small Cap', 'Multi Cap',
                 'Large & Mid Cap', 'ELSS', 'Focused', 'Value', 'Contra',
                 'Balanced Advantage', 'Aggressive Hybrid']
@@ -276,17 +346,59 @@ def _combo_score(combo: tuple, corr_matrix: dict, profile: dict) -> float:
     return avg_score - (avg_corr * 20) + (n_cats - 1) * 3 + (n_amcs - 1) * 1.5
 
 
-def _assign_weights(selected: list, profile: dict) -> list[tuple]:
-    """Assign category-based weights, normalised to 100%."""
+def _assign_equity_weights(equity_funds: list, profile: dict, equity_total_pct: int) -> list[tuple]:
+    """
+    Assign weights to the equity portion, scaled to sum to equity_total_pct.
+    Returns list of (scheme_code, weight_pct) tuples.
+    """
     cat_weights = profile['category_weights']
-    raw = [cat_weights.get(f['category'], 10) for f in selected]
-    total = sum(raw)
-    weights = [round(w / total * 100) for w in raw]
-    diff = 100 - sum(weights)
+    raw = [cat_weights.get(f['category'], 10) for f in equity_funds]
+    raw_total = sum(raw)
+    weights = [round(w / raw_total * equity_total_pct) for w in raw]
+    diff = equity_total_pct - sum(weights)
     if diff:
         weights[weights.index(max(weights))] += diff
-    return [(f['scheme_code'], w) for f, w in zip(selected, weights)]
+    return [(f['scheme_code'], w) for f, w in zip(equity_funds, weights)]
 
+
+def _pick_best_international(equity_funds: list, nav_cache: dict) -> dict | None:
+    """
+    From the curated INTL_DIVERSIFIER_POOL, pick the fund that minimises
+    average correlation with the selected equity funds.
+    Falls back to Motilal Nasdaq if NAV data is unavailable for all pool funds.
+    """
+    equity_codes = [f['scheme_code'] for f in equity_funds]
+    best_fund    = None
+    best_avg_corr = 999.0
+
+    for intl in INTL_DIVERSIFIER_POOL:
+        code  = intl['scheme_code']
+        s_intl = nav_cache.get(code)
+        if s_intl is None or len(s_intl) < 100:
+            continue  # No NAV data — skip this candidate
+
+        corrs = []
+        for eq_code in equity_codes:
+            s_eq = nav_cache.get(eq_code)
+            if s_eq is not None:
+                corrs.append(_corr(s_intl, s_eq))
+
+        avg_corr = float(np.mean(corrs)) if corrs else 0.7
+
+        if avg_corr < best_avg_corr:
+            best_avg_corr = avg_corr
+            best_fund = intl
+
+    # Hard fallback: if no NAV data at all, use Motilal Nasdaq (best-known)
+    if best_fund is None:
+        best_fund = INTL_DIVERSIFIER_POOL[0]
+        best_avg_corr = 0.35  # known approximate value
+
+    print(f"  [intl] Selected {best_fund['name'][:45]} (avg corr with equity: {best_avg_corr:.3f})")
+    return best_fund, best_avg_corr
+
+
+# ── Public API ────────────────────────────────────────────────────────────────
 
 def build_dynamic_archetype_bouquet(
     arch_id: str,
@@ -294,12 +406,18 @@ def build_dynamic_archetype_bouquet(
     target_cagr: float,
 ) -> dict | None:
     """
-    Select the best 5-fund bouquet for an archetype from the scored 271-fund universe.
-    Returns the same dict as legacy build_bouquet() — precompute.py compatible.
+    Select the optimal bouquet for an archetype from the scored 271-fund
+    universe. Steady and Balanced include 1 international diversifier
+    chosen to minimise correlation with the selected equity funds.
+    Returns same dict as legacy build_bouquet() — precompute.py compatible.
     """
     profile = ARCHETYPE_PROFILES.get(arch_id)
     if not profile:
         return None
+
+    n_equity       = profile['equity_fund_count']
+    intl_weight    = profile.get('intl_slot_weight', 0)
+    equity_total   = 100 - intl_weight          # equity funds share this %
 
     print(f"  [dynamic] Loading {horizon_years}yr scored universe...")
     scored_funds = _load_scored_universe(horizon_years)
@@ -309,16 +427,17 @@ def build_dynamic_archetype_bouquet(
     print(f"  [dynamic] {len(scored_funds)} equity funds available")
 
     candidates = _select_candidates(scored_funds, profile)
-    print(f"  [dynamic] {len(candidates)} candidates, evaluating combinations...")
+    print(f"  [dynamic] {len(candidates)} candidates — evaluating {n_equity}-fund combinations...")
 
-    if len(candidates) < 5:
+    if len(candidates) < n_equity:
         print(f"  [dynamic] Too few candidates ({len(candidates)})")
         return None
 
-    codes = [f['scheme_code'] for f in candidates]
-    nav_cache = _fetch_nav_batch(codes)
+    # Fetch NAV for equity candidates + international pool (single batch)
+    all_codes = [f['scheme_code'] for f in candidates] + INTL_CODES
+    nav_cache = _fetch_nav_batch(all_codes)
 
-    # Pairwise correlation matrix
+    # Build pairwise correlation matrix for equity candidates
     corr_matrix: dict = {}
     for i, f1 in enumerate(candidates):
         for f2 in candidates[i+1:]:
@@ -328,18 +447,16 @@ def build_dynamic_archetype_bouquet(
             corr_matrix[(c1, c2)] = c
             corr_matrix[(c2, c1)] = c
 
-    # Select best valid 5-fund combination
+    # Select best valid n_equity-fund equity combination
+    required = profile.get('required_categories', [])
     best_combo: list | None = None
     best_score = -9999.0
 
-    required = profile.get('required_categories', [])
-
-    for combo in combinations(candidates, 5):
-        codes_c = [f['scheme_code'] for f in combo]
+    for combo in combinations(candidates, n_equity):
         combo_cats = {f['category'] for f in combo}
+        codes_c    = [f['scheme_code'] for f in combo]
 
-        # Each required_categories entry is a set — combo must have at least one fund from each set
-        if any(not (req_set & combo_cats) for req_set in required):
+        if any(not (req & combo_cats) for req in required):
             continue
         if any(
             corr_matrix.get((codes_c[i], codes_c[j]), 0) > MAX_CORRELATION
@@ -350,25 +467,37 @@ def build_dynamic_archetype_bouquet(
             continue
         if len(set(f['amc_name'] for f in combo)) < 3:
             continue
+
         sc = _combo_score(combo, corr_matrix, profile)
         if sc > best_score:
             best_score = sc
             best_combo = list(combo)
 
     if best_combo is None:
-        # Relax constraints: take top 5 by boosted score (no correlation filter)
-        print(f"  [dynamic] No valid combo — using top-5 by score")
+        print(f"  [dynamic] No valid equity combo — using top-{n_equity} by score")
         dim_boosts = profile.get('dim_boosts', {})
         candidates.sort(key=lambda f: _boosted_score(f, dim_boosts), reverse=True)
-        best_combo = candidates[:5]
+        best_combo = candidates[:n_equity]
 
-    fund_weights = _assign_weights(best_combo, profile)
+    # Assign equity weights scaled to equity_total%
+    fund_weights_equity = _assign_equity_weights(best_combo, profile, equity_total)
 
-    # Build fund_scores list matching legacy build_bouquet() output
-    fund_scores = [
-        {
-            'scheme_code':      f['scheme_code'],
-            'weight':           w,
+    # Select & append international diversifier (steady/balanced only)
+    all_fund_weights: list[tuple] = list(fund_weights_equity)
+    selected_intl: dict | None = None
+    intl_avg_corr: float = 0.0
+
+    if intl_weight > 0:
+        selected_intl, intl_avg_corr = _pick_best_international(best_combo, nav_cache)
+        all_fund_weights.append((selected_intl['scheme_code'], intl_weight))
+
+    # Build fund_scores list (structure matches legacy build_bouquet output)
+    fund_scores = []
+
+    for f, (code, weight) in zip(best_combo, fund_weights_equity):
+        fund_scores.append({
+            'scheme_code':      code,
+            'weight':           weight,
             'name':             f['scheme_name'],
             'category':         f['category'],
             'amc':              f['amc_name'],
@@ -382,34 +511,48 @@ def build_dynamic_archetype_bouquet(
                 'portfolio_quality':  f['dim_port_qual'],
                 'forward_context':    f['dim_fwd_context'],
             },
-        }
-        for f, (_, w) in zip(best_combo, fund_weights)
-    ]
+        })
+
+    if selected_intl:
+        fund_scores.append({
+            'scheme_code':      selected_intl['scheme_code'],
+            'weight':           intl_weight,
+            'name':             selected_intl['name'],
+            'category':         selected_intl['category'],
+            'amc':              selected_intl['amc_name'],
+            'tier':             2,
+            'composite_score':  None,   # not scored via compute_metrics
+            'sub_type':         selected_intl['sub_type'],
+            'tax_note':         'Taxed as debt fund — income slab rate applies',
+            'dimension_scores': None,
+        })
 
     print(f"  [dynamic] Computing bouquet metrics...")
-    metrics = compute_bouquet_metrics(fund_weights, horizon_years)
+    metrics = compute_bouquet_metrics(all_fund_weights, horizon_years)
 
-    # Intra-bouquet correlation stats
-    codes_final = [f['scheme_code'] for f in best_combo]
+    # Intra-bouquet correlation stats (equity-only pairs for avg correlation display)
+    equity_codes_final = [f['scheme_code'] for f in best_combo]
     intra_corrs = [
-        corr_matrix.get((codes_final[i], codes_final[j]), 0.7)
-        for i in range(len(codes_final)) for j in range(i+1, len(codes_final))
+        corr_matrix.get((equity_codes_final[i], equity_codes_final[j]), 0.7)
+        for i in range(len(equity_codes_final))
+        for j in range(i+1, len(equity_codes_final))
     ]
-    avg_correlation = round(float(np.mean(intra_corrs)), 4) if intra_corrs else 0.7
+    avg_equity_corr = round(float(np.mean(intra_corrs)), 4) if intra_corrs else 0.7
 
-    # Holdings overlap
+    # Holdings overlap (portfolio_holdings table)
+    all_codes_final = [f['scheme_code'] for f in best_combo]
     overlap_scores = []
-    pairs_with_data = total_pairs = 0
-    for i in range(len(codes_final)):
-        for j in range(i+1, len(codes_final)):
+    pairs_data = total_pairs = 0
+    for i in range(len(all_codes_final)):
+        for j in range(i+1, len(all_codes_final)):
             total_pairs += 1
-            ov = compute_holding_overlap(codes_final[i], codes_final[j])
+            ov = compute_holding_overlap(all_codes_final[i], all_codes_final[j])
             if ov is not None:
                 overlap_scores.append(ov)
-                pairs_with_data += 1
+                pairs_data += 1
 
-    avg_overlap = round(float(np.mean(overlap_scores)) * 100, 1) if overlap_scores else None
-    holdings_cov = round(pairs_with_data / total_pairs * 100) if total_pairs else 0
+    avg_overlap  = round(float(np.mean(overlap_scores)) * 100, 1) if overlap_scores else None
+    holdings_cov = round(pairs_data / total_pairs * 100) if total_pairs else 0
 
     return {
         'archetype_id':          arch_id,
@@ -417,10 +560,12 @@ def build_dynamic_archetype_bouquet(
         'target_cagr':           target_cagr,
         'funds':                 fund_scores,
         'metrics':               metrics,
-        'avg_correlation':       avg_correlation,
+        'avg_correlation':       avg_equity_corr,
+        'intl_avg_corr':         round(intl_avg_corr, 3) if intl_weight else None,
         'avg_overlap_pct':       avg_overlap,
         'holdings_coverage_pct': holdings_cov,
         'avg_fund_score':        round(float(np.mean([f['fund_score'] for f in best_combo])), 2),
         'high_correlation_pairs': [],
         'universe_size':         len(scored_funds),
+        'has_international':     intl_weight > 0,
     }
