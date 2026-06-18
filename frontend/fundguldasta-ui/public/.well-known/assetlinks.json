@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.fundguldasta.app",
+      "sha256_cert_fingerprints": [
+        "05:57:76:A0:D7:E4:DB:2E:D4:5F:78:A3:90:00:8B:E8:40:45:00:D6:3B:05:A4:81:DE:58:83:3D:CD:C8:CE:77"
+      ]
+    }
+  }
+]
