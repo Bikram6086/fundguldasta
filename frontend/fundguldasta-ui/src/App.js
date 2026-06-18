@@ -5306,6 +5306,151 @@ useEffect(() => {
           </div>
         </div>
       </div>
+    </>
+  );
+
+  if (screen === "privacy") return (
+    <>
+      <style>{css}</style>
+      <div className="about-screen">
+        <div className="about-inner">
+          <button className="about-back" onClick={() => setScreen("hero")}>← Back to FundGuldasta</button>
+
+          <div style={{ marginBottom: 32 }}>
+            <div style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 28, color: G.gold, fontWeight: 600, marginBottom: 6 }}>Privacy Policy</div>
+            <div style={{ fontSize: 12, color: G.mist }}>Effective date: 18 June 2025 &nbsp;·&nbsp; Last updated: 18 June 2025</div>
+          </div>
+
+          <div className="about-section">
+            <div className="about-section-title">1. Who We Are</div>
+            <div className="about-card">
+              <div className="about-card-body">
+                <p>FundGuldasta (<strong>fundguldasta.com</strong>) is a mutual fund research and education platform operated as a non-profit initiative. We are not a SEBI-registered investment advisor, distributor, or broker. We do not earn commissions from any fund house or financial entity.</p>
+                <p style={{ marginTop: 10 }}>Contact: <strong>alerts@fundguldasta.com</strong></p>
+              </div>
+            </div>
+          </div>
+
+          <div className="about-section">
+            <div className="about-section-title">2. What Data We Collect</div>
+            <div className="about-card">
+              <div className="about-card-body">
+                <p><strong>Account data (only if you register):</strong></p>
+                <ul style={{ marginTop: 8, marginLeft: 16, lineHeight: 2 }}>
+                  <li>Email address — used for login and optional email alerts</li>
+                  <li>Display name — optional, used to personalise your dashboard</li>
+                  <li>Password — stored as a one-way bcrypt hash; we cannot read your password</li>
+                  <li>Preferences — whether you want manager-change alerts or monthly digest emails</li>
+                  <li>Saved bouquets — fund combinations you choose to save for future reference</li>
+                </ul>
+                <p style={{ marginTop: 12 }}><strong>Usage data (anonymous):</strong> Standard server logs (IP address, browser type, pages visited). We do not use third-party analytics trackers.</p>
+                <p style={{ marginTop: 12 }}><strong>Portfolio data (CAS upload):</strong> If you upload a CAS PDF for portfolio analysis, the file is processed in memory only and is never stored on our servers. No holdings data is retained after your session.</p>
+                <p style={{ marginTop: 12 }}><strong>We do not collect:</strong> PAN, Aadhaar, bank account details, investment amounts, or any financial transaction data.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="about-section">
+            <div className="about-section-title">3. How We Use Your Data</div>
+            <div className="about-card">
+              <div className="about-card-body">
+                <ul style={{ marginLeft: 16, lineHeight: 2 }}>
+                  <li>To authenticate your account and maintain your session</li>
+                  <li>To send email alerts when fund managers change (only if you opt in)</li>
+                  <li>To send a monthly research digest (only if you opt in)</li>
+                  <li>To save and restore your bouquet preferences across sessions</li>
+                </ul>
+                <p style={{ marginTop: 12 }}>We do not use your data for advertising, profiling, or any purpose beyond operating the platform.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="about-section">
+            <div className="about-section-title">4. Data Sharing</div>
+            <div className="about-card">
+              <div className="about-card-body">
+                <p>We do not sell, rent, or share your personal data with any third party for commercial purposes.</p>
+                <p style={{ marginTop: 10 }}>We use the following infrastructure providers, each bound by their own privacy policies:</p>
+                <ul style={{ marginTop: 8, marginLeft: 16, lineHeight: 2 }}>
+                  <li><strong>Vercel</strong> — frontend hosting (vercel.com)</li>
+                  <li><strong>Railway</strong> — API hosting (railway.app)</li>
+                  <li><strong>Timescale Cloud</strong> — database (timescale.com)</li>
+                  <li><strong>Resend</strong> — transactional email delivery (resend.com)</li>
+                </ul>
+                <p style={{ marginTop: 10 }}>No personal data is shared with fund houses, AMFI, SEBI, or any financial institution.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="about-section">
+            <div className="about-section-title">5. Data Security</div>
+            <div className="about-card">
+              <div className="about-card-body">
+                <p>All data in transit is encrypted via HTTPS/TLS. Passwords are hashed with bcrypt (irreversible). The database is hosted on Timescale Cloud (Mumbai region) with access restricted to authenticated API connections only.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="about-section">
+            <div className="about-section-title">6. Data Retention</div>
+            <div className="about-card">
+              <div className="about-card-body">
+                <p>Account data is retained for as long as your account is active. You may request deletion of your account and all associated data by emailing <strong>alerts@fundguldasta.com</strong>. We will process deletion requests within 30 days.</p>
+                <p style={{ marginTop: 10 }}>Anonymous server logs are retained for up to 90 days.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="about-section">
+            <div className="about-section-title">7. Your Rights</div>
+            <div className="about-card">
+              <div className="about-card-body">
+                <p>You have the right to:</p>
+                <ul style={{ marginTop: 8, marginLeft: 16, lineHeight: 2 }}>
+                  <li>Access the personal data we hold about you</li>
+                  <li>Correct inaccurate data</li>
+                  <li>Request deletion of your data</li>
+                  <li>Opt out of email communications at any time via account preferences</li>
+                </ul>
+                <p style={{ marginTop: 10 }}>To exercise any of these rights, email <strong>alerts@fundguldasta.com</strong>.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="about-section">
+            <div className="about-section-title">8. Cookies</div>
+            <div className="about-card">
+              <div className="about-card-body">
+                <p>FundGuldasta uses only essential session cookies required for authentication (JWT token stored in browser localStorage). We do not use advertising cookies, tracking pixels, or third-party analytics cookies.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="about-section">
+            <div className="about-section-title">9. Children</div>
+            <div className="about-card">
+              <div className="about-card-body">
+                <p>FundGuldasta is intended for users aged 18 and above. We do not knowingly collect data from anyone under 18. If you believe a minor has registered, please contact us at <strong>alerts@fundguldasta.com</strong> for immediate deletion.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="about-section">
+            <div className="about-section-title">10. Changes to This Policy</div>
+            <div className="about-card">
+              <div className="about-card-body">
+                <p>We may update this policy from time to time. The effective date at the top of this page will reflect the latest revision. Continued use of the platform after changes constitutes acceptance of the updated policy.</p>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ textAlign: "center", marginTop: 48, paddingBottom: 32 }}>
+            <button onClick={() => setScreen("hero")} style={{ background: "linear-gradient(135deg,rgba(212,175,55,0.15),rgba(212,175,55,0.05))", border: "1px solid rgba(212,175,55,0.35)", borderRadius: 12, padding: "14px 40px", color: G.gold, fontFamily: "Outfit,sans-serif", fontSize: 14, fontWeight: 600, cursor: "pointer", letterSpacing: ".04em" }}>
+              Back to FundGuldasta →
+            </button>
+          </div>
+        </div>
+      </div>
       {/* Site Footer */}
       {screen === "results" && (
         <div className="site-footer">
@@ -5315,6 +5460,7 @@ useEffect(() => {
               <div className="footer-brand-tag">Mutual Fund Research. Unfiltered.</div>
               <div className="footer-links">
                 <button className="footer-link" onClick={() => setScreen("about")}>About</button>
+                <button className="footer-link" onClick={() => setScreen("privacy")}>Privacy Policy</button>
                 <button className="footer-link" onClick={() => setScreen("custom_builder")}>Build Your Own</button>
                 <button className="footer-link" onClick={reset}>New Search</button>
               </div>
