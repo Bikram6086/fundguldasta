@@ -214,9 +214,14 @@ def _load_scored_funds_with_fallback(horizon_years: int) -> tuple[list, int]:
     If fewer than 10 funds exist (e.g. 25yr/30yr requests for young investors),
     step down to the next available scored horizon with sufficient data.
     Returns (funds, actual_horizon_used).
+
+    Scoring is capped at 15yr maximum regardless of goal horizon — this prevents
+    legacy AMCs with old-but-mediocre recent track records from dominating long
+    horizon bouquets based on performance from 20+ years ago.
     """
-    # Try requested horizon and all shorter horizons in descending order
-    candidates = sorted([h for h in SCORED_HORIZONS if h <= horizon_years], reverse=True)
+    MAX_SCORING_HORIZON = 15
+    effective_horizon = min(horizon_years, MAX_SCORING_HORIZON)
+    candidates = sorted([h for h in SCORED_HORIZONS if h <= effective_horizon], reverse=True)
     if not candidates:
         candidates = [5]
 
@@ -225,7 +230,7 @@ def _load_scored_funds_with_fallback(horizon_years: int) -> tuple[list, int]:
         if len(funds) >= 10:
             return funds, h
 
-    return [], horizon_years
+    return [], effective_horizon
 
 
 def _select_candidates(scored_funds: list, profile: dict, top_n: int = 5) -> list:
@@ -434,6 +439,8 @@ def build_goal_bouquet(
         combo = list(combo)
         if len(set(f['category'] for f in combo)) < 3:
             continue
+        if len(set(f['amc_name'] for f in combo)) < 5:
+            continue
         if _has_high_correlation(combo, corr_matrix):
             continue
         sc = _combination_score(combo, corr_matrix, profile)
@@ -444,6 +451,8 @@ def build_goal_bouquet(
     if not best_combo:
         for combo in combinations(candidates, 5):
             combo = list(combo)
+            if len(set(f['amc_name'] for f in combo)) < 5:
+                continue
             if _has_high_correlation(combo, corr_matrix):
                 continue
             sc = _combination_score(combo, corr_matrix, profile)
