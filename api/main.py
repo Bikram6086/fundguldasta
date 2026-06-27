@@ -388,14 +388,31 @@ def _nightly_scheduler():
         time.sleep(sleep_secs)
 
         run_ts = datetime.utcnow().isoformat()
-        print(f"[NIGHTLY] Starting scheduled precomputation — {run_ts}")
+        print(f"[NIGHTLY] Starting full data refresh + precomputation — {run_ts}")
         try:
-            # Refresh portfolio holdings first (monthly disclosures) — overlap depends on this
+            # Step 1: NAV ingestion — pulls latest NAV from AMFI (published ~8:30 PM IST)
+            try:
+                from data.nav_ingestion import main as nav_main
+                print("[NIGHTLY] Fetching latest NAV data from AMFI...")
+                nav_main()
+                print("[NIGHTLY] NAV ingestion complete")
+            except Exception as _nav_err:
+                print(f"[NIGHTLY] NAV ingestion failed (non-fatal): {_nav_err}")
+
+            # Step 2: Benchmark ingestion — Nifty 50 from yfinance
+            try:
+                from data.benchmark_ingestion import main as bench_main
+                print("[NIGHTLY] Fetching benchmark (Nifty 50) data...")
+                bench_main()
+                print("[NIGHTLY] Benchmark ingestion complete")
+            except Exception as _bench_err:
+                print(f"[NIGHTLY] Benchmark ingestion failed (non-fatal): {_bench_err}")
+
+            # Step 3: Portfolio holdings (monthly disclosures) — overlap depends on this
             try:
                 from data.portfolio_fetcher import fetch_all_configured, last_month_end
                 from config.db import get_db_config
                 _db = get_db_config()
-                # psycopg2 uses 'dbname' key; portfolio_fetcher uses 'database'
                 _pf_cfg = {k if k != 'dbname' else 'database': v for k, v in _db.items()}
                 _as_of = last_month_end()
                 print(f"[NIGHTLY] Refreshing portfolio holdings as of {_as_of}")
@@ -404,11 +421,12 @@ def _nightly_scheduler():
             except Exception as _pf_err:
                 print(f"[NIGHTLY] Portfolio holdings refresh failed (non-fatal): {_pf_err}")
 
+            # Step 4: Rebuild bouquet cache from fresh NAV data
             from engine.precompute import run_all_horizons
             run_all_horizons(target_cagr=16.0)
-            print(f"[NIGHTLY] Precomputation complete — {datetime.utcnow().isoformat()}")
+            print(f"[NIGHTLY] Full refresh complete — {datetime.utcnow().isoformat()}")
         except Exception as e:
-            print(f"[NIGHTLY] Precomputation failed: {e}")
+            print(f"[NIGHTLY] Nightly refresh failed: {e}")
             try:
                 threading.Thread(
                     target=send_pipeline_failure_alert,
