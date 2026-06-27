@@ -421,10 +421,38 @@ def _nightly_scheduler():
             except Exception as _pf_err:
                 print(f"[NIGHTLY] Portfolio holdings refresh failed (non-fatal): {_pf_err}")
 
-            # Step 4: Rebuild bouquet cache from fresh NAV data
-            from engine.precompute import run_all_horizons
+            # Step 4: Rebuild Screen 1 bouquet cache (steady/balanced/aggressive/conviction)
+            from engine.precompute import run_all_horizons, precompute_goal_bouquets
             run_all_horizons(target_cagr=16.0)
+            print("[NIGHTLY] Screen 1 bouquet cache rebuilt")
+
+            # Step 5: Rebuild Screen 2 Goal Bouquet cache (20 horizon×cagr combos)
+            precompute_goal_bouquets()
             print(f"[NIGHTLY] Full refresh complete — {datetime.utcnow().isoformat()}")
+
+            # Step 6 (Mondays only): weekly metadata refresh
+            if datetime.utcnow().weekday() == 0:
+                try:
+                    from data.amfi_scheme_master import main as scheme_main
+                    print("[NIGHTLY] Refreshing AMFI scheme master...")
+                    scheme_main()
+                    print("[NIGHTLY] Scheme master complete")
+                except Exception as _sm_err:
+                    print(f"[NIGHTLY] Scheme master failed (non-fatal): {_sm_err}")
+                try:
+                    from data.manager_change_detection import main as mcd_main
+                    print("[NIGHTLY] Running manager change detection...")
+                    mcd_main()
+                    print("[NIGHTLY] Manager change detection complete")
+                except Exception as _mcd_err:
+                    print(f"[NIGHTLY] Manager change detection failed (non-fatal): {_mcd_err}")
+                try:
+                    from data.manager_ingestion import main as mi_main
+                    print("[NIGHTLY] Refreshing fund manager data from AMFI...")
+                    mi_main()
+                    print("[NIGHTLY] Manager ingestion complete")
+                except Exception as _mi_err:
+                    print(f"[NIGHTLY] Manager ingestion failed (non-fatal): {_mi_err}")
         except Exception as e:
             print(f"[NIGHTLY] Nightly refresh failed: {e}")
             try:
