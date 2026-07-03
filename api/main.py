@@ -365,11 +365,13 @@ _health_thread.start()
 # ── Nightly precompute scheduler ──────────────────────────────────────────────
 def _nightly_scheduler():
     """
-    Runs every night at 02:00 IST (20:30 UTC).
-    Refreshes bouquet_cache for all horizons so the cache is never stale.
+    Runs every morning at 09:00 IST (03:30 UTC).
+    This time is chosen carefully:
+    - AMFI publishes previous day's NAV by midnight IST (18:30 UTC) — available ✓
+    - Yahoo Finance Indian index data (^NSEI etc.) is available by ~07:00 AM IST — available ✓
+    - Indian markets open at 09:15 AM IST — we run just before open ✓
     Runs as a daemon thread — Railway keeps the process alive between requests.
-    With --workers 2 both workers start this thread; that's harmless (DB writes
-    are idempotent and the second run completes instantly from warm cache).
+    With --workers 2 both workers start this thread; harmless (DB writes are idempotent).
     """
     import time
     from datetime import datetime, timedelta
@@ -379,12 +381,12 @@ def _nightly_scheduler():
 
     while True:
         now = datetime.utcnow()
-        # Next 20:30 UTC (= 02:00 IST)
-        target = now.replace(hour=20, minute=30, second=0, microsecond=0)
+        # Next 03:30 UTC (= 09:00 IST)
+        target = now.replace(hour=3, minute=30, second=0, microsecond=0)
         if now >= target:
             target += timedelta(days=1)
         sleep_secs = (target - now).total_seconds()
-        print(f"[NIGHTLY] Next precompute scheduled in {sleep_secs/3600:.1f}h at {target.strftime('%Y-%m-%d %H:%M UTC')}")
+        print(f"[NIGHTLY] Next refresh scheduled in {sleep_secs/3600:.1f}h at {target.strftime('%Y-%m-%d %H:%M UTC')} (09:00 IST)")
         time.sleep(sleep_secs)
 
         run_ts = datetime.utcnow().isoformat()
@@ -1080,8 +1082,8 @@ def get_freshness(archetype_id: str):
     nav_date   = max_nav_date
     bench_date = max_bench_date   # from benchmark_data table directly
     cache_date = max_cache_date   # from bouquet_cache table directly
-    mgr_date   = pipeline_map.get('manager_change_detection')
-    cat_date   = pipeline_map.get('manager_ingestion')
+    mgr_date   = pipeline_map.get('manager_ingestion')
+    cat_date   = pipeline_map.get('amfi_scheme_master')
 
     # Nav and benchmark: daily cadence (weekdays). Allow 3 days for weekends.
     nav_status   = stale_status(nav_date,   3)
