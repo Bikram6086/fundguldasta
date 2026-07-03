@@ -12,7 +12,7 @@ BENCHMARKS = {
     'NIFTY50':      ('^NSEI',      'Nifty 50'),
     'NIFTY500':     ('^CRSLDX',   'Nifty 500'),
     'NIFTYMID150':  ('^NSEMDCP50','Nifty Midcap 150'),
-    'NIFTYSML250':  ('^NSESMCP',  'Nifty Smallcap 250'),
+    'NIFTYSML250':  ('NIFTYSMLCAP250.NS', 'Nifty Smallcap 250'),
     'NIFTYNXT50':   ('^NSMIDCP',  'Nifty Next 50'),
     'SENSEX':       ('^BSESN',    'BSE Sensex'),
 }

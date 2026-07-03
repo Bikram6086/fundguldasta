@@ -60,6 +60,10 @@ def _get_session():
     return _SESSION
 
 
+def _strip_fm_prefix(s: str) -> str:
+    """Remove 'FM N ' prefix that some AMC SSDs embed in value cells."""
+    return re.sub(r'^FM\s+\d+\s+', '', s).strip()
+
 def _parse_ssd_openpyxl(content: bytes) -> list[dict]:
     """Parse modern XML-based XLS via openpyxl. Returns list of manager dicts."""
     wb = openpyxl.load_workbook(io.BytesIO(content), data_only=True)
@@ -70,11 +74,11 @@ def _parse_ssd_openpyxl(content: bytes) -> list[dict]:
         if len(vals) < 3:
             continue
         field = str(vals[1]).strip()
-        value = str(vals[2]).strip()
+        value = _strip_fm_prefix(str(vals[2]).strip())
         if "Fund Manager Name" in field:
             managers.append({"raw_name": value, "raw_since": None})
         elif "Fund Manager From Date" in field and managers:
-            managers[-1]["raw_since"] = value
+            managers[-1]["raw_since"] = _parse_date_str(value)
     return managers
 
 
