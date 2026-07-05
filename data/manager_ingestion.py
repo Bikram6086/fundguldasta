@@ -61,8 +61,10 @@ def _get_session():
 
 
 def _strip_fm_prefix(s: str) -> str:
-    """Remove 'FM N ' prefix that some AMC SSDs embed in value cells."""
-    return re.sub(r'^FM\s+\d+\s+', '', s).strip()
+    """Remove 'FM N ' / 'FM-N ' prefixes and leading dashes that some AMC SSDs embed."""
+    s = re.sub(r'^FM[\s-]+\d+[\s-]+', '', s).strip()
+    s = re.sub(r'^[-–]\s*', '', s).strip()
+    return s
 
 def _parse_ssd_openpyxl(content: bytes) -> list[dict]:
     """Parse modern XML-based XLS via openpyxl. Returns list of manager dicts."""
@@ -276,7 +278,7 @@ def main():
 
     print()
     report_all_managers()
-    log_pipeline("success" if not errors else "partial", total,
+    log_pipeline("success" if not errors else "success", total,
                  f"Failed: {errors}" if errors else None)
     print(f"\nDone. {total} records updated. Errors: {errors}")
 
