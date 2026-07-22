@@ -2204,6 +2204,7 @@ def analyse_portfolio(request: PortfolioRequest):
             """SELECT archetype_id, funds_json, metrics_json, confidence_json
                FROM bouquet_cache
                WHERE horizon_years = %s AND is_active = true
+                 AND archetype_id IN ('steady', 'balanced', 'aggressive', 'conviction')
                ORDER BY archetype_id""",
             (request.horizon_years,),
         )
@@ -2922,7 +2923,9 @@ async def fund_eligibility(scheme_code: str):
         # ── Is it in any bouquet? ──────────────────────────────────────────────
         cur.execute("""
             SELECT archetype_id, funds_json FROM bouquet_cache
-            WHERE is_active = TRUE ORDER BY computation_date DESC
+            WHERE is_active = TRUE
+              AND archetype_id IN ('steady', 'balanced', 'aggressive', 'conviction')
+            ORDER BY computation_date DESC
         """)
         cache_rows = cur.fetchall()
 
