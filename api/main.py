@@ -649,6 +649,17 @@ def _compute_pros(funds, metrics_dict, confidence, overlap, stress_test):
 # To pre-warm manually: python3 -c "from engine.precompute import run_all_horizons; run_all_horizons()"
 
 
+@app.get("/api/server-ip")
+def server_ip():
+    """Return this Railway server's outbound public IP — needed to whitelist in Timescale Cloud."""
+    import urllib.request
+    try:
+        ip = urllib.request.urlopen("https://api.ipify.org", timeout=5).read().decode()
+        return {"outbound_ip": ip, "cidr_32": f"{ip}/32", "note": "Add this IP to Timescale Cloud allowlist"}
+    except Exception as e:
+        return {"error": str(e)}
+
+
 @app.api_route("/health", methods=["GET", "HEAD"])
 def health_check():
     """Fast health check — returns live platform health state."""
